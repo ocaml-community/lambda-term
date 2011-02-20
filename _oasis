@@ -1,0 +1,54 @@
+# +-------------------------------------------------------------------+
+# | Package parameters                                                |
+# +-------------------------------------------------------------------+
+
+OASISFormat: 0.1
+Name: lambda-term
+Version: 1.0
+LicenseFile: LICENSE
+License: BSD3
+Authors: Jérémie Dimino
+Homepage: http://lambda-term.forge.ocamlcore.org/
+BuildTools: ocamlbuild
+Plugins: DevFiles (0.2), META (0.2)
+Synopsis: Lambda-Term
+Description: Corss-platform library for terminal manipulation
+
+# +-------------------------------------------------------------------+
+# | The library                                                       |
+# +-------------------------------------------------------------------+
+
+Library "lambda-term"
+  FindlibName: lambda-term
+  BuildDepends: lwt.unix, lwt.syntax, icu.io, icu.syntax
+  XMETADescription: Corss-platform library for terminal manipulation
+  XMETARequires: lwt.unix, icu.io
+  Path: src
+  Install: true
+  Modules:
+    Lt_windows
+  CSources:
+    lt_windows_stubs.c
+
+# +-------------------------------------------------------------------+
+# | Doc                                                               |
+# +-------------------------------------------------------------------+
+
+Document "lambda-term-api"
+  Title: API reference for Lambda-Term
+  Type: ocamlbuild (0.2)
+  Install: true
+  InstallDir: $htmldir/api
+  DataFiles: style.css
+  BuildTools: ocamldoc
+  XOCamlbuildPath: ./
+  XOCamlbuildLibraries: lambda-term
+
+# +-------------------------------------------------------------------+
+# | Misc                                                              |
+# +-------------------------------------------------------------------+
+
+SourceRepository head
+  Type: darcs
+  Location: http://darcs.ocamlcore.org/repos/lambda-term
+  Browser: http://darcs.ocamlcore.org/cgi-bin/darcsweb.cgi?r=lambda-term;a=summary

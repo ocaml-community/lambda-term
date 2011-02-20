@@ -1,0 +1,17 @@
+<**/*.ml>: syntax_camlp4o
+<src/*.{c,h}>: use_lwt_unix_h
+
+# OASIS_START
+# DO NOT EDIT (digest: 347b6ce96477a652d0b1822065043e77)
+# Library lambda-term
+"src": include
+<src/lambda-term.{cma,cmxa}>: use_liblambda-term
+<src/*.ml{,i}>: pkg_lwt.unix
+<src/*.ml{,i}>: pkg_lwt.syntax
+<src/*.ml{,i}>: pkg_icu.syntax
+<src/*.ml{,i}>: pkg_icu.io
+"src/lt_windows_stubs.c": pkg_lwt.unix
+"src/lt_windows_stubs.c": pkg_lwt.syntax
+"src/lt_windows_stubs.c": pkg_icu.syntax
+"src/lt_windows_stubs.c": pkg_icu.io
+# OASIS_STOP
