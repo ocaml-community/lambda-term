@@ -15,8 +15,8 @@ type t =
   | Key_sequence of Text.t
 
 let to_string = function
-  | Resize { lines; columns } ->
-      Printf.sprintf "Resize { lines = %d; columns = %d }" lines columns
+  | Resize size ->
+      Printf.sprintf "Resize { lines = %d; columns = %d }" size.lines size.columns
   | Key(mods, key) ->
       Printf.sprintf "Key(%s, %s)" (Lt_key.string_of_modifiers mods) (Lt_key.to_string key)
   | Key_sequence seq ->

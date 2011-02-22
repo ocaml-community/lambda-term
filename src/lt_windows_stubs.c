@@ -17,6 +17,7 @@
 #if defined(_WIN32) || defined(_WIN64)
 
 #include <windows.h>
+#include <lwt_unix.h>
 
 /* +-----------------------------------------------------------------+
    | Codepage functions                                              |
@@ -49,6 +50,128 @@ CAMLprim value lt_windows_set_console_output_cp(value cp)
   return Val_unit;
 }
 
+/* +-----------------------------------------------------------------+
+   | Console input                                                   |
+   +-----------------------------------------------------------------+ */
+
+static WORD code_table[] = {
+  VK_RETURN,
+  VK_ESCAPE,
+  VK_TAB,
+  VK_UP,
+  VK_DOWN,
+  VK_LEFT,
+  VK_RIGHT,
+  VK_F1,
+  VK_F2,
+  VK_F3,
+  VK_F4,
+  VK_F5,
+  VK_F6,
+  VK_F7,
+  VK_F8,
+  VK_F9,
+  VK_F10,
+  VK_F11,
+  VK_F12,
+  VK_NEXT,
+  VK_PRIOR,
+  VK_HOME,
+  VK_END,
+  VK_INSERT,
+  VK_DELETE,
+  VK_BACK
+};
+
+struct job_read_console_input {
+  struct lwt_unix_job job;
+  HANDLE handle;
+  INPUT_RECORD input;
+  DWORD error_code;
+};
+
+#define Job_read_console_input_val(v) *(struct job_read_console_input**)Data_custom_val(v)
+
+static void worker_read_console_input(struct job_read_console_input *job)
+{
+  DWORD event_count;
+  INPUT_RECORD *input = &(job->input);
+
+  for (;;) {
+    if (!ReadConsoleInput(job->handle, input, 1, &event_count)) {
+      job->error_code = GetLastError();
+      return;
+    }
+
+    switch (input->EventType) {
+    case KEY_EVENT:
+      if (input->Event.KeyEvent.bKeyDown) {
+        if (input->Event.KeyEvent.uChar.UnicodeChar)
+          return;
+        WORD code = input->Event.KeyEvent.wVirtualKeyCode;
+        int i;
+        for (i = 0; i < sizeof(code_table)/sizeof(code_table[0]); i++)
+          if (code == code_table[i])
+            return;
+      }
+      break;
+    case WINDOW_BUFFER_SIZE_EVENT:
+      return;
+    }
+  }
+}
+
+CAMLprim value lt_windows_read_console_input_job(value val_fd)
+{
+  struct job_read_console_input *job = lwt_unix_new(struct job_read_console_input);
+  job->job.worker = (lwt_unix_job_worker)worker_read_console_input;
+  job->handle = Handle_val(val_fd);
+  job->error_code = 0;
+  return lwt_unix_alloc_job(&(job->job));
+}
+
+CAMLprim value lt_windows_read_console_input_result(value val_job)
+{
+  CAMLparam1(val_job);
+  CAMLlocal2(result, mods);
+  struct job_read_console_input *job = Job_read_console_input_val(val_job);
+  if (job->error_code) {
+    win32_maperr(job->error_code);
+    uerror("ReadConsoleInput", Nothing);
+  }
+  INPUT_RECORD *input = &(job->input);
+  switch (input->EventType) {
+  case KEY_EVENT: {
+    DWORD cks = input->Event.KeyEvent.dwControlKeyState;
+    mods = caml_alloc_tuple(2);
+    Field(mods, 0) = Val_bool((cks & LEFT_CTRL_PRESSED) | (cks & RIGHT_CTRL_PRESSED));
+    Field(mods, 1) = Val_bool((cks & LEFT_ALT_PRESSED) | (cks & RIGHT_ALT_PRESSED));
+    WORD code = input->Event.KeyEvent.wVirtualKeyCode;
+    int i;
+    for (i = 0; i < sizeof(code_table)/sizeof(code_table[0]); i++)
+      if (code == code_table[i]) {
+        result = caml_alloc(2, 1);
+        Field(result, 0) = mods;
+        Field(result, 1) = Val_int(i);
+        CAMLreturn(result);
+      }
+    result = caml_alloc(2, 0);
+    Field(result, 0) = mods;
+    Field(result, 1) = Val_int(input->Event.KeyEvent.uChar.UnicodeChar);
+    CAMLreturn(result);
+  }
+  case WINDOW_BUFFER_SIZE_EVENT:
+    CAMLreturn(Val_int(0));
+  }
+  CAMLreturn(Val_int(0));
+}
+
+CAMLprim value lt_windows_read_console_input_free(value val_job)
+{
+  lwt_unix_free_job(&(Job_read_console_input_val(val_job))->job);
+  return Val_unit;
+}
+
 #else
 
 /* +-----------------------------------------------------------------+
@@ -69,5 +192,8 @@ NA(get_console_cp, "GetConsoleCP")
 NA(set_console_cp, "SetConsoleCP")
 NA(get_console_output_cp, "GetConsoleOutputCP")
 NA(set_console_output_cp, "SetConsoleOutputCP")
+NA(read_console_input_job, "ReadConsoleInput")
+NA(read_console_input_result, "ReadConsoleInput")
+NA(read_console_input_free, "ReadConsoleInput")
 
 #endif

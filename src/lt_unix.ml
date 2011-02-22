@@ -85,7 +85,7 @@ let get_sequence st =
    +-----------------------------------------------------------------+ *)
 
 let sequences = [|
-  "\x01", ({ control = true; meta = false }, Char " ");
+  "\x00", ({ control = true; meta = false }, Char " ");
   "\x01", ({ control = true; meta = false }, Char "a");
   "\x02", ({ control = true; meta = false }, Char "b");
   "\x03", ({ control = true; meta = false }, Char "c");

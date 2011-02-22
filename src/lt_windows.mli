@@ -11,7 +11,7 @@
 
 (** All these functions return [Lwt_sys.Not_available] on Unix. *)
 
-(** Codepage functions *)
+(** {6 Codepage functions} *)
 
 val get_acp : unit -> int
   (** Returns the current ANSI codepage. *)
@@ -31,3 +31,13 @@ val get_console_output_cp : unit -> int
 val set_console_output_cp : int -> unit
   (** Sets the output codepage used by the console attached to the
       current process. *)
+
+(** {6 Console input} *)
+
+type input =
+  | Resize
+  | Key of Lt_key.modifiers * Lt_key.t
+
+val read_console_input : Lwt_unix.file_descr -> input Lwt.t
+  (** [read_console_input fd] reads one input from the given file
+      descriptor. *)

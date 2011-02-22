@@ -42,13 +42,27 @@ class t ?(model=default_model) ~input ~input_encoding ~output ~output_encoding ?
   let ic = Lwt_text.make ~encoding:input_encoding (Lwt_io.of_fd ~mode:Lwt_io.input input)
   and oc = Lwt_text.make ~encoding:output_encoding (Lwt_io.of_fd ~mode:Lwt_io.output output) in
   let input_stream = Lwt_stream.from (fun () -> Lwt_text.read_char_opt ic) in
-object
+  let size_changed = ref false in
+  let size_changed_cond = Lwt_condition.create () in
+  let () =
+    if not windows then
+      match Lt_unix.sigwinch with
+        | Some signum ->
+            ignore
+              (Lwt_unix.on_signal signum
+                 (fun _ ->
+                    size_changed := true;
+                    Lwt_condition.signal size_changed_cond `Resize))
+        | None ->
+            ()
+  in
+object(self)
+
   method model = model
   method windows = windows
 
   method get_size = get_size output
   method set_size size = set_size output size
-
 
   method raw_mode = raw_mode
   val mutable saved_attr = None
@@ -100,9 +114,25 @@ object
 
   method read_event =
     if windows then
-      fail Exit
-    else
-      Lt_unix.get_sequence input_stream >|= Lt_unix.parse_event
+      Lt_windows.read_console_input input >>= function
+        | Lt_windows.Resize ->
+            lwt size = self#get_size in
+            return (Lt_event.Resize size)
+        | Lt_windows.Key(mods, key) ->
+            return (Lt_event.Key(mods, key))
+    else if !size_changed then begin
+      size_changed := false;
+      lwt size = self#get_size in
+      return (Lt_event.Resize size)
+    end else
+      pick [Lt_unix.get_sequence input_stream >|= (fun seq -> `Seq seq);
+            Lwt_condition.wait size_changed_cond] >>= function
+        | `Seq seq ->
+            return (Lt_unix.parse_event seq)
+        | `Resize ->
+            size_changed := false;
+            lwt size = self#get_size in
+            return (Lt_event.Resize size)
 end
 
 let stdout =
