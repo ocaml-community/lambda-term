@@ -7,7 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
-(** Windows specific functions. *)
+(** Windows specific functions *)
 
 (** All these functions return [Lwt_sys.Not_available] on Unix. *)
 
