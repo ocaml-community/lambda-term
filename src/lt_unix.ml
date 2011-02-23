@@ -35,37 +35,28 @@ let parse_escape st =
       | Return None ->
           raise_lwt Exit_sequence
       | Return(Some ch) ->
-          let code = Text.code ch in
-          (* Is it an ascii character ? *)
-          if code < 128 then begin
-            let ch = Char.unsafe_chr code in
-            Buffer.add_char buf ch;
-            return ch
-          end else
-            (* If it is not, then this is not an escape sequence: *)
-            raise_lwt Exit_sequence
-  in
-
-  (* Sometimes sequences starts with several escape characters: *)
-  let rec first count =
-    get () >>= function
-      | '\x1b' when count < 3 ->
-          first (count + 1)
-      | ch ->
+          Buffer.add_string buf ch;
           return ch
   in
 
-  first 0 >>= function
-    | '[' | 'O' ->
-        let rec loop () =
-          get () >>= function
-            | '0' .. '9' | ';' ->
-                loop ()
-            | ch ->
-                return (Buffer.contents buf)
-        in
-        loop ()
+  let rec loop () =
+    get () >>= function
+      | "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | ";" | "[" ->
+          loop ()
+      | ch ->
+          return (Buffer.contents buf)
+  in
 
+  get () >>= function
+    | "\027" -> begin
+        get () >>= function
+          | "[" | "O" ->
+              loop ()
+          | ch ->
+              return (Buffer.contents buf)
+      end
+    | "[" | "O" ->
+        loop ()
     | ch ->
         return (Buffer.contents buf)
 
@@ -122,7 +113,7 @@ let sequences = [|
   "\027[1~", ({ control = false; meta = false }, Home);
   "\027[2~", ({ control = false; meta = false }, Insert);
   "\027[3~", ({ control = false; meta = false }, Delete);
-  "\027[3~", ({ control = false; meta = false }, End);
+  "\027[4~", ({ control = false; meta = false }, End);
   "\027[5~", ({ control = false; meta = false }, Prev_page);
   "\027[6~", ({ control = false; meta = false }, Next_page);
   "\027[7~", ({ control = false; meta = false }, Home);
@@ -143,7 +134,7 @@ let sequences = [|
   "\027[1^", ({ control = true; meta = false }, Home);
   "\027[2^", ({ control = true; meta = false }, Insert);
   "\027[3^", ({ control = true; meta = false }, Delete);
-  "\027[3^", ({ control = true; meta = false }, End);
+  "\027[4^", ({ control = true; meta = false }, End);
   "\027[5^", ({ control = true; meta = false }, Prev_page);
   "\027[6^", ({ control = true; meta = false }, Next_page);
   "\027[7^", ({ control = true; meta = false }, Home);
@@ -185,6 +176,22 @@ let sequences = [|
   "\027OQ", ({ control = false; meta = false }, F2);
   "\027OR", ({ control = false; meta = false }, F3);
   "\027OS", ({ control = false; meta = false }, F4);
+
+  "\027O3P", ({ control = false; meta = true }, F1);
+  "\027O3Q", ({ control = false; meta = true }, F2);
+  "\027O3R", ({ control = false; meta = true }, F3);
+  "\027O3S", ({ control = false; meta = true }, F4);
+
+  "\027O5P", ({ control = true; meta = false }, F1);
+  "\027O5Q", ({ control = true; meta = false }, F2);
+  "\027O5R", ({ control = true; meta = false }, F3);
+  "\027O5S", ({ control = true; meta = false }, F4);
+
+  "\027[[A", ({ control = false; meta = false }, F1);
+  "\027[[B", ({ control = false; meta = false }, F2);
+  "\027[[C", ({ control = false; meta = false }, F3);
+  "\027[[D", ({ control = false; meta = false }, F4);
+  "\027[[E", ({ control = false; meta = false }, F5);
 
   "\027[H", ({ control = false; meta = false }, Home);
   "\027[F", ({ control = false; meta = false }, End);
