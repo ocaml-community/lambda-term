@@ -105,12 +105,16 @@ object(self)
             return ()
 
   method save =
-    (*Icu_io.write oc u"\027[?1049h\027[?1h\027=\r"*)
-    Lwt_text.write oc "\027[?1049h"
+    if windows then
+      return ()
+    else
+      Lwt_text.write oc "\027[?1049h"
 
   method load =
-    (*Icu_io.write oc u"\r\027[K\027[?1l\027>\027[r\027[?1049l"*)
-    Lwt_text.write oc "\027[?1049l"
+    if windows then
+      return ()
+    else
+      Lwt_text.write oc "\027[?1049l"
 
   method read_event =
     if windows then
