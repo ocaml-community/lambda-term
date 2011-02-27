@@ -13,10 +13,12 @@ val sigwinch : int option
   (** The number of the signal used to indicate that the terminal size
       have changed. It is [None] on windows. *)
 
-val get_sequence : Text.t Lwt_stream.t -> Text.t Lwt.t
-  (** [get_sequence stream] reads an escape sequence or a character
-      from the given stream of characters. *)
+val system_encoding : string
+  (** The encoding used by the system. *)
 
-val parse_event : Text.t -> Lt_event.t
-  (** [parse_event sequence] returns the event that correspond to the
-      given escape sequence. *)
+val parse_event : Lt_iconv.t -> char Lwt_stream.t -> Lt_event.t Lwt.t
+  (** [parse_event cd stream] parses one event from the given input
+      stream. [cd] is the conversion descriptor used to decode
+      non-ascii characters. It must be a converter from the stream
+      encoding to "UCS-4BE". If an invalid sequence is encountered in
+      the input, it fallbacks to Latin-1. *)

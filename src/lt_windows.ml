@@ -15,52 +15,47 @@ external set_console_cp : int -> unit = "lt_windows_set_console_cp"
 external get_console_output_cp : unit -> int = "lt_windows_get_console_output_cp"
 external set_console_output_cp : int -> unit = "lt_windows_set_console_output_cp"
 
-type original_input =
-  | OI_resize
-  | OI_code of Lt_key.modifiers * int
-  | OI_key of Lt_key.modifiers * Lt_key.t
-
 type input =
   | Resize
-  | Key of Lt_key.modifiers * Lt_key.t
+  | Key of Lt_key.t
 
 external read_console_input_job : Unix.file_descr -> [ `read_console_input ] Lwt_unix.job = "lt_windows_read_console_input_job"
-external read_console_input_result : [ `read_console_input ] Lwt_unix.job -> original_input = "lt_windows_read_console_input_result"
+external read_console_input_result : [ `read_console_input ] Lwt_unix.job -> input = "lt_windows_read_console_input_result"
 external read_console_input_free : [ `read_console_input ] Lwt_unix.job -> unit = "lt_windows_read_console_input_free"
 
 let controls = [|
-  " ";
-  "a";
-  "b";
-  "c";
-  "d";
-  "e";
-  "f";
-  "g";
-  "h";
-  "i";
-  "j";
-  "k";
-  "l";
-  "m";
-  "n";
-  "o";
-  "p";
-  "q";
-  "r";
-  "s";
-  "t";
-  "u";
-  "v";
-  "w";
-  "x";
-  "y";
-  "z";
-  "[";
-  "\\";
-  "]";
-  "^";
-  "_";
+  Char.code ' ';
+  Char.code 'a';
+  Char.code 'b';
+  Char.code 'c';
+  Char.code 'd';
+  Char.code 'e';
+  Char.code 'f';
+  Char.code 'g';
+  Char.code 'h';
+  Char.code 'i';
+  Char.code 'j';
+  Char.code 'k';
+  Char.code 'l';
+  Char.code 'm';
+  Char.code 'n';
+  Char.code 'o';
+  Char.code 'p';
+  Char.code 'q';
+  Char.code 'r';
+  Char.code 's';
+  Char.code 't';
+  Char.code 'u';
+  Char.code 'v';
+  Char.code 'w';
+  Char.code 'x';
+  Char.code 'y';
+  Char.code 'z';
+  Char.code '[';
+  Char.code '\\';
+  Char.code ']';
+  Char.code '^';
+  Char.code '_';
 |]
 
 let read_console_input fd =
@@ -69,13 +64,3 @@ let read_console_input fd =
     (read_console_input_job (Lwt_unix.unix_file_descr fd))
     read_console_input_result
     read_console_input_free
-  >|= function
-    | OI_resize ->
-        Resize
-    | OI_code(mods, code) ->
-        if code < 32 then
-          Key(mods, Lt_key.Char controls.(code))
-        else
-          Key(mods, Lt_key.Char(Text.char code))
-    | OI_key(mods, key) ->
-        Key(mods, key)

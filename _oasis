@@ -20,9 +20,9 @@ Description: Corss-platform library for terminal manipulation
 
 Library "lambda-term"
   FindlibName: lambda-term
-  BuildDepends: lwt.text, lwt.syntax
+  BuildDepends: lwt.unix, lwt.react, lwt.syntax
   XMETADescription: Corss-platform library for terminal manipulation
-  XMETARequires: lwt.text
+  XMETARequires: lwt.unix, lwt.react
   Path: src
   Install: true
   Modules:
@@ -30,11 +30,14 @@ Library "lambda-term"
     Lt_key,
     Lt_event,
     Lt_unix,
-    Lt_windows
+    Lt_windows,
+    Lt_iconv,
+    Lt_utf8
   CSources:
     lt_term_stubs.c,
     lt_unix_stubs.c,
-    lt_windows_stubs.c
+    lt_windows_stubs.c,
+    lt_iconv_stubs.c
 
 # +-------------------------------------------------------------------+
 # | Examples                                                          |

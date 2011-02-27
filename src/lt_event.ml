@@ -11,14 +11,16 @@ type size = { lines : int; columns : int }
 
 type t =
   | Resize of size
-  | Key of Lt_key.modifiers * Lt_key.t
-  | Key_sequence of Text.t
+  | Key of Lt_key.t
+  | Sequence of string
+  | Mouse of int * int * int
 
 let to_string = function
   | Resize size ->
       Printf.sprintf "Resize { lines = %d; columns = %d }" size.lines size.columns
-  | Key(mods, key) ->
-      Printf.sprintf "Key(%s, %s)" (Lt_key.string_of_modifiers mods) (Lt_key.to_string key)
-  | Key_sequence seq ->
-      Format.sprintf "Key_sequence %S" seq
-
+  | Key key ->
+      Printf.sprintf "Key %s" (Lt_key.to_string key)
+  | Sequence seq ->
+      Printf.sprintf "Sequence %S" seq
+  | Mouse(mask, x, y) ->
+      Printf.sprintf "Mouse(%x, %d, %d)" mask x y

@@ -1,8 +1,10 @@
 # OASIS_START
-# DO NOT EDIT (digest: bda6b3a12264ad0ff6a409717e252c2f)
+# DO NOT EDIT (digest: 6613fa8f0d060ea1e59c9569d295328b)
 Lt_term
 Lt_key
 Lt_event
 Lt_unix
 Lt_windows
+Lt_iconv
+Lt_utf8
 # OASIS_STOP

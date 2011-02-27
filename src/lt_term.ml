@@ -39,9 +39,10 @@ let default_model =
 
 class t ?(model=default_model) ~input ~input_encoding ~output ~output_encoding ?(windows=Lwt_sys.windows) () =
   let raw_mode, set_raw_mode = S.create false in
-  let ic = Lwt_text.make ~encoding:input_encoding (Lwt_io.of_fd ~mode:Lwt_io.input input)
-  and oc = Lwt_text.make ~encoding:output_encoding (Lwt_io.of_fd ~mode:Lwt_io.output output) in
-  let input_stream = Lwt_stream.from (fun () -> Lwt_text.read_char_opt ic) in
+  let ic = Lwt_io.of_fd ~mode:Lwt_io.input input
+  and oc = Lwt_io.of_fd ~mode:Lwt_io.output output in
+  let input_cd = Lt_iconv.iconv_open ~to_code:"UCS-4BE" ~of_code:input_encoding in
+  let input_stream = Lwt_stream.from (fun () -> Lwt_io.read_char_opt ic) in
   let size_changed = ref false in
   let size_changed_cond = Lwt_condition.create () in
   let () =
@@ -108,13 +109,13 @@ object(self)
     if windows then
       return ()
     else
-      Lwt_text.write oc "\027[?1049h"
+      Lwt_io.write oc "\027[?1049h"
 
   method load =
     if windows then
       return ()
     else
-      Lwt_text.write oc "\027[?1049l"
+      Lwt_io.write oc "\027[?1049l"
 
   method read_event =
     if windows then
@@ -122,17 +123,17 @@ object(self)
         | Lt_windows.Resize ->
             lwt size = self#get_size in
             return (Lt_event.Resize size)
-        | Lt_windows.Key(mods, key) ->
-            return (Lt_event.Key(mods, key))
+        | Lt_windows.Key key ->
+            return (Lt_event.Key key)
     else if !size_changed then begin
       size_changed := false;
       lwt size = self#get_size in
       return (Lt_event.Resize size)
     end else
-      pick [Lt_unix.get_sequence input_stream >|= (fun seq -> `Seq seq);
+      pick [Lt_unix.parse_event input_cd input_stream >|= (fun seq -> `Event seq);
             Lwt_condition.wait size_changed_cond] >>= function
-        | `Seq seq ->
-            return (Lt_unix.parse_event seq)
+        | `Event ev ->
+            return ev
         | `Resize ->
             size_changed := false;
             lwt size = self#get_size in
@@ -150,9 +151,9 @@ let stdout =
   else
     new t
       ~input:Lwt_unix.stdin
-      ~input_encoding:Encoding.system
+      ~input_encoding:Lt_unix.system_encoding
       ~output:Lwt_unix.stdout
-      ~output_encoding:Encoding.system
+      ~output_encoding:Lt_unix.system_encoding
       ()
 
 let stderr =
@@ -166,7 +167,7 @@ let stderr =
   else
     new t
       ~input:Lwt_unix.stdin
-      ~input_encoding:Encoding.system
+      ~input_encoding:Lt_unix.system_encoding
       ~output:Lwt_unix.stderr
-      ~output_encoding:Encoding.system
+      ~output_encoding:Lt_unix.system_encoding
       ()

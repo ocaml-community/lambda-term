@@ -17,9 +17,18 @@ CAMLprim value lt_unix_get_sigwinch()
   return Val_int(0);
 }
 
+CAMLprim value lt_unix_get_system_encoding()
+{
+  char codeset[128];
+  sprintf(codeset, "CP%d", GetACP());
+  return caml_copy_string(codeset);
+}
+
 #else
 
 #include <signal.h>
+#include <locale.h>
+#include <langinfo.h>
 
 CAMLprim value lt_unix_get_sigwinch()
 {
@@ -30,6 +39,18 @@ CAMLprim value lt_unix_get_sigwinch()
 #else
   return Val_int(0);
 #endif
+}
+
+CAMLprim value lt_unix_get_system_encoding()
+{
+  /* Set the locale according to environment variables: */
+  char *locale = setlocale(LC_CTYPE, "");
+  /* Get the codeset used by current locale: */
+  char *codeset = nl_langinfo(CODESET);
+  /* Reset the locale: */
+  setlocale(LC_CTYPE, locale);
+  /* If the encoding cannot be determined, just use ascii: */
+  return caml_copy_string(codeset ? codeset : "ASCII");
 }
 
 #endif

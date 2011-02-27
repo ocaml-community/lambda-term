@@ -133,7 +133,7 @@ CAMLprim value lt_windows_read_console_input_job(value val_fd)
 CAMLprim value lt_windows_read_console_input_result(value val_job)
 {
   CAMLparam1(val_job);
-  CAMLlocal2(result, mods);
+  CAMLlocal2(result, ch);
   struct job_read_console_input *job = Job_read_console_input_val(val_job);
   if (job->error_code) {
     win32_maperr(job->error_code);
@@ -143,21 +143,19 @@ CAMLprim value lt_windows_read_console_input_result(value val_job)
   switch (input->EventType) {
   case KEY_EVENT: {
     DWORD cks = input->Event.KeyEvent.dwControlKeyState;
-    mods = caml_alloc_tuple(2);
-    Field(mods, 0) = Val_bool((cks & LEFT_CTRL_PRESSED) | (cks & RIGHT_CTRL_PRESSED));
-    Field(mods, 1) = Val_bool((cks & LEFT_ALT_PRESSED) | (cks & RIGHT_ALT_PRESSED));
+    result = caml_alloc(3, 0);
+    Field(result, 0) = Val_bool((cks & LEFT_CTRL_PRESSED) | (cks & RIGHT_CTRL_PRESSED));
+    Field(result, 1) = Val_bool((cks & LEFT_ALT_PRESSED) | (cks & RIGHT_ALT_PRESSED));
     WORD code = input->Event.KeyEvent.wVirtualKeyCode;
     int i;
     for (i = 0; i < sizeof(code_table)/sizeof(code_table[0]); i++)
       if (code == code_table[i]) {
-        result = caml_alloc(2, 1);
-        Field(result, 0) = mods;
-        Field(result, 1) = Val_int(i);
+        Field(result, 2) = Val_int(i);
         CAMLreturn(result);
       }
-    result = caml_alloc(2, 0);
-    Field(result, 0) = mods;
-    Field(result, 1) = Val_int(input->Event.KeyEvent.uChar.UnicodeChar);
+    ch = caml_alloc_tuple(1);
+    Field(ch, 0) = Val_int(input->Event.KeyEvent.uChar.UnicodeChar);
+    Field(result, 2) = ch;
     CAMLreturn(result);
   }
   case WINDOW_BUFFER_SIZE_EVENT:

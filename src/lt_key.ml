@@ -7,8 +7,8 @@
  * This file is a part of Lambda-Term.
  *)
 
-type t =
-  | Char of Text.t
+type code =
+  | Char of int
   | Enter
   | Escape
   | Tab
@@ -36,13 +36,18 @@ type t =
   | Delete
   | Backspace
 
-type modifiers = {
-  control : bool;
+type t = {
+  ctrl : bool;
   meta : bool;
+  code : code;
 }
 
-let to_string = function
-  | Char ch -> Printf.sprintf "Char %S" ch
+let ctrl key = key.ctrl
+let meta key = key.meta
+let code key = key.code
+
+let string_of_code = function
+  | Char ch -> Printf.sprintf "Char 0x%02x" ch
   | Enter -> "Enter"
   | Escape -> "Escape"
   | Tab -> "Tab"
@@ -70,5 +75,5 @@ let to_string = function
   | Delete -> "Delete"
   | Backspace -> "Backspace"
 
-let string_of_modifiers m =
-  Printf.sprintf "{ control = %B; meta = %B }" m.control m.meta
+let to_string key =
+  Printf.sprintf "{ ctrl = %B; meta = %B; code = %s }" key.ctrl key.meta (string_of_code key.code)

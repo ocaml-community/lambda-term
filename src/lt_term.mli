@@ -38,9 +38,9 @@ type size = Lt_event.size = { lines : int; columns : int }
 class t :
   ?model : string ->
   input : Lwt_unix.file_descr ->
-  input_encoding : Encoding.t ->
+  input_encoding : string ->
   output : Lwt_unix.file_descr ->
-  output_encoding : Encoding.t ->
+  output_encoding : string ->
   ?windows : bool -> unit ->
 object
 

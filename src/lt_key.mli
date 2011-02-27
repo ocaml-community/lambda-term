@@ -9,8 +9,9 @@
 
 (** Keys *)
 
-type t =
-  | Char of Text.t
+(** Type of key code. *)
+type code =
+  | Char of int
       (** A unicode character. *)
   | Enter
   | Escape
@@ -39,16 +40,19 @@ type t =
   | Delete
   | Backspace
 
-(** State of modifier keys. *)
-type modifiers = {
-  control : bool;
+(** Type of key. *)
+type t = {
+  ctrl : bool;
   (** Is the control key down ? *)
   meta : bool;
   (** Is the meta key down ? *)
+  code : code;
+  (** The code of the key. *)
 }
+
+val ctrl : t -> bool
+val meta : t -> bool
+val code : t -> code
 
 val to_string : t -> string
   (** Returns the string representation of the given key. *)
-
-val string_of_modifiers : modifiers -> string
-  (** Returns the string representation of the given modifiers. *)

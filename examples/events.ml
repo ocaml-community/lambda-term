@@ -16,7 +16,7 @@ let rec loop term =
   lwt ev = term#read_event in
   lwt () = Lwt_io.printl (Lt_event.to_string ev) in
   match ev with
-    | Lt_event.Key(_, Lt_key.Escape) ->
+    | Lt_event.Key{ Lt_key.code = Lt_key.Escape } ->
         return ()
     | _ ->
         loop term
