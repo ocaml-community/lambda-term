@@ -12,6 +12,10 @@
 type t
   (** Type of an iconv conversion descriptor. *)
 
+val equal : string -> string -> bool
+  (** [equal encoding1 encoding2] returns [true] iff the two given
+      encodings denote the same one. *)
+
 exception Closed
   (** Exception raised when trying to use a closed iconv
       descriptor. *)
@@ -62,3 +66,7 @@ val reset : t -> unit
 val recode : to_code : string -> of_code : string -> string -> string
   (** [recode ~to_code ~of_code str] recodes [str] from [of_code] to
       [to_code]. *)
+
+val recode_with : t -> string -> string
+  (** [recode_with cd str] recodes [str] with the given conversion
+      descriptor. *)

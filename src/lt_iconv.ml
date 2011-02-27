@@ -38,8 +38,29 @@ let iconv cd ~src ~dst =
   if dst.index < 0 || dst.index > dst.limit || dst.limit > String.length dst.bytes then invalid_arg "Lt_iconv.iconv";
   iconv cd ~src ~dst
 
-let recode ~to_code ~of_code str =
-  let cd = iconv_open ~to_code ~of_code in
+let equal enc1 enc2 =
+  let rec loop i1 i2 =
+    if i1 = String.length enc1 || String.unsafe_get enc1 i1 = '/' then
+      i2 = String.length enc2 || String.unsafe_get enc2 i2 = '/'
+    else if i2 = String.length enc2 || String.unsafe_get enc2 i2 = '/' then
+      false
+    else
+      let ch1 = Char.lowercase (String.unsafe_get enc1 i1)
+      and ch2 = Char.lowercase (String.unsafe_get enc2 i2) in
+      match ch1, ch2 with
+        | ('a' .. 'z' | '0' .. '9' | '_' | '-' | '.' | ':'), ('a' .. 'z' | '0' .. '9' | '_' | '-' | '.' | ':') ->
+            ch1 = ch2 && loop (i1 + 1) (i2 + 1)
+        | ('a' .. 'z' | '0' .. '9' | '_' | '-' | '.' | ':'), _ ->
+            loop i1 (i2 + 1)
+        | _, ('a' .. 'z' | '0' .. '9' | '_' | '-' | '.' | ':') ->
+            loop (i1 + 1) i2
+        | _ ->
+            loop (i1 + 1) (i2 + 1)
+  in
+  loop 0 0
+
+let recode_with cd str =
+  reset cd;
   let src = {
     bytes = str;
     index = 0;
@@ -54,17 +75,20 @@ let recode ~to_code ~of_code str =
     try
       iconv cd ~src ~dst
     with
-      | (Invalid_sequence | Unterminated_sequence) as exn ->
-          iconv_close cd;
-          raise exn
       | Insufficient_space ->
           let buf = String.create (String.length dst.bytes * 2) in
           String.unsafe_blit dst.bytes 0 buf 0 (String.length dst.bytes);
           dst.bytes <- buf;
           dst.limit <- String.length buf
-      | exn ->
-          iconv_close cd;
-          raise exn
   done;
-  iconv_close cd;
   String.sub dst.bytes 0 dst.index
+
+let recode ~to_code ~of_code str =
+  if equal to_code of_code then
+    str
+  else begin
+    let cd = iconv_open ~to_code ~of_code in
+    let str = try recode_with cd str with exn -> iconv_close cd; raise exn in
+    iconv_close cd;
+    str
+  end

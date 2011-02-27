@@ -65,3 +65,9 @@ let read_console_input fd =
     (read_console_input_job (Lwt_unix.unix_file_descr fd))
     read_console_input_result
     read_console_input_free
+
+external set_console_text_attribute : Unix.file_descr -> int -> int -> unit = "lt_windows_set_console_text_attribute"
+
+let set_console_text_attribute fd fg bg =
+  Lwt_unix.check_descriptor fd;
+  set_console_text_attribute (Lwt_unix.unix_file_descr fd) fg bg

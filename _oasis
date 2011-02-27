@@ -32,7 +32,8 @@ Library "lambda-term"
     Lt_unix,
     Lt_windows,
     Lt_iconv,
-    Lt_utf8
+    Lt_utf8,
+    Lt_style
   CSources:
     lt_term_stubs.c,
     lt_unix_stubs.c,
@@ -48,6 +49,13 @@ Executable events
   Install: false
   CompiledObject: best
   MainIs: events.ml
+  BuildDepends: lambda-term
+
+Executable colors
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: colors.ml
   BuildDepends: lambda-term
 
 # +-------------------------------------------------------------------+

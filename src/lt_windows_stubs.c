@@ -25,7 +25,7 @@
 
 CAMLprim value lt_windows_get_acp()
 {
-  return Val_int(GetACP);
+  return Val_int(GetACP());
 }
 
 CAMLprim value lt_windows_get_console_cp()
@@ -35,7 +35,10 @@ CAMLprim value lt_windows_get_console_cp()
 
 CAMLprim value lt_windows_set_console_cp(value cp)
 {
-  SetConsoleCP(Int_val(cp));
+  if (!SetConsoleCP(Int_val(cp))) {
+    win32_maperr(GetLastError());
+    uerror("SetConsoleCP", Nothing);
+  }
   return Val_unit;
 }
 
@@ -46,7 +49,10 @@ CAMLprim value lt_windows_get_console_output_cp()
 
 CAMLprim value lt_windows_set_console_output_cp(value cp)
 {
-  SetConsoleOutputCP(Int_val(cp));
+  if (!SetConsoleOutputCP(Int_val(cp))) {
+    win32_maperr(GetLastError());
+    uerror("SetConsoleOutputCP", Nothing);
+  }
   return Val_unit;
 }
 
@@ -205,6 +211,33 @@ CAMLprim value lt_windows_read_console_input_free(value val_job)
   return Val_unit;
 }
 
+/* +-----------------------------------------------------------------+
+   | Text attributes                                                 |
+   +-----------------------------------------------------------------+ */
+
+CAMLprim value lt_windows_set_console_text_attribute(value val_fd, value val_fg, value val_bg)
+{
+  int fg = Int_val(val_fg);
+  int bg = Int_val(val_bg);
+  WORD attrs = 0;
+
+  if (fg & 1) attrs |= FOREGROUND_RED;
+  if (fg & 2) attrs |= FOREGROUND_GREEN;
+  if (fg & 4) attrs |= FOREGROUND_BLUE;
+  if (fg & 8) attrs |= FOREGROUND_INTENSITY;
+
+  if (bg & 1) attrs |= BACKGROUND_RED;
+  if (bg & 2) attrs |= BACKGROUND_GREEN;
+  if (bg & 4) attrs |= BACKGROUND_BLUE;
+  if (bg & 8) attrs |= BACKGROUND_INTENSITY;
+
+  if (!SetConsoleTextAttribute(Handle_val(val_fd), attrs)) {
+    win32_maperr(GetLastError());
+    uerror("SetConsoleTextAttribute", Nothing);
+  }
+  return Val_unit;
+}
+
 #else
 
 /* +-----------------------------------------------------------------+
@@ -228,5 +261,6 @@ NA(set_console_output_cp, "SetConsoleOutputCP")
 NA(read_console_input_job, "ReadConsoleInput")
 NA(read_console_input_result, "ReadConsoleInput")
 NA(read_console_input_free, "ReadConsoleInput")
+NA(set_console_text_attribute, "SetConsoleTextAttribute")
 
 #endif

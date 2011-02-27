@@ -41,13 +41,17 @@ val create :
 
       - [outgoing_encoding] is the encoding used for outgoing data. It
       defaults to [Lt_windows.get_console_output_cp] if [windows] is
-      [true] and [Lt_unix.system_encoding] otherwise.
-  *)
+      [true] and [Lt_unix.system_encoding] otherwise. Note that
+      transliteration is used so printing unicode character on the
+      terminal will never fail. *)
 
 (** {6 Informations} *)
 
 val model : t -> string
   (** Returns the model of the terminal. *)
+
+val colors : t -> int
+  (** Number of colors of the terminal. *)
 
 val windows : t -> bool
   (** Whether the terminal is in windows mode or not. *)
@@ -103,6 +107,47 @@ val read_event : t -> Lt_event.t Lwt.t
   (** Reads and returns one event. This method can be called only when
       the terminal is in raw mode. Otherwise several kind of events
       will not be reported. *)
+
+(** {6 Printing} *)
+
+(** The general name of a printing function is [<prefix>print<suffixes>].
+
+    Where [<prefix>] is one of:
+    - ['f'], which means that the function takes as argument a terminal
+    - nothing, which means that the function prints on {!stdout}
+    - ['e'], which means that the function prints on {!stderr}
+
+    and [<suffixes>] is a combination of:
+    - ['l'] which means that a new-line character is printed after the message
+    - ['f'] which means that the function takes as argument a {b format} instead
+    of a string
+    - ['s'] which means that the function takes as argument a styled
+    string instead of a string
+
+    Notes:
+    - if the terminal is not really a terminal, styles are stripped.
+    - non-ascii characters are recoded on the fly using the terminal
+    encoding
+*)
+
+val fprint : t -> string -> unit Lwt.t
+val fprintl : t -> string -> unit Lwt.t
+val fprintf : t -> ('a, unit, string, unit Lwt.t) format4 -> 'a
+val fprints : t -> Lt_style.text -> unit Lwt.t
+val fprintlf : t -> ('a, unit, string, unit Lwt.t) format4 -> 'a
+val fprintls : t -> Lt_style.text -> unit Lwt.t
+val print : string -> unit Lwt.t
+val printl : string -> unit Lwt.t
+val printf : ('a, unit, string, unit Lwt.t) format4 -> 'a
+val prints : Lt_style.text -> unit Lwt.t
+val printlf : ('a, unit, string, unit Lwt.t) format4 -> 'a
+val printls : Lt_style.text -> unit Lwt.t
+val eprint : string -> unit Lwt.t
+val eprintl : string -> unit Lwt.t
+val eprintf : ('a, unit, string, unit Lwt.t) format4 -> 'a
+val eprints : Lt_style.text -> unit Lwt.t
+val eprintlf : ('a, unit, string, unit Lwt.t) format4 -> 'a
+val eprintls : Lt_style.text -> unit Lwt.t
 
 (** {6 Well known instances} *)
 

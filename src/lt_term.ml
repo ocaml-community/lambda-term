@@ -18,7 +18,9 @@ type size = Lt_event.size = { lines : int; columns : int }
 
 type t = {
   model : string;
+  colors : int;
   windows : bool;
+  bold_is_bright : bool;
   (* Informations. *)
 
   raw_mode : bool signal;
@@ -65,6 +67,13 @@ let default_model =
   with Not_found ->
     "dumb"
 
+let colors_of_term = function
+  | "xterm" -> 256
+  | "rxvt-256color" -> 256
+  | "rxvt-unicode" -> 88
+  | "rxvt" -> 88
+  | _ -> 16
+
 let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding ?outgoing_encoding incoming_fd outgoing_fd =
   let incoming_encoding, outgoing_encoding =
     match windows with
@@ -80,7 +89,9 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
   let ic = Lwt_io.of_fd ~mode:Lwt_io.input incoming_fd and oc = Lwt_io.of_fd ~mode:Lwt_io.output outgoing_fd in
   let term = {
     model;
+    colors = colors_of_term model;
     windows;
+    bold_is_bright = model = "linux";
     raw_mode;
     set_raw_mode;
     saved_attr = None;
@@ -91,7 +102,7 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
     ic;
     oc;
     incoming_cd = Lt_iconv.iconv_open ~to_code:"UCS-4BE" ~of_code:incoming_encoding;
-    outgoing_cd = Lt_iconv.iconv_open ~to_code:outgoing_encoding ~of_code:"UTF-8";
+    outgoing_cd = Lt_iconv.iconv_open ~to_code:(outgoing_encoding ^ "//TRANSLIT") ~of_code:"UTF-8";
     input_stream = Lwt_stream.from (fun () -> Lwt_io.read_char_opt ic);
     size_changed = false;
     size_changed_cond = Lwt_condition.create ();
@@ -110,6 +121,7 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
   term
 
 let model t = t.model
+let colors t = t.colors
 let windows t = t.windows
 
 (* +-----------------------------------------------------------------+
@@ -232,8 +244,182 @@ let read_event term =
           return (Lt_event.Resize size)
 
 (* +-----------------------------------------------------------------+
+   | Styled printing                                                 |
+   +-----------------------------------------------------------------+ *)
+
+module Codes = struct
+  let reset = 0
+  let bold = 1
+  let underlined = 4
+  let blink = 5
+  let inverse = 7
+  let hidden = 8
+  let foreground = 30
+  let background = 40
+end
+
+let fprint term str =
+  Lwt_io.fprint term.oc (Lt_iconv.recode_with term.outgoing_cd str)
+
+let fprintl term str =
+  fprint term (str ^ "\n")
+
+let fprintf term fmt =
+  Printf.ksprintf (fun str -> fprint term str) fmt
+
+let fprintlf term fmt =
+  Printf.ksprintf (fun str -> fprintl term str) fmt
+
+let add_int buf n =
+  let rec loop = function
+    | 0 ->
+        ()
+    | n ->
+        loop (n / 10);
+        Buffer.add_char buf (Char.unsafe_chr (48 + (n mod 10)))
+  in
+  if n = 0 then
+    Buffer.add_char buf '0'
+  else
+    loop n
+
+let queue_color term q base = function
+  | Lt_style.Default ->
+      Queue.add (base + 9) q
+  | Lt_style.Index n ->
+      if n < 8 then
+        Queue.add (base + n) q
+      else begin
+        Queue.add (base + 8) q;
+        Queue.add 5 q;
+        Queue.add n q
+      end
+  | Lt_style.Light n ->
+      if n < 8 then
+        if term.bold_is_bright then
+          if base = Codes.foreground then begin
+            Queue.add Codes.bold q;
+            Queue.add (base + n) q
+          end else
+            Queue.add (base + n) q
+        else begin
+          Queue.add (base + 8) q;
+          Queue.add 5 q;
+          Queue.add (n + 8) q
+        end
+      else begin
+        Queue.add (base + 8) q;
+        Queue.add 5 q;
+        Queue.add n q
+      end
+  | Lt_style.RGB _ ->
+      assert false
+
+let expand term text =
+  let open Lt_style in
+
+  let buf = Buffer.create 256 in
+
+  (* Pendings style codes: *)
+  let codes = Queue.create () in
+
+  (* Output pending codes using only one escape sequence: *)
+  let output_pendings () =
+    Buffer.add_string buf "\027[";
+    add_int buf (Queue.take codes);
+    Queue.iter (fun code ->
+                  Buffer.add_char buf ';';
+                  add_int buf code) codes;
+    Queue.clear codes;
+    Buffer.add_char buf 'm';
+  in
+
+  let rec loop = function
+    | [] ->
+        if not (Queue.is_empty codes) then output_pendings ();
+        Buffer.contents buf
+    | instr :: rest ->
+        match instr with
+          | String str  ->
+              if not (Queue.is_empty codes) then output_pendings ();
+              Buffer.add_string buf str;
+              loop rest
+          | Reset ->
+              Queue.add 0 codes;
+              loop rest
+          | Bold ->
+              Queue.add Codes.bold codes;
+              loop rest
+          | Underlined ->
+              Queue.add Codes.underlined codes;
+              loop rest
+          | Blink ->
+              Queue.add Codes.blink codes;
+              loop rest
+          | Inverse ->
+              Queue.add Codes.inverse codes;
+              loop rest
+          | Hidden ->
+              Queue.add Codes.hidden codes;
+              loop rest
+          | Foreground col ->
+              queue_color term codes Codes.foreground col;
+              loop rest
+          | Background col ->
+              queue_color term codes Codes.background col;
+              loop rest
+  in
+  loop text
+
+let windows_color term = function
+  | Lt_style.Default -> 0
+  | Lt_style.Index n -> n
+  | Lt_style.Light n -> if n < 8 then n + 8 else n
+  | Lt_style.RGB _ -> assert false
+
+let fprints_windows term oc text =
+  let open Lt_style in
+  Lwt_list.iter_s
+    (function
+       | String str ->
+           Lwt_io.write oc (Lt_iconv.recode_with term.outgoing_cd str)
+       | Foreground col ->
+           lwt () = Lwt_io.flush oc in
+           Lt_windows.set_console_text_attribute term.outgoing_fd (windows_color term col) 0;
+           return ()
+       | _ ->
+           return ())
+    text
+
+let fprints term text =
+  Lwt_unix.isatty term.outgoing_fd >>= function
+    | true ->
+        if term.windows then
+          Lwt_io.atomic (fun oc -> fprints_windows term oc text) term.oc
+        else
+          fprint term (expand term text)
+    | false ->
+        fprint term (Lt_style.strip text)
+
+let fprintls term text =
+  fprints term (text @ [Lt_style.String "\n"])
+
+(* +-----------------------------------------------------------------+
    | Standard terminals                                              |
    +-----------------------------------------------------------------+ *)
 
 let stdout = create Lwt_unix.stdin Lwt_unix.stdout
 let stderr = create Lwt_unix.stdin Lwt_unix.stderr
+
+let print str = fprint stdout str
+let printl str = fprintl stdout str
+let printf fmt = fprintf stdout fmt
+let prints str = fprints stdout str
+let printlf fmt = fprintlf stdout fmt
+let printls str = fprintls stdout str
+let eprint str = fprint stderr str
+let eprintl str = fprintl stderr str
+let eprintf fmt = fprintf stderr fmt
+let eprints str = fprints stderr str
+let eprintlf fmt = fprintlf stderr fmt
+let eprintls str = fprintls stderr str

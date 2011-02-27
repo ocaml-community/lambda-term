@@ -42,3 +42,8 @@ type input =
 val read_console_input : Lwt_unix.file_descr -> input Lwt.t
   (** [read_console_input fd] reads one input from the given file
       descriptor. *)
+
+(** {6 Text attributes} *)
+
+val set_console_text_attribute : Lwt_unix.file_descr -> int -> int -> unit
+  (** [set_console_text_attribute fd foreground background] *)
