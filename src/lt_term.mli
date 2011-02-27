@@ -11,94 +11,98 @@
 
 open React
 
+type t
+  (** Type of terminals. *)
+
+(** {6 Creation} *)
+
+val create :
+  ?windows : bool ->
+  ?model : string ->
+  ?incoming_encoding : string ->
+  ?outgoing_encoding : string ->
+  Lwt_unix.file_descr -> Lwt_unix.file_descr -> t
+  (** [create ?windows ?model ?incoming_encoding ?outgoing_encoding
+      input_fd outout_fd] creates a new terminal using [input_fd] for
+      inputs and [output_fd] for outputs.
+
+      - [windows] is a flag telling whether windows hack should be
+      used. It defaults to [Lwt_sys.windows].
+
+      - [model] is the type of the terminal, such as "rxvt" or
+      "xterm". It defaults to the contents of the "TERM" environment
+      variable, or to "dumb" if this one is not found. It is used to
+      determine capabilities of the terminal, such as the number of
+      colors. This is not used if [windows] is [true].
+
+      - [incoming_encoding] is the encoding used for incoming data. It
+      defaults to [Lt_windows.get_console_cp] if [windows] is [true]
+      and [Lt_unix.system_encoding] otherwise.
+
+      - [outgoing_encoding] is the encoding used for outgoing data. It
+      defaults to [Lt_windows.get_console_output_cp] if [windows] is
+      [true] and [Lt_unix.system_encoding] otherwise.
+  *)
+
+(** {6 Informations} *)
+
+val model : t -> string
+  (** Returns the model of the terminal. *)
+
+val windows : t -> bool
+  (** Whether the terminal is in windows mode or not. *)
+
+(** {6 Sizes} *)
+
 type size = Lt_event.size = { lines : int; columns : int }
     (** Type of terminal sizes. *)
 
-(** {6 Terminal class} *)
+val get_size : t -> size Lwt.t
+  (** Returns the current size of the terminal. *)
 
-(** Class for terminals.
+val set_size : t -> size -> unit Lwt.t
+  (** Sets the current size of the terminal. *)
 
-    - [model] is the type of the terminal, such as "rxvt" or
-    "xterm". This is usually the contents of the "TERM" environment
-    variable,
+(** {6 Modes} *)
 
-    - [input] is the file descriptor used to read events from the
-    keyboard,
+val raw_mode : t -> bool signal
+  (** Whether the terminal is in ``raw mode''. In this mode keyboard
+      events are returned as they happen. In normal mode only complete
+      line are returned. *)
 
-    - |input_encoding] is the encoding used to converts the input to
-    unicode,
+val enter_raw_mode : t -> unit Lwt.t
+  (** Put the terminal in raw mode. On windows this does nothing
+      except setting {!raw_mode} to [true]. *)
 
-    - [output] is the file descriptor used to print to the terminal,
+val leave_raw_mode : t -> unit Lwt.t
+  (** Put the terminal in normal mode. On windows this does nothing
+      except setting {!raw_mode} to [false]. *)
 
-    - [output_encoding] is the encoding used to converts from unicode
-    to the terminal encoding,
+val mouse_mode : t -> bool signal
+  (** Wether the mouse mode is enabled. In this mode mouse event are
+      reported to the application. *)
 
-    - [windows] defaults to [Lwt_sys.windows]: if [true] it uses
-    windows mode, if [false] it uses unix mode. *)
-class t :
-  ?model : string ->
-  input : Lwt_unix.file_descr ->
-  input_encoding : string ->
-  output : Lwt_unix.file_descr ->
-  output_encoding : string ->
-  ?windows : bool -> unit ->
-object
+val enter_mouse_mode : t -> unit Lwt.t
+  (** Enable mouse events reporting. *)
 
-  (** Informations *)
+val leave_mouse_mode : t -> unit Lwt.t
+  (** Disable mouse events reporting. *)
 
-  method model : string
-    (** The model of the terminal. *)
+(** {6 State} *)
 
-  method windows : bool
-    (** Whether the terminal is in windows mode or not. *)
+val save : t -> unit Lwt.t
+  (** Save the current state of the terminal so it can be restored
+      latter. *)
 
-  method get_size : size Lwt.t
-    (** Returns the current size of the terminal. *)
+val load : t -> unit Lwt.t
+  (** Load the previously saved state of the terminal. *)
 
-  method set_size : size -> unit Lwt.t
-    (** Sets the current size of the terminal. *)
+(** {6 Events} *)
 
-  (** Modes *)
-
-  method raw_mode : bool signal
-    (** Whether the terminal is in ``raw mode''. In this mode keyboard
-        events are returned as they happen. In normal mode only
-        complete line are returned. *)
-
-  method enter_raw_mode : unit Lwt.t
-    (** Put the terminal in raw mode. On windows this does nothing
-        except setting {!raw_mode} to [true]. *)
-
-  method leave_raw_mode : unit Lwt.t
-    (** Put the terminal in normal mode. On windows this does nothing
-        except setting {!raw_mode} to [false]. *)
-
-  method mouse_mode : bool signal
-    (** Wether the mouse mode is enabled. In this mode mouse event are
-        reported to the application. *)
-
-  method enter_mouse_mode : unit Lwt.t
-    (** Enable mouse events reporting. *)
-
-  method leave_mouse_mode : unit Lwt.t
-    (** Disable mouse events reporting. *)
-
-  (** State *)
-
-  method save : unit Lwt.t
-    (** Save the current state of the terminal so it can be restored
-        latter. *)
-
-  method load : unit Lwt.t
-    (** Load the previously saved state of the terminal. *)
-
-  (** {6 Events} *)
-
-  method read_event : Lt_event.t Lwt.t
-    (** Reads and returns one event. This method can be called only
-        when the terminal is in raw mode. Otherwise several kind of
-        events will not be reported. *)
-end
+val read_event : t -> Lt_event.t Lwt.t
+  (** Reads and returns one event. This method can be called only when
+      the terminal is in raw mode. Otherwise several kind of events
+      will not be reported. *)
 
 (** {6 Well known instances} *)
 
@@ -112,10 +116,10 @@ val stderr : t
 
 (** {6 Low-level functions} *)
 
-val get_size : Lwt_unix.file_descr -> size Lwt.t
-  (** [get_size fd] returns the size of the terminal accessible via
+val get_size_from_fd : Lwt_unix.file_descr -> size Lwt.t
+  (** [get_size_from_fd fd] returns the size of the terminal accessible via
       the given file descriptor. *)
 
-val set_size : Lwt_unix.file_descr -> size -> unit Lwt.t
-  (** [set_size fd size] tries to set the size of the terminal
+val set_size_from_fd : Lwt_unix.file_descr -> size -> unit Lwt.t
+  (** [set_size_from_fd fd size] tries to set the size of the terminal
       accessible via the given file descriptor. *)

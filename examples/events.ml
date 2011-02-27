@@ -13,7 +13,7 @@ open Lwt
 open Lt_event
 
 let rec loop term =
-  lwt ev = term#read_event in
+  lwt ev = Lt_term.read_event term in
   lwt () = Lwt_io.printl (Lt_event.to_string ev) in
   match ev with
     | Lt_event.Key{ Lt_key.code = Lt_key.Escape } ->
@@ -23,10 +23,10 @@ let rec loop term =
 
 lwt () =
   lwt () = Lwt_io.printl "press escape to exit" in
-  lwt () = Lt_term.stdout#enter_raw_mode in
-  lwt () = Lt_term.stdout#enter_mouse_mode in
+  lwt () = Lt_term.enter_raw_mode Lt_term.stdout in
+  lwt () = Lt_term.enter_mouse_mode Lt_term.stdout in
   try_lwt
     loop Lt_term.stdout
   finally
-    lwt () = Lt_term.stdout#leave_mouse_mode in
-    Lt_term.stdout#leave_raw_mode
+    lwt () = Lt_term.leave_mouse_mode Lt_term.stdout in
+    Lt_term.leave_raw_mode Lt_term.stdout

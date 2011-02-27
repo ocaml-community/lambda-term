@@ -21,7 +21,7 @@
 #include <windows.h>
 #include <wincon.h>
 
-CAMLprim value lt_term_get_size(value fd)
+CAMLprim value lt_term_get_size_from_fd(value fd)
 {
   CONSOLE_SCREEN_BUFFER_INFO info;
 
@@ -36,7 +36,7 @@ CAMLprim value lt_term_get_size(value fd)
   return result;
 }
 
-CAMLprim value lt_term_set_size(value fd, value val_size)
+CAMLprim value lt_term_set_size_from_fd(value fd, value val_size)
 {
   CONSOLE_SCREEN_BUFFER_INFO info;
 
@@ -69,7 +69,7 @@ CAMLprim value lt_term_set_size(value fd, value val_size)
 #include <termios.h>
 #include <errno.h>
 
-CAMLprim value lt_term_get_size(value fd)
+CAMLprim value lt_term_get_size_from_fd(value fd)
 {
   struct winsize size;
 
@@ -82,7 +82,7 @@ CAMLprim value lt_term_get_size(value fd)
   return result;
 }
 
-CAMLprim value lt_term_set_size(value fd, value val_size)
+CAMLprim value lt_term_set_size_from_fd(value fd, value val_size)
 {
   struct winsize size;
 
