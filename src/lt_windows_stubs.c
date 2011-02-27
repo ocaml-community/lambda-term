@@ -115,8 +115,17 @@ static void worker_read_console_input(struct job_read_console_input *job)
             return;
       }
       break;
-    case MOUSE_EVENT:
-      return;
+    case MOUSE_EVENT: {
+      DWORD bs = input->Event.MouseEvent.dwButtonState;
+      if (!(input->Event.MouseEvent.dwEventFlags & MOUSE_MOVED) &&
+          bs & (FROM_LEFT_1ST_BUTTON_PRESSED |
+                FROM_LEFT_2ND_BUTTON_PRESSED |
+                FROM_LEFT_3RD_BUTTON_PRESSED |
+                FROM_LEFT_4TH_BUTTON_PRESSED |
+                RIGHTMOST_BUTTON_PRESSED))
+        return;
+      break;
+    }
     case WINDOW_BUFFER_SIZE_EVENT:
       return;
     }
