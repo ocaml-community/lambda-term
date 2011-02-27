@@ -37,12 +37,12 @@ type code =
   | Backspace
 
 type t = {
-  ctrl : bool;
+  control : bool;
   meta : bool;
   code : code;
 }
 
-let ctrl key = key.ctrl
+let control key = key.control
 let meta key = key.meta
 let code key = key.code
 
@@ -76,4 +76,4 @@ let string_of_code = function
   | Backspace -> "Backspace"
 
 let to_string key =
-  Printf.sprintf "{ ctrl = %B; meta = %B; code = %s }" key.ctrl key.meta (string_of_code key.code)
+  Printf.sprintf "{ control = %B; meta = %B; code = %s }" key.control key.meta (string_of_code key.code)

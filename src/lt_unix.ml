@@ -80,6 +80,10 @@ let parse_escape st =
           raise_lwt exn
       | Return None ->
           raise_lwt Not_a_sequence
+      | Return(Some('\x00' .. '\x1f' | '\x80' .. '\xff')) ->
+          (* Control characters and non-ascii characters are not part
+             of escape sequences. *)
+          raise_lwt Not_a_sequence
       | Return(Some ch) ->
           Buffer.add_char buf ch;
           return ch
@@ -97,7 +101,7 @@ let parse_escape st =
     | '[' | 'O' ->
         loop ()
     | _ ->
-        return (Buffer.contents buf)
+        raise_lwt Not_a_sequence
 
 (* +-----------------------------------------------------------------+
    | Escape sequences mapping                                        |
@@ -139,174 +143,174 @@ let controls = [|
 |]
 
 let sequences = [|
-  "[1~", { ctrl = false; meta = false; code = Home };
-  "[2~", { ctrl = false; meta = false; code = Insert };
-  "[3~", { ctrl = false; meta = false; code = Delete };
-  "[4~", { ctrl = false; meta = false; code = End };
-  "[5~", { ctrl = false; meta = false; code = Prev_page };
-  "[6~", { ctrl = false; meta = false; code = Next_page };
-  "[7~", { ctrl = false; meta = false; code = Home };
-  "[8~", { ctrl = false; meta = false; code = End };
-  "[11~", { ctrl = false; meta = false; code = F1 };
-  "[12~", { ctrl = false; meta = false; code = F2 };
-  "[13~", { ctrl = false; meta = false; code = F3 };
-  "[14~", { ctrl = false; meta = false; code = F4 };
-  "[15~", { ctrl = false; meta = false; code = F5 };
-  "[17~", { ctrl = false; meta = false; code = F6 };
-  "[18~", { ctrl = false; meta = false; code = F7 };
-  "[19~", { ctrl = false; meta = false; code = F8 };
-  "[20~", { ctrl = false; meta = false; code = F9 };
-  "[21~", { ctrl = false; meta = false; code = F10 };
-  "[23~", { ctrl = false; meta = false; code = F11 };
-  "[24~", { ctrl = false; meta = false; code = F12 };
+  "[1~", { control = false; meta = false; code = Home };
+  "[2~", { control = false; meta = false; code = Insert };
+  "[3~", { control = false; meta = false; code = Delete };
+  "[4~", { control = false; meta = false; code = End };
+  "[5~", { control = false; meta = false; code = Prev_page };
+  "[6~", { control = false; meta = false; code = Next_page };
+  "[7~", { control = false; meta = false; code = Home };
+  "[8~", { control = false; meta = false; code = End };
+  "[11~", { control = false; meta = false; code = F1 };
+  "[12~", { control = false; meta = false; code = F2 };
+  "[13~", { control = false; meta = false; code = F3 };
+  "[14~", { control = false; meta = false; code = F4 };
+  "[15~", { control = false; meta = false; code = F5 };
+  "[17~", { control = false; meta = false; code = F6 };
+  "[18~", { control = false; meta = false; code = F7 };
+  "[19~", { control = false; meta = false; code = F8 };
+  "[20~", { control = false; meta = false; code = F9 };
+  "[21~", { control = false; meta = false; code = F10 };
+  "[23~", { control = false; meta = false; code = F11 };
+  "[24~", { control = false; meta = false; code = F12 };
 
-  "[1^", { ctrl = true; meta = false; code = Home };
-  "[2^", { ctrl = true; meta = false; code = Insert };
-  "[3^", { ctrl = true; meta = false; code = Delete };
-  "[4^", { ctrl = true; meta = false; code = End };
-  "[5^", { ctrl = true; meta = false; code = Prev_page };
-  "[6^", { ctrl = true; meta = false; code = Next_page };
-  "[7^", { ctrl = true; meta = false; code = Home };
-  "[8^", { ctrl = true; meta = false; code = End };
-  "[11^", { ctrl = true; meta = false; code = F1 };
-  "[12^", { ctrl = true; meta = false; code = F2 };
-  "[13^", { ctrl = true; meta = false; code = F3 };
-  "[14^", { ctrl = true; meta = false; code = F4 };
-  "[15^", { ctrl = true; meta = false; code = F5 };
-  "[17^", { ctrl = true; meta = false; code = F6 };
-  "[18^", { ctrl = true; meta = false; code = F7 };
-  "[19^", { ctrl = true; meta = false; code = F8 };
-  "[20^", { ctrl = true; meta = false; code = F9 };
-  "[21^", { ctrl = true; meta = false; code = F10 };
-  "[23^", { ctrl = true; meta = false; code = F11 };
-  "[24^", { ctrl = true; meta = false; code = F12 };
+  "[1^", { control = true; meta = false; code = Home };
+  "[2^", { control = true; meta = false; code = Insert };
+  "[3^", { control = true; meta = false; code = Delete };
+  "[4^", { control = true; meta = false; code = End };
+  "[5^", { control = true; meta = false; code = Prev_page };
+  "[6^", { control = true; meta = false; code = Next_page };
+  "[7^", { control = true; meta = false; code = Home };
+  "[8^", { control = true; meta = false; code = End };
+  "[11^", { control = true; meta = false; code = F1 };
+  "[12^", { control = true; meta = false; code = F2 };
+  "[13^", { control = true; meta = false; code = F3 };
+  "[14^", { control = true; meta = false; code = F4 };
+  "[15^", { control = true; meta = false; code = F5 };
+  "[17^", { control = true; meta = false; code = F6 };
+  "[18^", { control = true; meta = false; code = F7 };
+  "[19^", { control = true; meta = false; code = F8 };
+  "[20^", { control = true; meta = false; code = F9 };
+  "[21^", { control = true; meta = false; code = F10 };
+  "[23^", { control = true; meta = false; code = F11 };
+  "[24^", { control = true; meta = false; code = F12 };
 
-  "[A", { ctrl = false; meta = false; code = Up };
-  "[B", { ctrl = false; meta = false; code = Down };
-  "[C", { ctrl = false; meta = false; code = Right };
-  "[D", { ctrl = false; meta = false; code = Left };
+  "[A", { control = false; meta = false; code = Up };
+  "[B", { control = false; meta = false; code = Down };
+  "[C", { control = false; meta = false; code = Right };
+  "[D", { control = false; meta = false; code = Left };
 
-  "A", { ctrl = false; meta = false; code = Up };
-  "B", { ctrl = false; meta = false; code = Down };
-  "C", { ctrl = false; meta = false; code = Right };
-  "D", { ctrl = false; meta = false; code = Left };
+  "A", { control = false; meta = false; code = Up };
+  "B", { control = false; meta = false; code = Down };
+  "C", { control = false; meta = false; code = Right };
+  "D", { control = false; meta = false; code = Left };
 
-  "OA", { ctrl = false; meta = false; code = Up };
-  "OB", { ctrl = false; meta = false; code = Down };
-  "OC", { ctrl = false; meta = false; code = Right };
-  "OD", { ctrl = false; meta = false; code = Left };
+  "OA", { control = false; meta = false; code = Up };
+  "OB", { control = false; meta = false; code = Down };
+  "OC", { control = false; meta = false; code = Right };
+  "OD", { control = false; meta = false; code = Left };
 
-  "Oa", { ctrl = true; meta = false; code = Up };
-  "Ob", { ctrl = true; meta = false; code = Down };
-  "Oc", { ctrl = true; meta = false; code = Right };
-  "Od", { ctrl = true; meta = false; code = Left };
+  "Oa", { control = true; meta = false; code = Up };
+  "Ob", { control = true; meta = false; code = Down };
+  "Oc", { control = true; meta = false; code = Right };
+  "Od", { control = true; meta = false; code = Left };
 
-  "OP", { ctrl = false; meta = false; code = F1 };
-  "OQ", { ctrl = false; meta = false; code = F2 };
-  "OR", { ctrl = false; meta = false; code = F3 };
-  "OS", { ctrl = false; meta = false; code = F4 };
+  "OP", { control = false; meta = false; code = F1 };
+  "OQ", { control = false; meta = false; code = F2 };
+  "OR", { control = false; meta = false; code = F3 };
+  "OS", { control = false; meta = false; code = F4 };
 
-  "O3P", { ctrl = false; meta = true; code = F1 };
-  "O3Q", { ctrl = false; meta = true; code = F2 };
-  "O3R", { ctrl = false; meta = true; code = F3 };
-  "O3S", { ctrl = false; meta = true; code = F4 };
+  "O3P", { control = false; meta = true; code = F1 };
+  "O3Q", { control = false; meta = true; code = F2 };
+  "O3R", { control = false; meta = true; code = F3 };
+  "O3S", { control = false; meta = true; code = F4 };
 
-  "O5P", { ctrl = true; meta = false; code = F1 };
-  "O5Q", { ctrl = true; meta = false; code = F2 };
-  "O5R", { ctrl = true; meta = false; code = F3 };
-  "O5S", { ctrl = true; meta = false; code = F4 };
+  "O5P", { control = true; meta = false; code = F1 };
+  "O5Q", { control = true; meta = false; code = F2 };
+  "O5R", { control = true; meta = false; code = F3 };
+  "O5S", { control = true; meta = false; code = F4 };
 
-  "[[A", { ctrl = false; meta = false; code = F1 };
-  "[[B", { ctrl = false; meta = false; code = F2 };
-  "[[C", { ctrl = false; meta = false; code = F3 };
-  "[[D", { ctrl = false; meta = false; code = F4 };
-  "[[E", { ctrl = false; meta = false; code = F5 };
+  "[[A", { control = false; meta = false; code = F1 };
+  "[[B", { control = false; meta = false; code = F2 };
+  "[[C", { control = false; meta = false; code = F3 };
+  "[[D", { control = false; meta = false; code = F4 };
+  "[[E", { control = false; meta = false; code = F5 };
 
-  "[H", { ctrl = false; meta = false; code = Home };
-  "[F", { ctrl = false; meta = false; code = End };
+  "[H", { control = false; meta = false; code = Home };
+  "[F", { control = false; meta = false; code = End };
 
-  "OH", { ctrl = false; meta = false; code = Home };
-  "OF", { ctrl = false; meta = false; code = End };
+  "OH", { control = false; meta = false; code = Home };
+  "OF", { control = false; meta = false; code = End };
 
-  "H", { ctrl = false; meta = false; code = Home };
-  "F", { ctrl = false; meta = false; code = End };
+  "H", { control = false; meta = false; code = Home };
+  "F", { control = false; meta = false; code = End };
 
-  "[1;3A", { ctrl = false; meta = true; code = Up };
-  "[1;3B", { ctrl = false; meta = true; code = Down };
-  "[1;3C", { ctrl = false; meta = true; code = Right };
-  "[1;3D", { ctrl = false; meta = true; code = Left };
+  "[1;3A", { control = false; meta = true; code = Up };
+  "[1;3B", { control = false; meta = true; code = Down };
+  "[1;3C", { control = false; meta = true; code = Right };
+  "[1;3D", { control = false; meta = true; code = Left };
 
-  "[1;5A", { ctrl = true; meta = false; code = Up };
-  "[1;5B", { ctrl = true; meta = false; code = Down };
-  "[1;5C", { ctrl = true; meta = false; code = Right };
-  "[1;5D", { ctrl = true; meta = false; code = Left };
+  "[1;5A", { control = true; meta = false; code = Up };
+  "[1;5B", { control = true; meta = false; code = Down };
+  "[1;5C", { control = true; meta = false; code = Right };
+  "[1;5D", { control = true; meta = false; code = Left };
 
-  "[1;7A", { ctrl = true; meta = true; code = Up };
-  "[1;7B", { ctrl = true; meta = true; code = Down };
-  "[1;7C", { ctrl = true; meta = true; code = Right };
-  "[1;7D", { ctrl = true; meta = true; code = Left };
+  "[1;7A", { control = true; meta = true; code = Up };
+  "[1;7B", { control = true; meta = true; code = Down };
+  "[1;7C", { control = true; meta = true; code = Right };
+  "[1;7D", { control = true; meta = true; code = Left };
 
-  "[1;3P", { ctrl = false; meta = true; code = F1 };
-  "[1;3Q", { ctrl = false; meta = true; code = F2 };
-  "[1;3R", { ctrl = false; meta = true; code = F3 };
-  "[1;3S", { ctrl = false; meta = true; code = F4 };
+  "[1;3P", { control = false; meta = true; code = F1 };
+  "[1;3Q", { control = false; meta = true; code = F2 };
+  "[1;3R", { control = false; meta = true; code = F3 };
+  "[1;3S", { control = false; meta = true; code = F4 };
 
-  "[1;5P", { ctrl = true; meta = false; code = F1 };
-  "[1;5Q", { ctrl = true; meta = false; code = F2 };
-  "[1;5R", { ctrl = true; meta = false; code = F3 };
-  "[1;5S", { ctrl = true; meta = false; code = F4 };
+  "[1;5P", { control = true; meta = false; code = F1 };
+  "[1;5Q", { control = true; meta = false; code = F2 };
+  "[1;5R", { control = true; meta = false; code = F3 };
+  "[1;5S", { control = true; meta = false; code = F4 };
 
-  "O1;3P", { ctrl = false; meta = true; code = F1 };
-  "O1;3Q", { ctrl = false; meta = true; code = F2 };
-  "O1;3R", { ctrl = false; meta = true; code = F3 };
-  "O1;3S", { ctrl = false; meta = true; code = F4 };
+  "O1;3P", { control = false; meta = true; code = F1 };
+  "O1;3Q", { control = false; meta = true; code = F2 };
+  "O1;3R", { control = false; meta = true; code = F3 };
+  "O1;3S", { control = false; meta = true; code = F4 };
 
-  "O1;5P", { ctrl = true; meta = false; code = F1 };
-  "O1;5Q", { ctrl = true; meta = false; code = F2 };
-  "O1;5R", { ctrl = true; meta = false; code = F3 };
-  "O1;5S", { ctrl = true; meta = false; code = F4 };
+  "O1;5P", { control = true; meta = false; code = F1 };
+  "O1;5Q", { control = true; meta = false; code = F2 };
+  "O1;5R", { control = true; meta = false; code = F3 };
+  "O1;5S", { control = true; meta = false; code = F4 };
 
-  "[15;3~", { ctrl = false; meta = true; code = F5 };
-  "[17;3~", { ctrl = false; meta = true; code = F6 };
-  "[18;3~", { ctrl = false; meta = true; code = F7 };
-  "[19;3~", { ctrl = false; meta = true; code = F8 };
-  "[20;3~", { ctrl = false; meta = true; code = F9 };
-  "[21;3~", { ctrl = false; meta = true; code = F10 };
-  "[23;3~", { ctrl = false; meta = true; code = F11 };
-  "[24;3~", { ctrl = false; meta = true; code = F12 };
+  "[15;3~", { control = false; meta = true; code = F5 };
+  "[17;3~", { control = false; meta = true; code = F6 };
+  "[18;3~", { control = false; meta = true; code = F7 };
+  "[19;3~", { control = false; meta = true; code = F8 };
+  "[20;3~", { control = false; meta = true; code = F9 };
+  "[21;3~", { control = false; meta = true; code = F10 };
+  "[23;3~", { control = false; meta = true; code = F11 };
+  "[24;3~", { control = false; meta = true; code = F12 };
 
-  "[15;5~", { ctrl = true; meta = false; code = F5 };
-  "[17;5~", { ctrl = true; meta = false; code = F6 };
-  "[18;5~", { ctrl = true; meta = false; code = F7 };
-  "[19;5~", { ctrl = true; meta = false; code = F8 };
-  "[20;5~", { ctrl = true; meta = false; code = F9 };
-  "[21;5~", { ctrl = true; meta = false; code = F10 };
-  "[23;5~", { ctrl = true; meta = false; code = F11 };
-  "[24;5~", { ctrl = true; meta = false; code = F12 };
+  "[15;5~", { control = true; meta = false; code = F5 };
+  "[17;5~", { control = true; meta = false; code = F6 };
+  "[18;5~", { control = true; meta = false; code = F7 };
+  "[19;5~", { control = true; meta = false; code = F8 };
+  "[20;5~", { control = true; meta = false; code = F9 };
+  "[21;5~", { control = true; meta = false; code = F10 };
+  "[23;5~", { control = true; meta = false; code = F11 };
+  "[24;5~", { control = true; meta = false; code = F12 };
 
-  "[1;3H", { ctrl = false; meta = true; code = Home };
-  "[1;3F", { ctrl = false; meta = true; code = End };
+  "[1;3H", { control = false; meta = true; code = Home };
+  "[1;3F", { control = false; meta = true; code = End };
 
-  "[1;5H", { ctrl = true; meta = false; code = Home };
-  "[1;5F", { ctrl = true; meta = false; code = End };
+  "[1;5H", { control = true; meta = false; code = Home };
+  "[1;5F", { control = true; meta = false; code = End };
 
-  "[1;7H", { ctrl = true; meta = true; code = Home };
-  "[1;7F", { ctrl = true; meta = true; code = End };
+  "[1;7H", { control = true; meta = true; code = Home };
+  "[1;7F", { control = true; meta = true; code = End };
 
-  "[2;3~", { ctrl = false; meta = true; code = Insert };
-  "[3;3~", { ctrl = false; meta = true; code = Delete };
-  "[5;3~", { ctrl = false; meta = true; code = Prev_page };
-  "[6;3~", { ctrl = false; meta = true; code = Next_page };
+  "[2;3~", { control = false; meta = true; code = Insert };
+  "[3;3~", { control = false; meta = true; code = Delete };
+  "[5;3~", { control = false; meta = true; code = Prev_page };
+  "[6;3~", { control = false; meta = true; code = Next_page };
 
-  "[2;5~", { ctrl = true; meta = false; code = Insert };
-  "[3;5~", { ctrl = true; meta = false; code = Delete };
-  "[5;5~", { ctrl = true; meta = false; code = Prev_page };
-  "[6;5~", { ctrl = true; meta = false; code = Next_page };
+  "[2;5~", { control = true; meta = false; code = Insert };
+  "[3;5~", { control = true; meta = false; code = Delete };
+  "[5;5~", { control = true; meta = false; code = Prev_page };
+  "[6;5~", { control = true; meta = false; code = Next_page };
 
-  "[2;7~", { ctrl = true; meta = true; code = Insert };
-  "[3;7~", { ctrl = true; meta = true; code = Delete };
-  "[5;7~", { ctrl = true; meta = true; code = Prev_page };
-  "[6;7~", { ctrl = true; meta = true; code = Next_page };
+  "[2;7~", { control = true; meta = true; code = Insert };
+  "[3;7~", { control = true; meta = true; code = Delete };
+  "[5;7~", { control = true; meta = true; code = Prev_page };
+  "[6;7~", { control = true; meta = true; code = Next_page };
 |]
 
 let () = Array.sort (fun (seq1, _) (seq2, _) -> String.compare seq1 seq2) sequences
@@ -328,24 +332,54 @@ let find_sequence seq =
   in
   loop 0 (Array.length sequences)
 
-let parse_event cd stream =
+let rec parse_event cd stream =
   lwt byte = Lwt_stream.next stream in
   match byte with
     | '\x1b' -> begin
         (* Escape sequences *)
         try_lwt
           (* Try to parse an escape seqsuence *)
-          lwt seq = Lwt_stream.parse stream parse_escape in
-          match find_sequence seq with
-            | Some key ->
-                return (Lt_event.Key key)
-            | None ->
-                return (Lt_event.Sequence ("\x1b" ^ seq))
+          Lwt_stream.parse stream parse_escape >>= function
+            | "[M" -> begin
+                (* Mouse report *)
+                let open Lt_mouse in
+                lwt mask = Lwt_stream.next stream >|= Char.code in
+                lwt x = Lwt_stream.next stream >|= Char.code in
+                lwt y = Lwt_stream.next stream >|= Char.code in
+                try
+                  if mask = 0b00100011 then raise Exit;
+                  return (Lt_event.Mouse {
+                            control = mask land 0b00010000 <> 0;
+                            meta = mask land 0b00001000 <> 0;
+                            line = y - 33;
+                            column = x - 33;
+                            button =
+                              (match mask land 0b11000111 with
+                                 | 0b00000000 -> Button1
+                                 | 0b00000001 -> Button2
+                                 | 0b00000010 -> Button3
+                                 | 0b01000000 -> Button4
+                                 | 0b01000001 -> Button5
+                                 | 0b01000010 -> Button6
+                                 | 0b01000011 -> Button7
+                                 | 0b01000100 -> Button8
+                                 | 0b01000101 -> Button9
+                                 | _ -> raise Exit);
+                          })
+                with Exit ->
+                  parse_event cd stream
+              end
+            | seq ->
+                match find_sequence seq with
+                  | Some key ->
+                      return (Lt_event.Key key)
+                  | None ->
+                      return (Lt_event.Sequence ("\x1b" ^ seq))
         with Not_a_sequence ->
           (* If it is not, test if it is META+key. *)
           match Lwt.state (Lwt_stream.peek stream) with
             | Sleep | Fail _ | Return None ->
-                return (Lt_event.Key { ctrl = false; meta = false; code = Escape })
+                return (Lt_event.Key { control = false; meta = false; code = Escape })
             | Return(Some byte) ->
                 match byte with
                   | '\x1b' -> begin
@@ -358,35 +392,35 @@ let parse_event cd stream =
                           | None ->
                               return (Lt_event.Sequence ("\x1b\x1b" ^ seq))
                       with Not_a_sequence ->
-                        return (Lt_event.Key { ctrl = false; meta = false; code = Escape })
+                        return (Lt_event.Key { control = false; meta = false; code = Escape })
                     end
                   | '\x00' .. '\x1b' ->
                       (* Control characters *)
                       lwt () = Lwt_stream.junk stream in
-                      return (Lt_event.Key { ctrl = true; meta = true; code = controls.(Char.code byte) })
+                      return (Lt_event.Key { control = true; meta = true; code = controls.(Char.code byte) })
                   | '\x7f' ->
                       (* Backspace *)
                       lwt () = Lwt_stream.junk stream in
-                      return (Lt_event.Key { ctrl = false; meta = true; code = Backspace })
+                      return (Lt_event.Key { control = false; meta = true; code = Backspace })
                   | '\x00' .. '\x7f' ->
                       (* Other ascii characters *)
                       lwt () = Lwt_stream.junk stream in
-                      return(Lt_event.Key  { ctrl = false; meta = true; code = Char(Char.code byte) })
+                      return(Lt_event.Key  { control = false; meta = true; code = Char(Char.code byte) })
                   | byte' ->
                       lwt () = Lwt_stream.junk stream in
                       lwt code = parse_char cd stream byte' in
-                      return (Lt_event.Key { ctrl = false; meta = true; code = Char code })
+                      return (Lt_event.Key { control = false; meta = true; code = Char code })
       end
     | '\x00' .. '\x1f' ->
         (* Control characters *)
-        return (Lt_event.Key { ctrl = true; meta = false; code = controls.(Char.code byte) })
+        return (Lt_event.Key { control = true; meta = false; code = controls.(Char.code byte) })
     | '\x7f' ->
         (* Backspace *)
-        return (Lt_event.Key { ctrl = false; meta = false; code = Backspace })
+        return (Lt_event.Key { control = false; meta = false; code = Backspace })
     | '\x00' .. '\x7f' ->
         (* Other ascii characters *)
-        return (Lt_event.Key { ctrl = false; meta = false; code = Char(Char.code byte) })
+        return (Lt_event.Key { control = false; meta = false; code = Char(Char.code byte) })
     | _ ->
         (* Encoded characters *)
         lwt code = parse_char cd stream byte in
-        return (Lt_event.Key { ctrl = false; meta = false; code = Char code })
+        return (Lt_event.Key { control = false; meta = false; code = Char code })

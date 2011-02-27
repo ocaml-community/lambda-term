@@ -13,7 +13,7 @@ type t =
   | Resize of size
   | Key of Lt_key.t
   | Sequence of string
-  | Mouse of int * int * int
+  | Mouse of Lt_mouse.t
 
 let to_string = function
   | Resize size ->
@@ -22,5 +22,5 @@ let to_string = function
       Printf.sprintf "Key %s" (Lt_key.to_string key)
   | Sequence seq ->
       Printf.sprintf "Sequence %S" seq
-  | Mouse(mask, x, y) ->
-      Printf.sprintf "Mouse(%x, %d, %d)" mask x y
+  | Mouse mouse ->
+      Printf.sprintf "Mouse %s" (Lt_mouse.to_string mouse)

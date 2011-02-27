@@ -20,7 +20,7 @@ type t =
       (** A key has been pressed. *)
   | Sequence of string
       (** An uninterpreted escape sequence. *)
-  | Mouse of int * int * int
+  | Mouse of Lt_mouse.t
       (** A mouse button has been pressed. *)
 
 val to_string : t -> string

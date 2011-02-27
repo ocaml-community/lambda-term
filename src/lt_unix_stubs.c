@@ -12,6 +12,9 @@
 
 #if defined(_WIN32) || defined(_WIN64)
 
+#include <windows.h>
+#include <stdio.h>
+
 CAMLprim value lt_unix_get_sigwinch()
 {
   return Val_int(0);

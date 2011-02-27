@@ -115,6 +115,8 @@ static void worker_read_console_input(struct job_read_console_input *job)
             return;
       }
       break;
+    case MOUSE_EVENT:
+      return;
     case WINDOW_BUFFER_SIZE_EVENT:
       return;
     }
@@ -133,7 +135,7 @@ CAMLprim value lt_windows_read_console_input_job(value val_fd)
 CAMLprim value lt_windows_read_console_input_result(value val_job)
 {
   CAMLparam1(val_job);
-  CAMLlocal2(result, ch);
+  CAMLlocal3(result, x, y);
   struct job_read_console_input *job = Job_read_console_input_val(val_job);
   if (job->error_code) {
     win32_maperr(job->error_code);
@@ -142,20 +144,44 @@ CAMLprim value lt_windows_read_console_input_result(value val_job)
   INPUT_RECORD *input = &(job->input);
   switch (input->EventType) {
   case KEY_EVENT: {
+    result = caml_alloc(1, 0);
+    x = caml_alloc_tuple(3);
+    Field(result, 0) = x;
     DWORD cks = input->Event.KeyEvent.dwControlKeyState;
-    result = caml_alloc(3, 0);
-    Field(result, 0) = Val_bool((cks & LEFT_CTRL_PRESSED) | (cks & RIGHT_CTRL_PRESSED));
-    Field(result, 1) = Val_bool((cks & LEFT_ALT_PRESSED) | (cks & RIGHT_ALT_PRESSED));
+    Field(x, 0) = Val_bool((cks & LEFT_CTRL_PRESSED) | (cks & RIGHT_CTRL_PRESSED));
+    Field(x, 1) = Val_bool((cks & LEFT_ALT_PRESSED) | (cks & RIGHT_ALT_PRESSED));
     WORD code = input->Event.KeyEvent.wVirtualKeyCode;
     int i;
     for (i = 0; i < sizeof(code_table)/sizeof(code_table[0]); i++)
       if (code == code_table[i]) {
-        Field(result, 2) = Val_int(i);
+        Field(x, 2) = Val_int(i);
         CAMLreturn(result);
       }
-    ch = caml_alloc_tuple(1);
-    Field(ch, 0) = Val_int(input->Event.KeyEvent.uChar.UnicodeChar);
-    Field(result, 2) = ch;
+    y = caml_alloc_tuple(1);
+    Field(y, 0) = Val_int(input->Event.KeyEvent.uChar.UnicodeChar);
+    Field(x, 2) = y;
+    CAMLreturn(result);
+  }
+  case MOUSE_EVENT: {
+    result = caml_alloc(1, 1);
+    x = caml_alloc_tuple(5);
+    Field(result, 0) = x;
+    DWORD cks = input->Event.MouseEvent.dwControlKeyState;
+    Field(x, 0) = Val_bool((cks & LEFT_CTRL_PRESSED) | (cks & RIGHT_CTRL_PRESSED));
+    Field(x, 1) = Val_bool((cks & LEFT_ALT_PRESSED) | (cks & RIGHT_ALT_PRESSED));
+    Field(x, 3) = Val_int(input->Event.MouseEvent.dwMousePosition.Y);
+    Field(x, 4) = Val_int(input->Event.MouseEvent.dwMousePosition.X);
+    DWORD bs = input->Event.MouseEvent.dwButtonState;
+    if (bs & FROM_LEFT_1ST_BUTTON_PRESSED)
+      Field(x, 2) = Val_int(0);
+    else if (bs & FROM_LEFT_2ND_BUTTON_PRESSED)
+      Field(x, 2) = Val_int(1);
+    else if (bs & FROM_LEFT_3RD_BUTTON_PRESSED)
+      Field(x, 2) = Val_int(2);
+    else if (bs & FROM_LEFT_4TH_BUTTON_PRESSED)
+      Field(x, 2) = Val_int(3);
+    else
+      Field(x, 2) = Val_int(4);
     CAMLreturn(result);
   }
   case WINDOW_BUFFER_SIZE_EVENT:

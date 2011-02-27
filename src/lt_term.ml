@@ -39,6 +39,7 @@ let default_model =
 
 class t ?(model=default_model) ~input ~input_encoding ~output ~output_encoding ?(windows=Lwt_sys.windows) () =
   let raw_mode, set_raw_mode = S.create false in
+  let mouse_mode, set_mouse_mode = S.create false in
   let ic = Lwt_io.of_fd ~mode:Lwt_io.input input
   and oc = Lwt_io.of_fd ~mode:Lwt_io.output output in
   let input_cd = Lt_iconv.iconv_open ~to_code:"UCS-4BE" ~of_code:input_encoding in
@@ -105,6 +106,24 @@ object(self)
         | None ->
             return ()
 
+  method mouse_mode = mouse_mode
+
+  method enter_mouse_mode =
+    if windows || S.value mouse_mode then
+      return ()
+    else begin
+      set_mouse_mode true;
+      Lwt_io.write oc "\027[?1000h"
+    end
+
+  method leave_mouse_mode =
+    if windows || not (S.value mouse_mode) then
+      return ()
+    else begin
+      set_mouse_mode false;
+      Lwt_io.write oc "\027[?1000l"
+    end
+
   method save =
     if windows then
       return ()
@@ -125,6 +144,8 @@ object(self)
             return (Lt_event.Resize size)
         | Lt_windows.Key key ->
             return (Lt_event.Key key)
+        | Lt_windows.Mouse mouse ->
+            return (Lt_event.Mouse mouse)
     else if !size_changed then begin
       size_changed := false;
       lwt size = self#get_size in

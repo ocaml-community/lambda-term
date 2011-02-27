@@ -37,6 +37,7 @@ val set_console_output_cp : int -> unit
 type input =
   | Resize
   | Key of Lt_key.t
+  | Mouse of Lt_mouse.t
 
 val read_console_input : Lwt_unix.file_descr -> input Lwt.t
   (** [read_console_input fd] reads one input from the given file

@@ -73,6 +73,16 @@ object
     (** Put the terminal in normal mode. On windows this does nothing
         except setting {!raw_mode} to [false]. *)
 
+  method mouse_mode : bool signal
+    (** Wether the mouse mode is enabled. In this mode mouse event are
+        reported to the application. *)
+
+  method enter_mouse_mode : unit Lwt.t
+    (** Enable mouse events reporting. *)
+
+  method leave_mouse_mode : unit Lwt.t
+    (** Disable mouse events reporting. *)
+
   (** State *)
 
   method save : unit Lwt.t

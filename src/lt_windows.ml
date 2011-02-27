@@ -18,6 +18,7 @@ external set_console_output_cp : int -> unit = "lt_windows_set_console_output_cp
 type input =
   | Resize
   | Key of Lt_key.t
+  | Mouse of Lt_mouse.t
 
 external read_console_input_job : Unix.file_descr -> [ `read_console_input ] Lwt_unix.job = "lt_windows_read_console_input_job"
 external read_console_input_result : [ `read_console_input ] Lwt_unix.job -> input = "lt_windows_read_console_input_result"

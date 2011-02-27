@@ -42,7 +42,7 @@ type code =
 
 (** Type of key. *)
 type t = {
-  ctrl : bool;
+  control : bool;
   (** Is the control key down ? *)
   meta : bool;
   (** Is the meta key down ? *)
@@ -50,7 +50,7 @@ type t = {
   (** The code of the key. *)
 }
 
-val ctrl : t -> bool
+val control : t -> bool
 val meta : t -> bool
 val code : t -> code
 

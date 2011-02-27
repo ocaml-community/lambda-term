@@ -1,5 +1,6 @@
 <**/*.ml>: syntax_camlp4o
 <src/*.{c,h}>: use_lwt_unix_h
+<src/*>: use_iconv
 
 # OASIS_START
 # DO NOT EDIT (digest: 35e94d0c43f9a1f52abb496fd66ab79e)
