@@ -397,7 +397,8 @@ let rec parse_event cd stream =
                   | '\x00' .. '\x1b' ->
                       (* Control characters *)
                       lwt () = Lwt_stream.junk stream in
-                      return (Lt_event.Key { control = true; meta = true; code = controls.(Char.code byte) })
+                      let code = controls.(Char.code byte) in
+                      return (Lt_event.Key { control = (match code with Char _ -> true | _ -> false); meta = true; code })
                   | '\x7f' ->
                       (* Backspace *)
                       lwt () = Lwt_stream.junk stream in
@@ -413,7 +414,8 @@ let rec parse_event cd stream =
       end
     | '\x00' .. '\x1f' ->
         (* Control characters *)
-        return (Lt_event.Key { control = true; meta = false; code = controls.(Char.code byte) })
+        let code = controls.(Char.code byte) in
+        return (Lt_event.Key { control = (match code with Char _ -> true | _ -> false); meta = false; code })
     | '\x7f' ->
         (* Backspace *)
         return (Lt_event.Key { control = false; meta = false; code = Backspace })
