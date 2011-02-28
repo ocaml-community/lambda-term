@@ -89,6 +89,14 @@ val enter_mouse_mode : t -> unit Lwt.t
 val leave_mouse_mode : t -> unit Lwt.t
   (** Disable mouse events reporting. *)
 
+(** {6 Cursor} *)
+
+val show_cursor : t -> unit Lwt.t
+  (** Make the cursor visible. *)
+
+val hide_cursor : t -> unit Lwt.t
+  (** Make the cursor invisible. *)
+
 (** {6 State} *)
 
 val save : t -> unit Lwt.t
@@ -145,6 +153,17 @@ val eprintf : ('a, unit, string, unit Lwt.t) format4 -> 'a
 val eprints : Lt_style.text -> unit Lwt.t
 val eprintlf : ('a, unit, string, unit Lwt.t) format4 -> 'a
 val eprintls : Lt_style.text -> unit Lwt.t
+
+(** {6 Rendering} *)
+
+val render : t -> Lt_draw.matrix -> unit Lwt.t
+  (** Render an offscreen array to the given terminal. *)
+
+val render_update : t -> Lt_draw.matrix -> Lt_draw.matrix -> unit Lwt.t
+  (** [render_update displayed to_display] does the same as [render
+      to_display] but assumes that [displayed] contains the current
+      displayed text. This reduces the amount of text sent to the
+      terminal. *)
 
 (** {6 Well known instances} *)
 

@@ -34,7 +34,8 @@ Library "lambda-term"
     Lt_iconv,
     Lt_utf8,
     Lt_style,
-    Lt_types
+    Lt_types,
+    Lt_draw
   CSources:
     lt_term_stubs.c,
     lt_unix_stubs.c,
@@ -71,6 +72,13 @@ Executable rgb
   Install: false
   CompiledObject: best
   MainIs: rgb.ml
+  BuildDepends: lambda-term
+
+Executable render
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: render.ml
   BuildDepends: lambda-term
 
 # +-------------------------------------------------------------------+

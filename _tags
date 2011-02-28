@@ -3,7 +3,7 @@
 <src/*>: use_iconv
 
 # OASIS_START
-# DO NOT EDIT (digest: f25d4d0e4d6655467e733947a3996bba)
+# DO NOT EDIT (digest: c97a44882a13c762cfec2d0eb55f76c3)
 # Library lambda-term
 "src": include
 <src/lambda-term.{cma,cmxa}>: use_liblambda-term
@@ -37,6 +37,11 @@
 <examples/colors_256.{native,byte}>: pkg_lwt.unix
 <examples/colors_256.{native,byte}>: pkg_lwt.syntax
 <examples/colors_256.{native,byte}>: pkg_lwt.react
+# Executable render
+<examples/render.{native,byte}>: use_lambda-term
+<examples/render.{native,byte}>: pkg_lwt.unix
+<examples/render.{native,byte}>: pkg_lwt.syntax
+<examples/render.{native,byte}>: pkg_lwt.react
 # Executable colors
 <examples/colors.{native,byte}>: use_lambda-term
 <examples/colors.{native,byte}>: pkg_lwt.unix

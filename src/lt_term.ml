@@ -210,6 +210,16 @@ let leave_mouse_mode term =
   end
 
 (* +-----------------------------------------------------------------+
+   | Cursor                                                          |
+   +-----------------------------------------------------------------+ *)
+
+let show_cursor term =
+  Lwt_io.write term.oc "\027[?25h"
+
+let hide_cursor term =
+  Lwt_io.write term.oc "\027[?25l"
+
+(* +-----------------------------------------------------------------+
    | State                                                           |
    +-----------------------------------------------------------------+ *)
 
@@ -224,6 +234,10 @@ let load term =
     return ()
   else
     Lwt_io.write term.oc "\027[?1049l"
+
+(* +-----------------------------------------------------------------+
+   | Events                                                          |
+   +-----------------------------------------------------------------+ *)
 
 let read_event term =
   if term.windows then
@@ -305,24 +319,17 @@ let map_color term r g b =
 let queue_index term q base n =
   if n < 8 then
     Queue.add (base + n) q
-  else
-    if n < 16 then
-      if term.bold_is_bright then
-        if base = Codes.foreground then begin
-          Queue.add Codes.bold q;
-          Queue.add (base + n - 8) q
-        end else
-          Queue.add (base + n - 8) q
-      else begin
-        Queue.add (base + 8) q;
-        Queue.add 5 q;
-        Queue.add n q
-      end
-    else begin
-      Queue.add (base + 8) q;
-      Queue.add 5 q;
-      Queue.add n q
-    end
+  else if n < 16 && term.bold_is_bright then
+    if base = Codes.foreground then begin
+      Queue.add Codes.bold q;
+      Queue.add (base + n - 8) q
+    end else
+      Queue.add (base + n - 8) q
+  else begin
+    Queue.add (base + 8) q;
+    Queue.add 5 q;
+    Queue.add n q
+  end
 
 let queue_color term q base = function
   | Lt_style.Default ->
@@ -438,6 +445,90 @@ let fprints term text =
 
 let fprintls term text =
   fprints term (text @ [Lt_style.String "\n"])
+
+(* +-----------------------------------------------------------------+
+   | Rendering                                                       |
+   +-----------------------------------------------------------------+ *)
+
+let add_index term buf base n =
+  if n < 8 then begin
+    Buffer.add_char buf ';';
+    add_int buf (base + n)
+  end else if n < 16 &&  term.bold_is_bright then
+    if base = Codes.foreground then begin
+      Buffer.add_string buf ";1;";
+      add_int buf (base + n - 8)
+    end else begin
+      Buffer.add_char buf ';';
+      add_int buf (base + n - 8)
+    end
+  else begin
+    Buffer.add_char buf ';';
+    add_int buf (base + 8);
+    Buffer.add_string buf ";5;";
+    add_int buf n
+  end
+
+let add_color term buf base = function
+  | Lt_style.Default ->
+      ()
+  | Lt_style.Index n ->
+      add_index term buf base n
+  | Lt_style.RGB(r, g, b) ->
+      add_index term buf base (map_color term  r g b)
+
+let same_style p1 p2 =
+  let open Lt_draw in
+  p1.bold = p2.bold &&
+      p1.underlined = p2.underlined &&
+      p1.blink = p2.blink &&
+      p1.foreground = p2.foreground &&
+      p1.background = p2.background
+
+let render_update term old_matrix matrix =
+  let open Lt_draw in
+  let buf = Buffer.create 16 in
+  (* Go the the top-left and reset attributes *)
+  Buffer.add_string buf "\027[H\027[0m";
+  (* The last displayed point. *)
+  let last_point = ref {
+    char = 32;
+    bold = false;
+    underlined = false;
+    blink = false;
+    foreground = Lt_style.default;
+    background = Lt_style.default;
+  } in
+  for y = 0 to Array.length matrix - 1 do
+    let line = Array.unsafe_get matrix y in
+    if y < Array.length old_matrix && line = Array.unsafe_get old_matrix y then begin
+      (* If the current line is equal to the displayed one, skip it *)
+      if Array.length line > 0 then
+        last_point := Array.unsafe_get line (Array.length line - 1)
+    end else begin
+      for x = 0 to Array.length line - 1 do
+        let point = Array.unsafe_get line x in
+        if not (same_style point !last_point) then begin
+          (* Reset styles if they are different from the previous
+             point. *)
+          Buffer.add_string buf "\027[0";
+          if point.bold then Buffer.add_string buf ";1";
+          if point.underlined then Buffer.add_string buf ";4";
+          if point.blink then Buffer.add_string buf ";5";
+          add_color term buf Codes.foreground point.foreground;
+          add_color term buf Codes.background point.background;
+          Buffer.add_char buf 'm';
+        end;
+        Buffer.add_string buf (Lt_utf8.singleton point.char);
+        last_point := point
+      done
+    end;
+    if y < Array.length matrix - 1 then Buffer.add_char buf '\n'
+  done;
+  Buffer.add_string buf "\027[0m";
+  fprint term (Buffer.contents buf)
+
+let render term m = render_update term [||] m
 
 (* +-----------------------------------------------------------------+
    | Standard terminals                                              |
