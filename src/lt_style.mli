@@ -64,7 +64,7 @@ type item =
           nothing on windows. *)
   | Inverse
       (** Inverse the foreground and background for the text following
-          this item. *)
+          this item. This does nothing on windows. *)
   | Hidden
       (** Hide the text following this item. This does nothing on
           windows. *)

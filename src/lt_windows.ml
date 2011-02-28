@@ -66,8 +66,27 @@ let read_console_input fd =
     read_console_input_result
     read_console_input_free
 
-external set_console_text_attribute : Unix.file_descr -> int -> int -> unit = "lt_windows_set_console_text_attribute"
+type text_attributes = {
+  foreground : int;
+  background : int;
+}
 
-let set_console_text_attribute fd fg bg =
+type console_screen_buffer_info = {
+  size : Lt_types.size;
+  cursor_position : Lt_types.coord;
+  attributes : text_attributes;
+  window : Lt_types.rect;
+  maximum_window_size : Lt_types.size;
+}
+
+external get_console_screen_buffer_info : Unix.file_descr -> console_screen_buffer_info = "lt_windows_get_console_screen_buffer_info"
+
+let get_console_screen_buffer_info fd =
   Lwt_unix.check_descriptor fd;
-  set_console_text_attribute (Lwt_unix.unix_file_descr fd) fg bg
+  get_console_screen_buffer_info (Lwt_unix.unix_file_descr fd)
+
+external set_console_text_attribute : Unix.file_descr -> text_attributes -> unit = "lt_windows_set_console_text_attribute"
+
+let set_console_text_attribute fd attrs =
+  Lwt_unix.check_descriptor fd;
+  set_console_text_attribute (Lwt_unix.unix_file_descr fd) attrs

@@ -43,7 +43,37 @@ val read_console_input : Lwt_unix.file_descr -> input Lwt.t
   (** [read_console_input fd] reads one input from the given file
       descriptor. *)
 
+(** {6 Console info} *)
+
+(** Type of text attributes. *)
+type text_attributes = {
+  foreground : int;
+  (** The foreground color. Only bits 0 to 3 matters, other are
+      ignored. *)
+  background : int;
+  (** The background color. Only bits 0 to 3 matters, other are
+      ignored. *)
+}
+
+(** Type of informations about a console. *)
+type console_screen_buffer_info = {
+  size : Lt_types.size;
+  (** The size of the console buffer. *)
+  cursor_position : Lt_types.coord;
+  (** The line and column of the cursor. *)
+  attributes : text_attributes;
+  (** Text attributes. *)
+  window : Lt_types.rect;
+  (** The displayed windows in the console buffer. *)
+  maximum_window_size : Lt_types.size;
+  (** The maximum window size for the current screen. *)
+}
+
+val get_console_screen_buffer_info : Lwt_unix.file_descr -> console_screen_buffer_info
+  (** [get_console_screen_buffer_info fd] returns the current
+      informations about the given console. *)
+
 (** {6 Text attributes} *)
 
-val set_console_text_attribute : Lwt_unix.file_descr -> int -> int -> unit
-  (** [set_console_text_attribute fd foreground background] *)
+val set_console_text_attribute : Lwt_unix.file_descr -> text_attributes -> unit
+  (** [set_console_text_attribute fd attributes] *)

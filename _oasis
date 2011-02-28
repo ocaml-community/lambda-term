@@ -33,7 +33,8 @@ Library "lambda-term"
     Lt_windows,
     Lt_iconv,
     Lt_utf8,
-    Lt_style
+    Lt_style,
+    Lt_types
   CSources:
     lt_term_stubs.c,
     lt_unix_stubs.c,

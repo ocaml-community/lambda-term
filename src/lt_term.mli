@@ -58,13 +58,10 @@ val windows : t -> bool
 
 (** {6 Sizes} *)
 
-type size = Lt_event.size = { lines : int; columns : int }
-    (** Type of terminal sizes. *)
-
-val get_size : t -> size Lwt.t
+val get_size : t -> Lt_types.size Lwt.t
   (** Returns the current size of the terminal. *)
 
-val set_size : t -> size -> unit Lwt.t
+val set_size : t -> Lt_types.size -> unit Lwt.t
   (** Sets the current size of the terminal. *)
 
 (** {6 Modes} *)
@@ -161,10 +158,10 @@ val stderr : t
 
 (** {6 Low-level functions} *)
 
-val get_size_from_fd : Lwt_unix.file_descr -> size Lwt.t
+val get_size_from_fd : Lwt_unix.file_descr -> Lt_types.size Lwt.t
   (** [get_size_from_fd fd] returns the size of the terminal accessible via
       the given file descriptor. *)
 
-val set_size_from_fd : Lwt_unix.file_descr -> size -> unit Lwt.t
+val set_size_from_fd : Lwt_unix.file_descr -> Lt_types.size -> unit Lwt.t
   (** [set_size_from_fd fd size] tries to set the size of the terminal
       accessible via the given file descriptor. *)

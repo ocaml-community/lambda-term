@@ -9,12 +9,9 @@
 
 (** Events *)
 
-type size = { lines : int; columns : int }
-    (** Type of terminal sizes. *)
-
 (** Event from the terminal. *)
 type t =
-  | Resize of size
+  | Resize of Lt_types.size
       (** The terminal has been resized. *)
   | Key of Lt_key.t
       (** A key has been pressed. *)

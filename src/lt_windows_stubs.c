@@ -212,13 +212,72 @@ CAMLprim value lt_windows_read_console_input_free(value val_job)
 }
 
 /* +-----------------------------------------------------------------+
+   | Console informations                                            |
+   +-----------------------------------------------------------------+ */
+
+CAMLprim value lt_windows_get_console_screen_buffer_info(value val_fd)
+{
+  CAMLparam1(val_fd);
+  CAMLlocal2(result, x);
+
+  CONSOLE_SCREEN_BUFFER_INFO info;
+
+  if (!GetConsoleScreenBufferInfo(Handle_val(val_fd), &info)) {
+    win32_maperr(GetLastError());
+    uerror("GetConsoleScreenBufferInfo", Nothing);
+  }
+
+  result = caml_alloc_tuple(5);
+
+  x = caml_alloc_tuple(2);
+  Field(x, 0) = Val_int(info.dwSize.Y);
+  Field(x, 1) = Val_int(info.dwSize.X);
+  Field(result, 0) = x;
+
+  x = caml_alloc_tuple(4);
+  Field(x, 0) = Val_int(info.dwCursorPosition.Y);
+  Field(x, 1) = Val_int(info.dwCursorPosition.X);
+  Field(result, 1) = x;
+
+  x = caml_alloc_tuple(2);
+  int color = 0;
+  if (info.wAttributes & FOREGROUND_RED) color |= 1;
+  if (info.wAttributes & FOREGROUND_GREEN) color |= 2;
+  if (info.wAttributes & FOREGROUND_BLUE) color |= 4;
+  if (info.wAttributes & FOREGROUND_INTENSITY) color |= 8;
+  Field(x, 0) = Val_int(color);
+  color = 0;
+  if (info.wAttributes & BACKGROUND_RED) color |= 1;
+  if (info.wAttributes & BACKGROUND_GREEN) color |= 2;
+  if (info.wAttributes & BACKGROUND_BLUE) color |= 4;
+  if (info.wAttributes & BACKGROUND_INTENSITY) color |= 8;
+  Field(x, 1) = Val_int(color);
+  Field(result, 2) = x;
+
+  x = caml_alloc_tuple(4);
+  Field(x, 0) = Val_int(info.srWindow.Top);
+  Field(x, 1) = Val_int(info.srWindow.Left);
+  Field(x, 2) = Val_int(info.srWindow.Bottom - info.srWindow.Top);
+  Field(x, 3) = Val_int(info.srWindow.Right - info.srWindow.Left);
+  Field(result, 3) = x;
+
+  x = caml_alloc_tuple(2);
+  Field(x, 0) = Val_int(info.dwMaximumWindowSize.Y);
+  Field(x, 1) = Val_int(info.dwMaximumWindowSize.X);
+  Field(result, 4) = x;
+
+  CAMLreturn(result);
+}
+
+
+/* +-----------------------------------------------------------------+
    | Text attributes                                                 |
    +-----------------------------------------------------------------+ */
 
-CAMLprim value lt_windows_set_console_text_attribute(value val_fd, value val_fg, value val_bg)
+CAMLprim value lt_windows_set_console_text_attribute(value val_fd, value val_attrs)
 {
-  int fg = Int_val(val_fg);
-  int bg = Int_val(val_bg);
+  int fg = Int_val(Field(val_attrs, 0));
+  int bg = Int_val(Field(val_attrs, 1));
   WORD attrs = 0;
 
   if (fg & 1) attrs |= FOREGROUND_RED;
@@ -262,5 +321,6 @@ NA(read_console_input_job, "ReadConsoleInput")
 NA(read_console_input_result, "ReadConsoleInput")
 NA(read_console_input_free, "ReadConsoleInput")
 NA(set_console_text_attribute, "SetConsoleTextAttribute")
+NA(get_console_screen_buffer_info, "GetConsoleScreenBufferInfo")
 
 #endif

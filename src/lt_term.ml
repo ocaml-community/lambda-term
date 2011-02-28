@@ -10,8 +10,6 @@
 open Lwt
 open React
 
-type size = Lt_event.size = { lines : int; columns : int }
-
 (* +-----------------------------------------------------------------+
    | The terminal type                                               |
    +-----------------------------------------------------------------+ *)
@@ -128,8 +126,8 @@ let windows t = t.windows
    | Sizes                                                           |
    +-----------------------------------------------------------------+ *)
 
-external get_size_from_fd : Unix.file_descr -> size = "lt_term_get_size_from_fd"
-external set_size_from_fd : Unix.file_descr -> size -> unit = "lt_term_set_size_from_fd"
+external get_size_from_fd : Unix.file_descr -> Lt_types.size = "lt_term_get_size_from_fd"
+external set_size_from_fd : Unix.file_descr -> Lt_types.size -> unit = "lt_term_set_size_from_fd"
 
 let get_size_from_fd fd =
   Lwt_unix.check_descriptor fd;
@@ -379,17 +377,36 @@ let windows_color term = function
 
 let fprints_windows term oc text =
   let open Lt_style in
-  Lwt_list.iter_s
-    (function
-       | String str ->
-           Lwt_io.write oc (Lt_iconv.recode_with term.outgoing_cd str)
-       | Foreground col ->
-           lwt () = Lwt_io.flush oc in
-           Lt_windows.set_console_text_attribute term.outgoing_fd (windows_color term col) 0;
-           return ()
-       | _ ->
-           return ())
-    text
+  let rec loop need_to_commit attrs text =
+    match text with
+      | [] ->
+          if need_to_commit then begin
+            lwt () = Lwt_io.flush oc in
+            Lt_windows.set_console_text_attribute term.outgoing_fd attrs;
+            return ()
+          end else
+            return ()
+      | String str :: text ->
+          lwt () =
+            if need_to_commit then begin
+              lwt () = Lwt_io.flush oc in
+              Lt_windows.set_console_text_attribute term.outgoing_fd attrs;
+              return ()
+            end else
+              return ()
+          in
+          lwt () = Lwt_io.write oc (Lt_iconv.recode_with term.outgoing_cd str) in
+          loop false attrs text
+      | Reset :: text ->
+          loop true { Lt_windows.foreground = 7; Lt_windows.background = 0 } text
+      | (Bold | Underlined | Blink | Inverse | Hidden) :: text ->
+          loop need_to_commit attrs text
+      | Foreground col :: text ->
+          loop true { attrs with Lt_windows.foreground = windows_color term col } text
+      | Background col :: text ->
+          loop true { attrs with Lt_windows.background = windows_color term col } text
+  in
+  loop false (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.attributes text
 
 let fprints term text =
   Lwt_unix.isatty term.outgoing_fd >>= function
