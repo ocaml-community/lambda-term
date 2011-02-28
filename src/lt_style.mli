@@ -17,9 +17,6 @@ type color =
   | Index of int
       (** A color given by its index. Most terminal have at least 8
           colors. *)
-  | Light of int
-      (** Light version of the given color. This works only for index
-          from 0 to 7. *)
   | RGB of int * int * int
       (** A color given by its three component between 0 and 255. The
           closest color will be used. *)

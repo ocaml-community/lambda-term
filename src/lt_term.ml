@@ -292,29 +292,24 @@ let queue_color term q base = function
   | Lt_style.Index n ->
       if n < 8 then
         Queue.add (base + n) q
-      else begin
-        Queue.add (base + 8) q;
-        Queue.add 5 q;
-        Queue.add n q
-      end
-  | Lt_style.Light n ->
-      if n < 8 then
-        if term.bold_is_bright then
-          if base = Codes.foreground then begin
-            Queue.add Codes.bold q;
-            Queue.add (base + n) q
-          end else
-            Queue.add (base + n) q
+      else
+        if n < 16 then
+          if term.bold_is_bright then
+            if base = Codes.foreground then begin
+              Queue.add Codes.bold q;
+              Queue.add (base + n - 8) q
+            end else
+              Queue.add (base + n - 8) q
+          else begin
+            Queue.add (base + 8) q;
+            Queue.add 5 q;
+            Queue.add n q
+          end
         else begin
           Queue.add (base + 8) q;
           Queue.add 5 q;
-          Queue.add (n + 8) q
+          Queue.add n q
         end
-      else begin
-        Queue.add (base + 8) q;
-        Queue.add 5 q;
-        Queue.add n q
-      end
   | Lt_style.RGB _ ->
       assert false
 
@@ -377,7 +372,6 @@ let expand term text =
 let windows_color term = function
   | Lt_style.Default -> 0
   | Lt_style.Index n -> n
-  | Lt_style.Light n -> if n < 8 then n + 8 else n
   | Lt_style.RGB _ -> assert false
 
 let fprints_windows term oc text =
