@@ -35,7 +35,9 @@ Library "lambda-term"
     Lt_utf8,
     Lt_style,
     Lt_types,
-    Lt_draw
+    Lt_draw,
+    Lt_mouse,
+    Lt_color_mappings
   CSources:
     lt_term_stubs.c,
     lt_unix_stubs.c,
