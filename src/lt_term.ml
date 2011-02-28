@@ -226,7 +226,12 @@ let read_event term =
       | Lt_windows.Key key ->
           return (Lt_event.Key key)
       | Lt_windows.Mouse mouse ->
-          return (Lt_event.Mouse mouse)
+          let window = (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.window in
+          return (Lt_event.Mouse {
+                    mouse with
+                      Lt_mouse.line = mouse.Lt_mouse.line - window.Lt_types.r_line;
+                      Lt_mouse.column = mouse.Lt_mouse.column - window.Lt_types.r_column;
+                  })
   else if term.size_changed then begin
     term.size_changed <- false;
     lwt size = get_size term in
