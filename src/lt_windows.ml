@@ -85,6 +85,17 @@ let get_console_screen_buffer_info fd =
   Lwt_unix.check_descriptor fd;
   get_console_screen_buffer_info (Lwt_unix.unix_file_descr fd)
 
+external get_console_cursor_info : Unix.file_descr -> int * bool = "lt_windows_get_console_cursor_info"
+external set_console_cursor_info : Unix.file_descr -> int -> bool -> unit = "lt_windows_set_console_cursor_info"
+
+let get_console_cursor_info fd =
+  Lwt_unix.check_descriptor fd;
+  get_console_cursor_info (Lwt_unix.unix_file_descr fd)
+
+let set_console_cursor_info fd size visible =
+  Lwt_unix.check_descriptor fd;
+  set_console_cursor_info (Lwt_unix.unix_file_descr fd) size visible
+
 external set_console_text_attribute : Unix.file_descr -> text_attributes -> unit = "lt_windows_set_console_text_attribute"
 
 let set_console_text_attribute fd attrs =

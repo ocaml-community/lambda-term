@@ -73,6 +73,16 @@ val get_console_screen_buffer_info : Lwt_unix.file_descr -> console_screen_buffe
   (** [get_console_screen_buffer_info fd] returns the current
       informations about the given console. *)
 
+(** {6 Console cursor} *)
+
+val get_console_cursor_info : Lwt_unix.file_descr -> int * bool
+  (** Returns the size and visible status of the cursor on the given
+      console. The size is a percentage between 1 and 100. *)
+
+val set_console_cursor_info : Lwt_unix.file_descr -> int -> bool -> unit
+  (** [set_console_cursor_info fd size visible] sets the size and
+      visible status of the cursor on the given console. *)
+
 (** {6 Text attributes} *)
 
 val set_console_text_attribute : Lwt_unix.file_descr -> text_attributes -> unit

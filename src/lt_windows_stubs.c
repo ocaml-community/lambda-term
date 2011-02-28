@@ -269,6 +269,34 @@ CAMLprim value lt_windows_get_console_screen_buffer_info(value val_fd)
   CAMLreturn(result);
 }
 
+/* +-----------------------------------------------------------------+
+   | Cursor                                                          |
+   +-----------------------------------------------------------------+ */
+
+CAMLprim value lt_windows_get_console_cursor_info(value val_fd)
+{
+  CONSOLE_CURSOR_INFO info;
+  if (!GetConsoleCursorInfo(Handle_val(val_fd), &info)) {
+    win32_maperr(GetLastError());
+    uerror("GetConsoleCursorInfo", Nothing);
+  }
+  value result = caml_alloc_tuple(2);
+  Field(result, 0) = Val_int(info.dwSize);
+  Field(result, 1) = Val_bool(info.bVisible);
+  return result;
+}
+
+CAMLprim value lt_windows_set_console_cursor_info(value val_fd, value val_size, value val_visible)
+{
+  CONSOLE_CURSOR_INFO info;
+  info.dwSize = Int_val(val_size);
+  info.bVisible = Bool_val(val_visible);
+  if (!SetConsoleCursorInfo(Handle_val(val_fd), &info)) {
+    win32_maperr(GetLastError());
+    uerror("SetConsoleCursorInfo", Nothing);
+  }
+  return Val_unit;
+}
 
 /* +-----------------------------------------------------------------+
    | Text attributes                                                 |
@@ -322,5 +350,7 @@ NA(read_console_input_result, "ReadConsoleInput")
 NA(read_console_input_free, "ReadConsoleInput")
 NA(set_console_text_attribute, "SetConsoleTextAttribute")
 NA(get_console_screen_buffer_info, "GetConsoleScreenBufferInfo")
+NA(get_console_cursor_info, "GetConsoleCursorInfo")
+NA(set_console_cursor_info, "SetConsoleCursorInfo")
 
 #endif

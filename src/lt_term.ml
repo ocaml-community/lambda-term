@@ -214,10 +214,20 @@ let leave_mouse_mode term =
    +-----------------------------------------------------------------+ *)
 
 let show_cursor term =
-  Lwt_io.write term.oc "\027[?25h"
+  if term.windows then begin
+    let size, _ = Lt_windows.get_console_cursor_info term.outgoing_fd in
+    Lt_windows.set_console_cursor_info term.outgoing_fd size true;
+    return ()
+  end else
+    Lwt_io.write term.oc "\027[?25h"
 
 let hide_cursor term =
-  Lwt_io.write term.oc "\027[?25l"
+  if term.windows then begin
+    let size, _ = Lt_windows.get_console_cursor_info term.outgoing_fd in
+    Lt_windows.set_console_cursor_info term.outgoing_fd size false;
+    return ()
+  end else
+    Lwt_io.write term.oc "\027[?25l"
 
 (* +-----------------------------------------------------------------+
    | State                                                           |
