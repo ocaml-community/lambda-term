@@ -66,6 +66,13 @@ Executable colors_256
   MainIs: colors_256.ml
   BuildDepends: lambda-term
 
+Executable rgb
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: rgb.ml
+  BuildDepends: lambda-term
+
 # +-------------------------------------------------------------------+
 # | Doc                                                               |
 # +-------------------------------------------------------------------+

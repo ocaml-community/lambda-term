@@ -483,6 +483,12 @@ let () =
          | After_rules ->
              flag ["c"; "compile"; "use_lwt_unix_h"] & S[A"-package"; A"lwt"];
 
+             rule "generation of color mappings"
+               ~dep:"src/gen_color_mappings.byte"
+               ~prod:"src/lt_color_mappings.ml"
+               (fun _ _ ->
+                  Cmd(S[P"src/gen_color_mappings.byte"; A"src/lt_color_mappings.ml"]));
+
              let env = BaseEnvLight.load () in
 
              if BaseEnvLight.var_get "need_liconv" env = "true" then begin

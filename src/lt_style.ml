@@ -16,6 +16,14 @@ type color =
   | Index of int
   | RGB of int * int * int
 
+let default = Default
+let index n = Index n
+let rgb r g b =
+  if r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255 then
+    invalid_arg "Lt_style.rgb"
+  else
+    RGB(r, g, b)
+
 let black = Index 0
 let red = Index 1
 let green = Index 2

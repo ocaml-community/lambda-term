@@ -12,5 +12,5 @@ open Lt_style
 
 lwt () =
   for_lwt i = 0 to 255 do
-    Lt_term.printls [format "color %d: " i; Foreground(Index i); String "example"; Reset]
+    Lt_term.printls [format "color %d: " i; Foreground(index i); String "example"; Reset]
   done

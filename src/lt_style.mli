@@ -12,6 +12,7 @@
 (** {6 Colors} *)
 
 type color =
+    private
   | Default
       (** The default color of the terminal. *)
   | Index of int
@@ -20,6 +21,12 @@ type color =
   | RGB of int * int * int
       (** A color given by its three component between 0 and 255. The
           closest color will be used. *)
+
+val default : color
+val index : int -> color
+val rgb : int -> int -> int -> color
+  (** [rgb r g b] raises [Invalid_argument] if one of [r], [g] or [b]
+      is not in the range [0..255]. *)
 
 (** {8 Standard colors} *)
 

@@ -19,6 +19,7 @@ type t = {
   colors : int;
   windows : bool;
   bold_is_bright : bool;
+  color_map : Lt_color_mappings.map;
   (* Informations. *)
 
   raw_mode : bool signal;
@@ -85,11 +86,18 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
   let raw_mode, set_raw_mode = S.create false in
   let mouse_mode, set_mouse_mode = S.create false in
   let ic = Lwt_io.of_fd ~mode:Lwt_io.input incoming_fd and oc = Lwt_io.of_fd ~mode:Lwt_io.output outgoing_fd in
+  let colors = colors_of_term model in
   let term = {
     model;
-    colors = colors_of_term model;
+    colors;
     windows;
     bold_is_bright = model = "linux";
+    color_map =
+      (match colors with
+         | 16 -> Lt_color_mappings.colors_16
+         | 88 -> Lt_color_mappings.colors_88
+         | 256 -> Lt_color_mappings.colors_256
+         | n -> Printf.ksprintf failwith "Lt_term.create: unknown number of colors (%d)" n);
     raw_mode;
     set_raw_mode;
     saved_attr = None;
@@ -286,32 +294,43 @@ let add_int buf n =
   else
     loop n
 
+let map_color term r g b =
+  let open Lt_color_mappings in
+  let map = term.color_map in
+  (* The [String.unsafe_get] is safe because the private type
+     [Lt_style.color] ensure that all components are in the range
+     [0..255]. *)
+  Char.code (String.unsafe_get map.map (map.index_r.(r) + map.count_r * (map.index_g.(g) + map.count_g * map.index_b.(b))))
+
+let queue_index term q base n =
+  if n < 8 then
+    Queue.add (base + n) q
+  else
+    if n < 16 then
+      if term.bold_is_bright then
+        if base = Codes.foreground then begin
+          Queue.add Codes.bold q;
+          Queue.add (base + n - 8) q
+        end else
+          Queue.add (base + n - 8) q
+      else begin
+        Queue.add (base + 8) q;
+        Queue.add 5 q;
+        Queue.add n q
+      end
+    else begin
+      Queue.add (base + 8) q;
+      Queue.add 5 q;
+      Queue.add n q
+    end
+
 let queue_color term q base = function
   | Lt_style.Default ->
       Queue.add (base + 9) q
   | Lt_style.Index n ->
-      if n < 8 then
-        Queue.add (base + n) q
-      else
-        if n < 16 then
-          if term.bold_is_bright then
-            if base = Codes.foreground then begin
-              Queue.add Codes.bold q;
-              Queue.add (base + n - 8) q
-            end else
-              Queue.add (base + n - 8) q
-          else begin
-            Queue.add (base + 8) q;
-            Queue.add 5 q;
-            Queue.add n q
-          end
-        else begin
-          Queue.add (base + 8) q;
-          Queue.add 5 q;
-          Queue.add n q
-        end
-  | Lt_style.RGB _ ->
-      assert false
+      queue_index term q base n
+  | Lt_style.RGB(r, g, b) ->
+      queue_index term q base (map_color term  r g b)
 
 let expand term text =
   let open Lt_style in
@@ -372,7 +391,7 @@ let expand term text =
 let windows_color term = function
   | Lt_style.Default -> 0
   | Lt_style.Index n -> n
-  | Lt_style.RGB _ -> assert false
+  | Lt_style.RGB(r, g, b) -> map_color term r g b
 
 let fprints_windows term oc text =
   let open Lt_style in
