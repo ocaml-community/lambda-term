@@ -15,17 +15,17 @@ open Lt_key
 let render term old_matrix size coord =
   let m = make_matrix size in
   for l = 1 to size.lines - 2 do
-    m.(l).(0).char <- Char.code '|';
-    m.(l).(size.columns - 1).char <- Char.code '|'
+    m.(l).(0).char <- 0x2502;
+    m.(l).(size.columns - 1).char <- 0x2502
   done;
   for c = 1 to size.columns - 2 do
-    m.(0).(c).char <- Char.code '-';
-    m.(size.lines - 1).(c).char <- Char.code '-'
+    m.(0).(c).char <- 0x2500;
+    m.(size.lines - 1).(c).char <- 0x2500
   done;
-  m.(0).(0).char <- Char.code '+';
-  m.(0).(size.columns - 1).char <- Char.code '+';
-  m.(size.lines - 1).(0).char <- Char.code '+';
-  m.(size.lines - 1).(size.columns - 1).char <- Char.code '+';
+  m.(0).(0).char <- 0x250c;
+  m.(0).(size.columns - 1).char <- 0x2510;
+  m.(size.lines - 1).(0).char <- 0x2514;
+  m.(size.lines - 1).(size.columns - 1).char <- 0x2518;
   m.(coord.line).(coord.column).char <- Char.code 'O';
   lwt () = Lt_term.render_update term old_matrix m in
   return m

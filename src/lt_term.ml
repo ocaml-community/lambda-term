@@ -293,7 +293,39 @@ module Codes = struct
   let background = 40
 end
 
+let hline = Char.code '-'
+let vline = Char.code '|'
+let corner = Char.code '+'
+
+(* Maps unicode characters used for drawing on windows. *)
+let windows_map_char = function
+  | 0x2500 -> hline
+  | 0x2501 -> hline
+  | 0x2502 -> vline
+  | 0x2503 -> vline
+  | 0x2504 -> hline
+  | 0x2505 -> hline
+  | 0x2506 -> vline
+  | 0x2507 -> vline
+  | 0x2508 -> hline
+  | 0x2509 -> hline
+  | 0x250a -> vline
+  | 0x250b -> vline
+  | x when x >= 0x250c && x <= 0x254b -> corner
+  | 0x254c -> hline
+  | 0x254d -> hline
+  | 0x254e -> vline
+  | 0x254f -> vline
+  | 0x2550 -> hline
+  | 0x2551 -> vline
+  | x when x >= 0x2552 && x <= 0x2570 -> corner
+  | 0x2571 -> Char.code '/'
+  | 0x2572 -> Char.code '\\'
+  | 0x2573 -> Char.code 'X'
+  | x -> x
+
 let fprint term str =
+  let str = if term.windows then Lt_utf8.map windows_map_char str else str in
   Lwt_io.fprint term.oc (Lt_iconv.recode_with term.outgoing_cd str)
 
 let fprintl term str =
@@ -435,7 +467,7 @@ let fprints_windows term oc text =
             end else
               return ()
           in
-          lwt () = Lwt_io.write oc (Lt_iconv.recode_with term.outgoing_cd str) in
+          lwt () = fprint term str in
           loop false attrs text
       | Reset :: text ->
           loop true { Lt_windows.foreground = 7; Lt_windows.background = 0 } text
@@ -551,7 +583,7 @@ let render_windows term matrix =
       (fun line ->
          Array.map
            (fun point -> {
-              Lt_windows.ci_char = point.char;
+              Lt_windows.ci_char = windows_map_char point.char;
               Lt_windows.ci_foreground = windows_fg_color term point.foreground;
               Lt_windows.ci_background = windows_bg_color term point.background;
             })
