@@ -543,6 +543,20 @@ let same_style p1 p2 =
       p1.foreground = p2.foreground &&
       p1.background = p2.background
 
+let render_point term buf last_point point =
+  let open Lt_draw in
+  if not (same_style point last_point) then begin
+    (* Reset styles if they are different from the previous point. *)
+    Buffer.add_string buf "\027[0";
+    if point.bold then Buffer.add_string buf ";1";
+    if point.underlined then Buffer.add_string buf ";4";
+    if point.blink then Buffer.add_string buf ";5";
+    add_color term buf Codes.foreground point.foreground;
+    add_color term buf Codes.background point.background;
+    Buffer.add_char buf 'm';
+  end;
+  Buffer.add_string buf (Lt_utf8.singleton point.char)
+
 let render_update_unix term old_matrix matrix =
   let open Lt_draw in
   let buf = Buffer.create 16 in
@@ -561,27 +575,19 @@ let render_update_unix term old_matrix matrix =
     let line = Array.unsafe_get matrix y in
     if y < Array.length old_matrix && line = Array.unsafe_get old_matrix y then begin
       (* If the current line is equal to the displayed one, skip it *)
-      if Array.length line > 0 then
-        last_point := Array.unsafe_get line (Array.length line - 1)
+      if Array.length line > 0 then begin
+        let point = Array.unsafe_get line 0 in
+        render_point term buf !last_point point;
+        last_point := point
+      end
     end else begin
       for x = 0 to Array.length line - 1 do
         let point = Array.unsafe_get line x in
-        if not (same_style point !last_point) then begin
-          (* Reset styles if they are different from the previous
-             point. *)
-          Buffer.add_string buf "\027[0";
-          if point.bold then Buffer.add_string buf ";1";
-          if point.underlined then Buffer.add_string buf ";4";
-          if point.blink then Buffer.add_string buf ";5";
-          add_color term buf Codes.foreground point.foreground;
-          add_color term buf Codes.background point.background;
-          Buffer.add_char buf 'm';
-        end;
-        Buffer.add_string buf (Lt_utf8.singleton point.char);
+        render_point term buf !last_point point;
         last_point := point
       done
     end;
-    if y < Array.length matrix - 1 then Buffer.add_char buf '\n'
+    if y < Array.length matrix - 1 then  Buffer.add_char buf '\n'
   done;
   Buffer.add_string buf "\027[0m";
   fprint term (Buffer.contents buf)
