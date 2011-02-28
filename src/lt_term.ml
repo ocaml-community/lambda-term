@@ -405,7 +405,12 @@ let expand term text =
   in
   loop text
 
-let windows_color term = function
+let windows_fg_color term = function
+  | Lt_style.Default -> 7
+  | Lt_style.Index n -> n
+  | Lt_style.RGB(r, g, b) -> map_color term r g b
+
+let windows_bg_color term = function
   | Lt_style.Default -> 0
   | Lt_style.Index n -> n
   | Lt_style.RGB(r, g, b) -> map_color term r g b
@@ -437,9 +442,9 @@ let fprints_windows term oc text =
       | (Bold | Underlined | Blink | Inverse | Hidden) :: text ->
           loop need_to_commit attrs text
       | Foreground col :: text ->
-          loop true { attrs with Lt_windows.foreground = windows_color term col } text
+          loop true { attrs with Lt_windows.foreground = windows_fg_color term col } text
       | Background col :: text ->
-          loop true { attrs with Lt_windows.background = windows_color term col } text
+          loop true { attrs with Lt_windows.background = windows_bg_color term col } text
   in
   loop false (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.attributes text
 
@@ -495,7 +500,7 @@ let same_style p1 p2 =
       p1.foreground = p2.foreground &&
       p1.background = p2.background
 
-let render_update term old_matrix matrix =
+let render_update_unix term old_matrix matrix =
   let open Lt_draw in
   let buf = Buffer.create 16 in
   (* Go the the top-left and reset attributes *)
@@ -537,6 +542,37 @@ let render_update term old_matrix matrix =
   done;
   Buffer.add_string buf "\027[0m";
   fprint term (Buffer.contents buf)
+
+let render_windows term matrix =
+  let open Lt_draw in
+  (* Build the matrix of char infos *)
+  let matrix =
+    Array.map
+      (fun line ->
+         Array.map
+           (fun point -> {
+              Lt_windows.ci_char = point.char;
+              Lt_windows.ci_foreground = windows_fg_color term point.foreground;
+              Lt_windows.ci_background = windows_bg_color term point.background;
+            })
+           line)
+      matrix
+  in
+  ignore (
+    Lt_windows.write_console_output
+      term.outgoing_fd
+      matrix
+      { Lt_types.lines = Array.length matrix; Lt_types.columns = if matrix = [||] then 0 else Array.length matrix.(0) }
+      { Lt_types.line = 0; Lt_types.column = 0 }
+      (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.window
+  );
+  return ()
+
+let render_update term old_matrix matrix =
+  if term.windows then
+    render_windows term matrix
+  else
+    render_update_unix term old_matrix matrix
 
 let render term m = render_update term [||] m
 

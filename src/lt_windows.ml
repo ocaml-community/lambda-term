@@ -101,3 +101,20 @@ external set_console_text_attribute : Unix.file_descr -> text_attributes -> unit
 let set_console_text_attribute fd attrs =
   Lwt_unix.check_descriptor fd;
   set_console_text_attribute (Lwt_unix.unix_file_descr fd) attrs
+
+type char_info = {
+  ci_char : int;
+  ci_foreground : int;
+  ci_background : int;
+}
+
+external write_console_output : Unix.file_descr -> char_info array array -> Lt_types.size -> Lt_types.coord -> Lt_types.rect -> Lt_types.rect = "lt_windows_write_console_output"
+
+let write_console_output fd chars size coord rect =
+  Lwt_unix.check_descriptor fd;
+  if Array.length chars <> size.Lt_types.lines then invalid_arg "Lt_windows.write_console_output";
+  Array.iter
+    (fun line ->
+       if Array.length line <> size.Lt_types.columns then invalid_arg "Lt_windows.write_console_output")
+    chars;
+  write_console_output (Lwt_unix.unix_file_descr fd) chars size coord rect

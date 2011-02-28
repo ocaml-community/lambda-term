@@ -257,8 +257,8 @@ CAMLprim value lt_windows_get_console_screen_buffer_info(value val_fd)
   x = caml_alloc_tuple(4);
   Field(x, 0) = Val_int(info.srWindow.Top);
   Field(x, 1) = Val_int(info.srWindow.Left);
-  Field(x, 2) = Val_int(info.srWindow.Bottom - info.srWindow.Top);
-  Field(x, 3) = Val_int(info.srWindow.Right - info.srWindow.Left);
+  Field(x, 2) = Val_int(info.srWindow.Bottom - info.srWindow.Top + 1);
+  Field(x, 3) = Val_int(info.srWindow.Right - info.srWindow.Left + 1);
   Field(result, 3) = x;
 
   x = caml_alloc_tuple(2);
@@ -325,6 +325,68 @@ CAMLprim value lt_windows_set_console_text_attribute(value val_fd, value val_att
   return Val_unit;
 }
 
+/* +-----------------------------------------------------------------+
+   | Rendering                                                       |
+   +-----------------------------------------------------------------+ */
+
+CAMLprim value lt_windows_write_console_output(value val_fd, value val_chars, value val_size, value val_coord, value val_rect)
+{
+  CAMLparam5(val_fd, val_chars, val_size, val_coord, val_rect);
+  CAMLlocal1(result);
+
+  int lines = Int_val(Field(val_size, 0));
+  int columns = Int_val(Field(val_size, 1));
+
+  /* Convert characters */
+  CHAR_INFO buffer[lines * columns];
+  int l, c;
+  CHAR_INFO *dst = buffer;
+  for (l = 0; l < lines; l++) {
+    value line = Field(val_chars, l);
+    for (c = 0; c < columns; c++) {
+      value src = Field(line, c);
+      dst->Char.UnicodeChar = Int_val(Field(src, 0));
+      int fg = Int_val(Field(src, 1));
+      int bg = Int_val(Field(src, 2));
+      WORD attrs = 0;
+      if (fg & 1) attrs |= FOREGROUND_RED;
+      if (fg & 2) attrs |= FOREGROUND_GREEN;
+      if (fg & 4) attrs |= FOREGROUND_BLUE;
+      if (fg & 8) attrs |= FOREGROUND_INTENSITY;
+      if (bg & 1) attrs |= BACKGROUND_RED;
+      if (bg & 2) attrs |= BACKGROUND_GREEN;
+      if (bg & 4) attrs |= BACKGROUND_BLUE;
+      if (bg & 8) attrs |= BACKGROUND_INTENSITY;
+      dst->Attributes = attrs;
+      dst++;
+    }
+  }
+
+  COORD size;
+  COORD coord;
+  SMALL_RECT rect;
+  size.X = Int_val(Field(val_size, 1));
+  size.Y = Int_val(Field(val_size, 0));
+  coord.X = Int_val(Field(val_coord, 1));
+  coord.Y = Int_val(Field(val_coord, 0));
+  rect.Top = Int_val(Field(val_rect, 0));
+  rect.Left = Int_val(Field(val_rect, 1));
+  rect.Bottom = rect.Top + Int_val(Field(val_rect, 2)) - 1;
+  rect.Right = rect.Left + Int_val(Field(val_rect, 3)) - 1;
+
+  if (!WriteConsoleOutput(Handle_val(val_fd), buffer, size, coord, &rect)) {
+    win32_maperr(GetLastError());
+    uerror("WriteConsoleOutput", Nothing);
+  }
+
+  result = caml_alloc_tuple(4);
+  Field(result, 0) = Val_int(rect.Top);
+  Field(result, 1) = Val_int(rect.Left);
+  Field(result, 2) = Val_int(rect.Bottom - rect.Top + 1);
+  Field(result, 3) = Val_int(rect.Right - rect.Left + 1);
+  CAMLreturn(result);
+}
+
 #else
 
 /* +-----------------------------------------------------------------+
@@ -352,5 +414,6 @@ NA(set_console_text_attribute, "SetConsoleTextAttribute")
 NA(get_console_screen_buffer_info, "GetConsoleScreenBufferInfo")
 NA(get_console_cursor_info, "GetConsoleCursorInfo")
 NA(set_console_cursor_info, "SetConsoleCursorInfo")
+NA(write_console_output, "WriteConsoleOutput")
 
 #endif

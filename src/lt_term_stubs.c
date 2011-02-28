@@ -31,8 +31,8 @@ CAMLprim value lt_term_get_size_from_fd(value fd)
   }
 
   value result = caml_alloc_tuple(2);
-  Field(result, 0) = Val_int(info.srWindow.Bottom - info.srWindow.Top);
-  Field(result, 1) = Val_int(info.srWindow.Right - info.srWindow.Left);
+  Field(result, 0) = Val_int(info.srWindow.Bottom - info.srWindow.Top + 1);
+  Field(result, 1) = Val_int(info.srWindow.Right - info.srWindow.Left + 1);
   return result;
 }
 
@@ -48,8 +48,8 @@ CAMLprim value lt_term_set_size_from_fd(value fd, value val_size)
   SMALL_RECT rect;
   rect.Top = info.srWindow.Top;
   rect.Left = info.srWindow.Left;
-  rect.Bottom = rect.Top + Int_val(Field(val_size, 0));
-  rect.Right = rect.Left + Int_val(Field(val_size, 1));
+  rect.Bottom = rect.Top + Int_val(Field(val_size, 0)) - 1;
+  rect.Right = rect.Left + Int_val(Field(val_size, 1)) - 1;
 
   if (!SetConsoleWindowInfo(Handle_val(fd), TRUE, &rect)) {
     win32_maperr(GetLastError());

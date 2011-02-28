@@ -87,3 +87,19 @@ val set_console_cursor_info : Lwt_unix.file_descr -> int -> bool -> unit
 
 val set_console_text_attribute : Lwt_unix.file_descr -> text_attributes -> unit
   (** [set_console_text_attribute fd attributes] *)
+
+(** {6 Rendering} *)
+
+type char_info = {
+  ci_char : int;
+  (** The unicode character. *)
+  ci_foreground : int;
+  (** The foreground color. *)
+  ci_background : int;
+  (** The background color. *)
+}
+
+val write_console_output : Lwt_unix.file_descr -> char_info array array -> Lt_types.size -> Lt_types.coord -> Lt_types.rect -> Lt_types.rect
+  (** [write_console_output fd chars size coord rect] writes the given
+      matrix of characters with their attributes on the given console
+      at given position. *)
