@@ -83,6 +83,10 @@ val set_console_cursor_info : Lwt_unix.file_descr -> int -> bool -> unit
   (** [set_console_cursor_info fd size visible] sets the size and
       visible status of the cursor on the given console. *)
 
+val set_console_cursor_position : Lwt_unix.file_descr -> Lt_types.coord -> unit
+  (** Move the cursor to the specified location in the screen
+      buffer. *)
+
 (** {6 Text attributes} *)
 
 val set_console_text_attribute : Lwt_unix.file_descr -> text_attributes -> unit

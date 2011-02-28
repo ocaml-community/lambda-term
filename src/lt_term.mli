@@ -97,6 +97,9 @@ val show_cursor : t -> unit Lwt.t
 val hide_cursor : t -> unit Lwt.t
   (** Make the cursor invisible. *)
 
+val goto : t -> Lt_types.coord -> unit Lwt.t
+  (** [goto term coord] move the cursor to the given coordinates. *)
+
 (** {6 State} *)
 
 val save : t -> unit Lwt.t

@@ -229,6 +229,17 @@ let hide_cursor term =
   end else
     Lwt_io.write term.oc "\027[?25l"
 
+let goto term coord =
+  if term.windows then
+    let window = (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.window in
+    Lt_windows.set_console_cursor_position term.outgoing_fd {
+      Lt_types.line = window.Lt_types.r_line + coord.Lt_types.line;
+      Lt_types.column = window.Lt_types.r_column + coord.Lt_types.column;
+    };
+    return ()
+  else
+    Lwt_io.fprintf term.oc "\027[H\027[%dB\027[%dC" coord.Lt_types.line coord.Lt_types.column
+
 (* +-----------------------------------------------------------------+
    | State                                                           |
    +-----------------------------------------------------------------+ *)

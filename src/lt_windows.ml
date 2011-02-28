@@ -96,6 +96,12 @@ let set_console_cursor_info fd size visible =
   Lwt_unix.check_descriptor fd;
   set_console_cursor_info (Lwt_unix.unix_file_descr fd) size visible
 
+external set_console_cursor_position : Unix.file_descr -> Lt_types.coord -> unit = "lt_windows_set_console_cursor_position"
+
+let set_console_cursor_position fd coord =
+  Lwt_unix.check_descriptor fd;
+  set_console_cursor_position (Lwt_unix.unix_file_descr fd) coord
+
 external set_console_text_attribute : Unix.file_descr -> text_attributes -> unit = "lt_windows_set_console_text_attribute"
 
 let set_console_text_attribute fd attrs =

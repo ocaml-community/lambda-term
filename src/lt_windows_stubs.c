@@ -298,6 +298,17 @@ CAMLprim value lt_windows_set_console_cursor_info(value val_fd, value val_size, 
   return Val_unit;
 }
 
+CAMLprim value lt_windows_set_console_cursor_position(value val_fd, value val_coord)
+{
+  COORD coord;
+  coord.X = Int_val(Field(val_coord, 1));
+  coord.Y = Int_val(Field(val_coord, 0));
+  if (!SetConsoleCursorPosition(Handle_val(val_fd), coord)) {
+    win32_maperr(GetLastError());
+    uerror("SetConsoleCursorPosition", Nothing);
+  }
+}
+
 /* +-----------------------------------------------------------------+
    | Text attributes                                                 |
    +-----------------------------------------------------------------+ */
@@ -415,5 +426,6 @@ NA(get_console_screen_buffer_info, "GetConsoleScreenBufferInfo")
 NA(get_console_cursor_info, "GetConsoleCursorInfo")
 NA(set_console_cursor_info, "SetConsoleCursorInfo")
 NA(write_console_output, "WriteConsoleOutput")
+NA(set_console_cursor_position, "SetConsoleCursorPosition")
 
 #endif
