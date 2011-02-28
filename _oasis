@@ -59,6 +59,13 @@ Executable colors
   MainIs: colors.ml
   BuildDepends: lambda-term
 
+Executable colors_256
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: colors_256.ml
+  BuildDepends: lambda-term
+
 # +-------------------------------------------------------------------+
 # | Doc                                                               |
 # +-------------------------------------------------------------------+
