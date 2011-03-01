@@ -65,6 +65,11 @@ let read_console_input fd =
     (read_console_input_job (Lwt_unix.unix_file_descr fd))
     read_console_input_result
     read_console_input_free
+  >|= function
+    | Key({ Lt_key.code = Lt_key.Char ch } as key) when ch < 32 ->
+        Key { key with Lt_key.code = Lt_key.Char controls.(ch) }
+    | input ->
+        input
 
 type text_attributes = {
   foreground : int;
