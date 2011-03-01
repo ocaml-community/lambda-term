@@ -98,7 +98,14 @@ val hide_cursor : t -> unit Lwt.t
   (** Make the cursor invisible. *)
 
 val goto : t -> Lt_types.coord -> unit Lwt.t
-  (** [goto term coord] move the cursor to the given coordinates. *)
+  (** [goto term coord] moves the cursor to the given coordinates. *)
+
+val goto_bol : t -> int -> unit Lwt.t
+  (** [goto_bol term n] moves the cursor to the beginning of the [n]th
+      next/previous line. [goto_bol term 0] moves the cursor to the
+      beginning of the current line, [goto_bol term 1] moves the
+      cursor to the beginning of the next line, [goto_bol term (-1)]
+      moves the cursor the beginning of the previous line...  *)
 
 (** {6 State} *)
 

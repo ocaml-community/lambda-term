@@ -230,15 +230,32 @@ let hide_cursor term =
     Lwt_io.write term.oc "\027[?25l"
 
 let goto term coord =
-  if term.windows then
+  if term.windows then begin
     let window = (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.window in
     Lt_windows.set_console_cursor_position term.outgoing_fd {
       Lt_types.line = window.Lt_types.r_line + coord.Lt_types.line;
       Lt_types.column = window.Lt_types.r_column + coord.Lt_types.column;
     };
     return ()
-  else
+  end else
     Lwt_io.fprintf term.oc "\027[H\027[%dB\027[%dC" coord.Lt_types.line coord.Lt_types.column
+
+let goto_bol term n =
+  if term.windows then begin
+    let pos = (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.cursor_position in
+    Lt_windows.set_console_cursor_position term.outgoing_fd {
+      Lt_types.line = pos.Lt_types.line + n;
+      Lt_types.column = 0;
+    };
+    return ()
+  end else
+    match n with
+      | n when n < 0 ->
+          Lwt_io.fprintf term.oc "\r\027[%dA" (-n)
+      | n when n > 0 ->
+          Lwt_io.fprintf term.oc "\r\027[%dB" n
+      | _ ->
+          Lwt_io.write_char term.oc '\r'
 
 (* +-----------------------------------------------------------------+
    | State                                                           |
