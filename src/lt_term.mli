@@ -168,6 +168,11 @@ val render_update : t -> Lt_draw.matrix -> Lt_draw.matrix -> unit Lwt.t
       displayed text. This reduces the amount of text sent to the
       terminal. *)
 
+(** {6 Misc} *)
+
+val flush : t -> unit Lwt.t
+  (** Flushes the underlying output channel used by the terminal. *)
+
 (** {6 Well known instances} *)
 
 val stdout : t
