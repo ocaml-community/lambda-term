@@ -307,6 +307,7 @@ CAMLprim value lt_windows_set_console_cursor_position(value val_fd, value val_co
     win32_maperr(GetLastError());
     uerror("SetConsoleCursorPosition", Nothing);
   }
+  return Val_unit;
 }
 
 /* +-----------------------------------------------------------------+
