@@ -270,6 +270,49 @@ CAMLprim value lt_windows_get_console_screen_buffer_info(value val_fd)
 }
 
 /* +-----------------------------------------------------------------+
+   | Console mode                                                    |
+   +-----------------------------------------------------------------+ */
+
+CAMLprim value lt_windows_get_console_mode(value val_fd)
+{
+  WORD mode;
+
+  if (!GetConsoleMode(Handle_val(val_fd), &mode)) {
+    win32_maperr(GetLastError());
+    uerror("GetConsoleMode", Nothing);
+  }
+
+  value result = caml_alloc_tuple(7);
+  Field(result, 0) = Val_bool(mode & ENABLE_ECHO_INPUT);
+  Field(result, 1) = Val_bool(mode & ENABLE_INSERT_MODE);
+  Field(result, 2) = Val_bool(mode & ENABLE_LINE_INPUT);
+  Field(result, 3) = Val_bool(mode & ENABLE_MOUSE_INPUT);
+  Field(result, 4) = Val_bool(mode & ENABLE_PROCESSED_INPUT);
+  Field(result, 5) = Val_bool(mode & ENABLE_QUICK_EDIT_MODE);
+  Field(result, 6) = Val_bool(mode & ENABLE_WINDOW_INPUT);
+  return result;
+}
+
+CAMLprim value lt_windows_set_console_mode(value val_fd, value val_mode)
+{
+  WORD mode = 0;
+
+  if (Bool_val(Field(val_mode, 0))) mode |= ENABLE_ECHO_INPUT;
+  if (Bool_val(Field(val_mode, 1))) mode |= ENABLE_INSERT_MODE;
+  if (Bool_val(Field(val_mode, 2))) mode |= ENABLE_LINE_INPUT;
+  if (Bool_val(Field(val_mode, 3))) mode |= ENABLE_MOUSE_INPUT;
+  if (Bool_val(Field(val_mode, 4))) mode |= ENABLE_PROCESSED_INPUT;
+  if (Bool_val(Field(val_mode, 5))) mode |= ENABLE_QUICK_EDIT_MODE;
+  if (Bool_val(Field(val_mode, 6))) mode |= ENABLE_WINDOW_INPUT;
+
+  if (!SetConsoleMode(Handle_val(val_fd), mode)) {
+    win32_maperr(GetLastError());
+    uerror("SetConsoleMode", Nothing);
+  }
+  return Val_unit;
+}
+
+/* +-----------------------------------------------------------------+
    | Cursor                                                          |
    +-----------------------------------------------------------------+ */
 
@@ -428,5 +471,7 @@ NA(get_console_cursor_info, "GetConsoleCursorInfo")
 NA(set_console_cursor_info, "SetConsoleCursorInfo")
 NA(write_console_output, "WriteConsoleOutput")
 NA(set_console_cursor_position, "SetConsoleCursorPosition")
+NA(get_console_mode, "GetConsoleMode")
+NA(set_console_mode, "SetConsoleMode")
 
 #endif

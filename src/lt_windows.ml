@@ -85,6 +85,27 @@ let get_console_screen_buffer_info fd =
   Lwt_unix.check_descriptor fd;
   get_console_screen_buffer_info (Lwt_unix.unix_file_descr fd)
 
+type console_mode = {
+  cm_echo_input : bool;
+  cm_insert_mode : bool;
+  cm_line_input : bool;
+  cm_mouse_input : bool;
+  cm_processed_input : bool;
+  cm_quick_edit_mode : bool;
+  cm_window_input : bool;
+}
+
+external get_console_mode : Unix.file_descr -> console_mode = "lt_windows_get_console_mode"
+external set_console_mode : Unix.file_descr -> console_mode -> unit = "lt_windows_set_console_mode"
+
+let get_console_mode fd =
+  Lwt_unix.check_descriptor fd;
+  get_console_mode (Lwt_unix.unix_file_descr fd)
+
+let set_console_mode fd mode =
+  Lwt_unix.check_descriptor fd;
+  set_console_mode (Lwt_unix.unix_file_descr fd) mode
+
 external get_console_cursor_info : Unix.file_descr -> int * bool = "lt_windows_get_console_cursor_info"
 external set_console_cursor_info : Unix.file_descr -> int -> bool -> unit = "lt_windows_set_console_cursor_info"
 

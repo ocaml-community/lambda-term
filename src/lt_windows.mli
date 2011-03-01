@@ -73,6 +73,25 @@ val get_console_screen_buffer_info : Lwt_unix.file_descr -> console_screen_buffe
   (** [get_console_screen_buffer_info fd] returns the current
       informations about the given console. *)
 
+(** {6 Console modes} *)
+
+(** Console modes. *)
+type console_mode = {
+  cm_echo_input : bool;
+  cm_insert_mode : bool;
+  cm_line_input : bool;
+  cm_mouse_input : bool;
+  cm_processed_input : bool;
+  cm_quick_edit_mode : bool;
+  cm_window_input : bool;
+}
+
+val get_console_mode : Lwt_unix.file_descr -> console_mode
+  (** Returns the mode of the given console. *)
+
+val set_console_mode : Lwt_unix.file_descr -> console_mode -> unit
+  (** Sets the mode of the given console. *)
+
 (** {6 Console cursor} *)
 
 val get_console_cursor_info : Lwt_unix.file_descr -> int * bool

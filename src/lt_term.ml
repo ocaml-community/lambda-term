@@ -14,6 +14,11 @@ open React
    | The terminal type                                               |
    +-----------------------------------------------------------------+ *)
 
+type attributes =
+  | Attr_none
+  | Attr_unix of Unix.terminal_io
+  | Attr_windows of Lt_windows.console_mode
+
 type t = {
   model : string;
   colors : int;
@@ -26,7 +31,7 @@ type t = {
   set_raw_mode : bool -> unit;
   (* The current raw mode. *)
 
-  mutable saved_attr : Unix.terminal_io option;
+  mutable saved_attr : attributes;
   (* Saved terminal attributes. *)
 
   mouse_mode : bool signal;
@@ -100,7 +105,7 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
          | n -> Printf.ksprintf failwith "Lt_term.create: unknown number of colors (%d)" n);
     raw_mode;
     set_raw_mode;
-    saved_attr = None;
+    saved_attr = Attr_none;
     mouse_mode;
     set_mouse_mode;
     incoming_fd;
@@ -155,11 +160,24 @@ let set_size term size = set_size_from_fd term.outgoing_fd size
 let raw_mode term = term.raw_mode
 
 let enter_raw_mode term =
-  if term.windows || S.value term.raw_mode then
+  if S.value term.raw_mode then
     return ()
-  else begin
+  else if term.windows then begin
+    let mode = Lt_windows.get_console_mode term.incoming_fd in
+    term.saved_attr <- Attr_windows mode;
+    Lt_windows.set_console_mode term.incoming_fd {
+      mode with
+        Lt_windows.cm_echo_input = false;
+        Lt_windows.cm_line_input = false;
+        Lt_windows.cm_mouse_input = true;
+        Lt_windows.cm_processed_input = false;
+        Lt_windows.cm_window_input = true;
+    };
+    term.set_raw_mode true;
+    return ()
+  end else begin
     lwt attr = Lwt_unix.tcgetattr term.incoming_fd in
-    term.saved_attr <- Some attr;
+    term.saved_attr <- Attr_unix attr;
     lwt () = Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH {
       attr with
         (* Inspired from Python-3.0/Lib/tty.py: *)
@@ -180,16 +198,18 @@ let enter_raw_mode term =
   end
 
 let leave_raw_mode term =
-  if term.windows || not (S.value term.raw_mode) then
-    return ()
-  else
-    match term.saved_attr with
-      | Some attr ->
-          term.saved_attr <- None;
-          term.set_raw_mode false;
-          Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH attr
-      | None ->
-          return ()
+  match term.saved_attr with
+    | Attr_none ->
+        return ()
+    | Attr_unix attr ->
+        term.saved_attr <- Attr_none;
+        term.set_raw_mode false;
+        Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH attr
+    | Attr_windows mode ->
+        term.saved_attr <- Attr_none;
+        term.set_raw_mode false;
+        Lt_windows.set_console_mode term.incoming_fd mode;
+        return ()
 
 let mouse_mode term = term.mouse_mode
 
