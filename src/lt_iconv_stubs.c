@@ -24,13 +24,13 @@
 
 #define Iconv_val(v) *(iconv_t*)Data_custom_val(v)
 
-void ml_iconv_finalize(value val_cd)
+static void lt_iconv_finalize(value val_cd)
 {
   iconv_t cd = Iconv_val(val_cd);
   if (cd) iconv_close(cd);
 }
 
-int ml_iconv_compare(value v1, value v2)
+static int lt_iconv_compare(value v1, value v2)
 {
   long d = (long)Iconv_val(v1) - (long)Iconv_val(v2);
   if (d < 0) return -1;
@@ -38,16 +38,16 @@ int ml_iconv_compare(value v1, value v2)
   return 0;
 }
 
-long ml_iconv_hash(value v)
+static long lt_iconv_hash(value v)
 {
   return (long)Iconv_val(v);
 }
 
 static struct custom_operations iconv_ops = {
   "lambda-term:iconv",
-  ml_iconv_finalize,
-  ml_iconv_compare,
-  ml_iconv_hash,
+  lt_iconv_finalize,
+  lt_iconv_compare,
+  lt_iconv_hash,
   custom_serialize_default,
   custom_deserialize_default
 };
