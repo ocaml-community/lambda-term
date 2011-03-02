@@ -8,7 +8,6 @@
  *)
 
 open Lwt
-open React
 
 (* +-----------------------------------------------------------------+
    | The terminal type                                               |
@@ -27,16 +26,8 @@ type t = {
   color_map : Lt_color_mappings.map;
   (* Informations. *)
 
-  raw_mode : bool signal;
-  set_raw_mode : bool -> unit;
-  (* The current raw mode. *)
-
   mutable saved_attr : attributes;
   (* Saved terminal attributes. *)
-
-  mouse_mode : bool signal;
-  set_mouse_mode : bool -> unit;
-  (* The current mouse mode. *)
 
   incoming_fd : Lwt_unix.file_descr;
   outgoing_fd : Lwt_unix.file_descr;
@@ -88,8 +79,6 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
           (Lt_unix.system_encoding,
            Lt_unix.system_encoding)
   in
-  let raw_mode, set_raw_mode = S.create false in
-  let mouse_mode, set_mouse_mode = S.create false in
   let ic = Lwt_io.of_fd ~mode:Lwt_io.input incoming_fd and oc = Lwt_io.of_fd ~mode:Lwt_io.output outgoing_fd in
   let colors = colors_of_term model in
   let term = {
@@ -103,11 +92,7 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
          | 88 -> Lt_color_mappings.colors_88
          | 256 -> Lt_color_mappings.colors_256
          | n -> Printf.ksprintf failwith "Lt_term.create: unknown number of colors (%d)" n);
-    raw_mode;
-    set_raw_mode;
     saved_attr = Attr_none;
-    mouse_mode;
-    set_mouse_mode;
     incoming_fd;
     outgoing_fd;
     ic;
@@ -157,45 +142,43 @@ let set_size term size = set_size_from_fd term.outgoing_fd size
    | Modes                                                           |
    +-----------------------------------------------------------------+ *)
 
-let raw_mode term = term.raw_mode
-
 let enter_raw_mode term =
-  if S.value term.raw_mode then
-    return ()
-  else if term.windows then begin
-    let mode = Lt_windows.get_console_mode term.incoming_fd in
-    term.saved_attr <- Attr_windows mode;
-    Lt_windows.set_console_mode term.incoming_fd {
-      mode with
-        Lt_windows.cm_echo_input = false;
-        Lt_windows.cm_line_input = false;
-        Lt_windows.cm_mouse_input = true;
-        Lt_windows.cm_processed_input = false;
-        Lt_windows.cm_window_input = true;
-    };
-    term.set_raw_mode true;
-    return ()
-  end else begin
-    lwt attr = Lwt_unix.tcgetattr term.incoming_fd in
-    term.saved_attr <- Attr_unix attr;
-    lwt () = Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH {
-      attr with
-        (* Inspired from Python-3.0/Lib/tty.py: *)
-        Unix.c_brkint = false;
-        Unix.c_inpck = false;
-        Unix.c_istrip = false;
-        Unix.c_ixon = false;
-        Unix.c_csize = 8;
-        Unix.c_parenb = false;
-        Unix.c_echo = false;
-        Unix.c_icanon = false;
-        Unix.c_isig = false;
-        Unix.c_vmin = 1;
-        Unix.c_vtime = 0;
-    } in
-    term.set_raw_mode true;
-    return ()
-  end
+  match term.saved_attr with
+    | Attr_unix _ | Attr_windows _ ->
+        return ()
+    | Attr_none ->
+        if term.windows then begin
+          let mode = Lt_windows.get_console_mode term.incoming_fd in
+          term.saved_attr <- Attr_windows mode;
+          Lt_windows.set_console_mode term.incoming_fd {
+            mode with
+              Lt_windows.cm_echo_input = false;
+              Lt_windows.cm_line_input = false;
+              Lt_windows.cm_mouse_input = true;
+              Lt_windows.cm_processed_input = false;
+              Lt_windows.cm_window_input = true;
+          };
+          return ()
+        end else begin
+          lwt attr = Lwt_unix.tcgetattr term.incoming_fd in
+          term.saved_attr <- Attr_unix attr;
+          lwt () = Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH {
+            attr with
+              (* Inspired from Python-3.0/Lib/tty.py: *)
+              Unix.c_brkint = false;
+              Unix.c_inpck = false;
+              Unix.c_istrip = false;
+              Unix.c_ixon = false;
+              Unix.c_csize = 8;
+              Unix.c_parenb = false;
+              Unix.c_echo = false;
+              Unix.c_icanon = false;
+              Unix.c_isig = false;
+              Unix.c_vmin = 1;
+              Unix.c_vtime = 0;
+          } in
+          return ()
+        end
 
 let leave_raw_mode term =
   match term.saved_attr with
@@ -203,31 +186,23 @@ let leave_raw_mode term =
         return ()
     | Attr_unix attr ->
         term.saved_attr <- Attr_none;
-        term.set_raw_mode false;
         Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH attr
     | Attr_windows mode ->
         term.saved_attr <- Attr_none;
-        term.set_raw_mode false;
         Lt_windows.set_console_mode term.incoming_fd mode;
         return ()
 
-let mouse_mode term = term.mouse_mode
-
 let enter_mouse_mode term =
-  if term.windows || S.value term.mouse_mode then
+  if term.windows then
     return ()
-  else begin
-    term.set_mouse_mode true;
+  else
     Lwt_io.write term.oc "\027[?1000h"
-  end
 
 let leave_mouse_mode term =
-  if term.windows || not (S.value term.mouse_mode) then
+  if term.windows then
     return ()
-  else begin
-    term.set_mouse_mode false;
+  else
     Lwt_io.write term.oc "\027[?1000l"
-  end
 
 (* +-----------------------------------------------------------------+
    | Cursor                                                          |
@@ -281,13 +256,13 @@ let goto_bol term n =
    | State                                                           |
    +-----------------------------------------------------------------+ *)
 
-let save term =
+let save_state term =
   if term.windows then
     return ()
   else
     Lwt_io.write term.oc "\027[?1049h"
 
-let load term =
+let load_state term =
   if term.windows then
     return ()
   else

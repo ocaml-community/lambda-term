@@ -63,7 +63,7 @@ let rec loop term coord size matrix =
 lwt () =
   let term = Lt_term.stdout in
   lwt () = Lt_term.enter_raw_mode term in
-  lwt () = Lt_term.save term in
+  lwt () = Lt_term.save_state term in
   lwt () = Lt_term.hide_cursor term in
   try_lwt
     lwt size = Lt_term.get_size term in
@@ -72,5 +72,5 @@ lwt () =
     loop term coord size matrix
   finally
     lwt () = Lt_term.show_cursor term in
-    lwt () = Lt_term.load term in
+    lwt () = Lt_term.load_state term in
     Lt_term.leave_raw_mode term

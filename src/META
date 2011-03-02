@@ -1,8 +1,8 @@
 # OASIS_START
-# DO NOT EDIT (digest: c75fa114befa8dbd2c21870e3ff9cb11)
+# DO NOT EDIT (digest: b23db7261e5b9ce73617bc30ccffca96)
 version = "1.0"
 description = "Corss-platform library for terminal manipulation"
-requires = "lwt.unix lwt.react"
+requires = "lwt.unix"
 archive(byte) = "lambda-term.cma"
 archive(native) = "lambda-term.cmxa"
 exists_if = "lambda-term.cma"

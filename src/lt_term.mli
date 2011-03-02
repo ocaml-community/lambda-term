@@ -9,8 +9,6 @@
 
 (** Terminal definitions *)
 
-open React
-
 type t
   (** Type of terminals. *)
 
@@ -66,22 +64,16 @@ val set_size : t -> Lt_types.size -> unit Lwt.t
 
 (** {6 Modes} *)
 
-val raw_mode : t -> bool signal
-  (** Whether the terminal is in ``raw mode''. In this mode keyboard
-      events are returned as they happen. In normal mode only complete
-      line are returned. *)
+(** In raow mode keyboard events are returned as they happen. In
+    normal mode only complete line are returned. *)
 
 val enter_raw_mode : t -> unit Lwt.t
-  (** Put the terminal in raw mode. On windows this does nothing
-      except setting {!raw_mode} to [true]. *)
+  (** Put the terminal in raw mode. This does nothing if the terminal
+      is already in raw mode. *)
 
 val leave_raw_mode : t -> unit Lwt.t
-  (** Put the terminal in normal mode. On windows this does nothing
-      except setting {!raw_mode} to [false]. *)
-
-val mouse_mode : t -> bool signal
-  (** Wether the mouse mode is enabled. In this mode mouse event are
-      reported to the application. *)
+  (** Put the terminal in normal mode. This does nothing if the
+      terminal is in normal mode. *)
 
 val enter_mouse_mode : t -> unit Lwt.t
   (** Enable mouse events reporting. *)
@@ -109,11 +101,11 @@ val goto_bol : t -> int -> unit Lwt.t
 
 (** {6 State} *)
 
-val save : t -> unit Lwt.t
+val save_state : t -> unit Lwt.t
   (** Save the current state of the terminal so it can be restored
       latter. *)
 
-val load : t -> unit Lwt.t
+val load_state : t -> unit Lwt.t
   (** Load the previously saved state of the terminal. *)
 
 (** {6 Events} *)
