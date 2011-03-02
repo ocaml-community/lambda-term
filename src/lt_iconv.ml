@@ -30,8 +30,8 @@ type data = {
 
 external iconv_open : to_code : string -> of_code : string -> t = "lt_iconv_iconv_open"
 external iconv_close : t -> unit = "lt_iconv_iconv_close"
-external iconv : t -> src : data -> dst : data -> unit = "lt_iconv_iconv" "noalloc"
-external reset : t -> unit = "lt_iconv_reset" "noalloc"
+external iconv : t -> src : data -> dst : data -> unit = "lt_iconv_iconv"
+external reset : t -> unit = "lt_iconv_reset"
 
 let iconv cd ~src ~dst =
   if src.index < 0 || src.index > src.limit || src.limit > String.length src.bytes then invalid_arg "Lt_iconv.iconv";
