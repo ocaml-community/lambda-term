@@ -46,6 +46,8 @@ type t = {
   (** Is the control key down ? *)
   meta : bool;
   (** Is the meta key down ? *)
+  shift : bool;
+  (** Is the shift key down ? *)
   code : code;
   (** The code of the key. *)
 }

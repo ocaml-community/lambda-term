@@ -27,6 +27,8 @@ type t = {
   (** Is the control key down ? *)
   meta : bool;
   (** Is the meta key down ? *)
+  shift : bool;
+  (** Is the shift key down ? *)
   button : button;
   (** Which button have been pressed ? *)
   line : int;

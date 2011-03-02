@@ -21,6 +21,7 @@ type button =
 type t = {
   control : bool;
   meta : bool;
+  shift : bool;
   button : button;
   line : int;
   column : int;
@@ -45,5 +46,5 @@ let string_of_button = function
 
 let to_string m =
   Printf.sprintf
-    "{ control = %B; meta = %B; button = %s; line = %d; column = %d }"
-    m.control m.meta (string_of_button m.button) m.line m.column
+    "{ control = %B; meta = %B; shift = %B; button = %s; line = %d; column = %d }"
+    m.control m.meta m.shift (string_of_button m.button) m.line m.column

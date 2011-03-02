@@ -39,6 +39,7 @@ type code =
 type t = {
   control : bool;
   meta : bool;
+  shift : bool;
   code : code;
 }
 
@@ -76,4 +77,4 @@ let string_of_code = function
   | Backspace -> "Backspace"
 
 let to_string key =
-  Printf.sprintf "{ control = %B; meta = %B; code = %s }" key.control key.meta (string_of_code key.code)
+  Printf.sprintf "{ control = %B; meta = %B; shift = %B; code = %s }" key.control key.meta key.shift (string_of_code key.code)
