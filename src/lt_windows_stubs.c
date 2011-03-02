@@ -277,7 +277,7 @@ CAMLprim value lt_windows_get_console_screen_buffer_info(value val_fd)
 
 CAMLprim value lt_windows_get_console_mode(value val_fd)
 {
-  WORD mode;
+  DWORD mode;
 
   if (!GetConsoleMode(Handle_val(val_fd), &mode)) {
     win32_maperr(GetLastError());
@@ -297,7 +297,7 @@ CAMLprim value lt_windows_get_console_mode(value val_fd)
 
 CAMLprim value lt_windows_set_console_mode(value val_fd, value val_mode)
 {
-  WORD mode = 0;
+  DWORD mode = 0;
 
   if (Bool_val(Field(val_mode, 0))) mode |= ENABLE_ECHO_INPUT;
   if (Bool_val(Field(val_mode, 1))) mode |= ENABLE_INSERT_MODE;
