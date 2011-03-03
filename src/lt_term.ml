@@ -348,7 +348,7 @@ let windows_map_char = function
   | x -> x
 
 let fprint term str =
-  let str = if term.windows then Lt_utf8.map windows_map_char str else str in
+  let str = if term.windows then Zed_utf8.map windows_map_char str else str in
   Lwt_io.fprint term.oc (Lt_iconv.recode_with term.outgoing_cd str)
 
 let fprintl term str =
@@ -567,7 +567,7 @@ let render_point term buf last_point point =
     add_color term buf Codes.background point.background;
     Buffer.add_char buf 'm';
   end;
-  Buffer.add_string buf (Lt_utf8.singleton point.char)
+  Buffer.add_string buf (Zed_utf8.singleton point.char)
 
 let render_update_unix term old_matrix matrix =
   let open Lt_draw in

@@ -63,7 +63,7 @@ let format fmt = Printf.ksprintf (fun str -> String str) fmt
 let strip text =
   let rec loop acc = function
     | [] ->
-        Lt_utf8.rev_concat "" acc
+        Zed_utf8.rev_concat "" acc
     | String str :: rest ->
         loop (str :: acc) rest
     | _ :: rest ->

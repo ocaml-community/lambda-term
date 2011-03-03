@@ -20,9 +20,9 @@ Description: Corss-platform library for terminal manipulation
 
 Library "lambda-term"
   FindlibName: lambda-term
-  BuildDepends: lwt.unix, lwt.syntax
+  BuildDepends: lwt.unix, lwt.syntax, zed
   XMETADescription: Corss-platform library for terminal manipulation
-  XMETARequires: lwt.unix
+  XMETARequires: lwt.unix, zed
   Path: src
   Install: true
   Modules:
@@ -32,7 +32,6 @@ Library "lambda-term"
     Lt_unix,
     Lt_windows,
     Lt_iconv,
-    Lt_utf8,
     Lt_style,
     Lt_types,
     Lt_draw,
