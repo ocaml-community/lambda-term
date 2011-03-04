@@ -7,8 +7,11 @@
  * This file is a part of Lambda-Term.
  *)
 
+open CamomileLibraryDyn.Camomile
+open Lt_types
+
 type point = {
-  mutable char : int;
+  mutable char : UChar.t;
   mutable bold : bool;
   mutable underlined : bool;
   mutable blink : bool;
@@ -25,7 +28,7 @@ let make_matrix size =
        Array.init
          size.Lt_types.columns
          (fun _ -> {
-            char = 32;
+            char = UChar.of_char ' ';
             bold = false;
             underlined = false;
             blink = false;

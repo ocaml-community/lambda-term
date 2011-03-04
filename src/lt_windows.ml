@@ -7,6 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
+open CamomileLibraryDyn.Camomile
 open Lwt
 
 external get_acp : unit -> int = "lt_windows_get_acp"
@@ -25,38 +26,38 @@ external read_console_input_result : [ `read_console_input ] Lwt_unix.job -> inp
 external read_console_input_free : [ `read_console_input ] Lwt_unix.job -> unit = "lt_windows_read_console_input_free"
 
 let controls = [|
-  Char.code ' ';
-  Char.code 'a';
-  Char.code 'b';
-  Char.code 'c';
-  Char.code 'd';
-  Char.code 'e';
-  Char.code 'f';
-  Char.code 'g';
-  Char.code 'h';
-  Char.code 'i';
-  Char.code 'j';
-  Char.code 'k';
-  Char.code 'l';
-  Char.code 'm';
-  Char.code 'n';
-  Char.code 'o';
-  Char.code 'p';
-  Char.code 'q';
-  Char.code 'r';
-  Char.code 's';
-  Char.code 't';
-  Char.code 'u';
-  Char.code 'v';
-  Char.code 'w';
-  Char.code 'x';
-  Char.code 'y';
-  Char.code 'z';
-  Char.code '[';
-  Char.code '\\';
-  Char.code ']';
-  Char.code '^';
-  Char.code '_';
+  UChar.of_char ' ';
+  UChar.of_char 'a';
+  UChar.of_char 'b';
+  UChar.of_char 'c';
+  UChar.of_char 'd';
+  UChar.of_char 'e';
+  UChar.of_char 'f';
+  UChar.of_char 'g';
+  UChar.of_char 'h';
+  UChar.of_char 'i';
+  UChar.of_char 'j';
+  UChar.of_char 'k';
+  UChar.of_char 'l';
+  UChar.of_char 'm';
+  UChar.of_char 'n';
+  UChar.of_char 'o';
+  UChar.of_char 'p';
+  UChar.of_char 'q';
+  UChar.of_char 'r';
+  UChar.of_char 's';
+  UChar.of_char 't';
+  UChar.of_char 'u';
+  UChar.of_char 'v';
+  UChar.of_char 'w';
+  UChar.of_char 'x';
+  UChar.of_char 'y';
+  UChar.of_char 'z';
+  UChar.of_char '[';
+  UChar.of_char '\\';
+  UChar.of_char ']';
+  UChar.of_char '^';
+  UChar.of_char '_';
 |]
 
 let read_console_input fd =
@@ -66,8 +67,8 @@ let read_console_input fd =
     read_console_input_result
     read_console_input_free
   >|= function
-    | Key({ Lt_key.code = Lt_key.Char ch } as key) when ch < 32 ->
-        Key { key with Lt_key.code = Lt_key.Char controls.(ch) }
+    | Key({ Lt_key.code = Lt_key.Char ch } as key) when UChar.code ch < 32 ->
+        Key { key with Lt_key.code = Lt_key.Char controls.(UChar.code ch) }
     | input ->
         input
 
@@ -135,7 +136,7 @@ let set_console_text_attribute fd attrs =
   set_console_text_attribute (Lwt_unix.unix_file_descr fd) attrs
 
 type char_info = {
-  ci_char : int;
+  ci_char : UChar.t;
   ci_foreground : int;
   ci_background : int;
 }

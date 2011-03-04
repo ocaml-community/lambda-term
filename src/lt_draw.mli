@@ -9,9 +9,12 @@
 
 (** Drawing *)
 
+open CamomileLibrary
+open Lt_types
+
 (** Type of a point in a matrix of styled characters. *)
 type point = {
-  mutable char : int;
+  mutable char : UChar.t;
   (** The unicode character. *)
   mutable bold : bool;
   (** Whether the character is in bold or not. *)

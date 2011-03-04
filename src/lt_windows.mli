@@ -11,6 +11,8 @@
 
 (** All these functions return [Lwt_sys.Not_available] on Unix. *)
 
+open CamomileLibrary
+
 (** {6 Codepage functions} *)
 
 val get_acp : unit -> int
@@ -114,7 +116,7 @@ val set_console_text_attribute : Lwt_unix.file_descr -> text_attributes -> unit
 (** {6 Rendering} *)
 
 type char_info = {
-  ci_char : int;
+  ci_char : UChar.t;
   (** The unicode character. *)
   ci_foreground : int;
   (** The foreground color. *)

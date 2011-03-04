@@ -7,8 +7,10 @@
  * This file is a part of Lambda-Term.
  *)
 
+open CamomileLibraryDyn.Camomile
+
 type code =
-  | Char of int
+  | Char of UChar.t
   | Enter
   | Escape
   | Tab
@@ -48,7 +50,7 @@ let meta key = key.meta
 let code key = key.code
 
 let string_of_code = function
-  | Char ch -> Printf.sprintf "Char 0x%02x" ch
+  | Char ch -> Printf.sprintf "Char 0x%02x" (UChar.code ch)
   | Enter -> "Enter"
   | Escape -> "Escape"
   | Tab -> "Tab"

@@ -7,6 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
+open CamomileLibraryDyn.Camomile
 open Lwt
 open Lt_key
 
@@ -37,10 +38,12 @@ let parse_char cd st first_byte =
   let rec loop st =
     try
       iconv cd ~src ~dst;
-      return ((Char.code dst.bytes.[0] lsl 24)
-              lor (Char.code dst.bytes.[1] lsl 16)
-              lor (Char.code dst.bytes.[2] lsl 8)
-              lor (Char.code dst.bytes.[3]))
+      return
+        (UChar.of_int
+           ((Char.code dst.bytes.[0] lsl 24)
+            lor (Char.code dst.bytes.[1] lsl 16)
+            lor (Char.code dst.bytes.[2] lsl 8)
+            lor (Char.code dst.bytes.[3])))
     with
       | Invalid_sequence ->
           raise_lwt Fallback
@@ -59,7 +62,7 @@ let parse_char cd st first_byte =
     Lwt_stream.parse st loop
   with
     | Fallback ->
-        return (Char.code first_byte)
+        return (UChar.of_char first_byte)
 
 (* +-----------------------------------------------------------------+
    | Input of escape sequence                                        |
@@ -108,38 +111,38 @@ let parse_escape st =
    +-----------------------------------------------------------------+ *)
 
 let controls = [|
-  Char(Char.code ' ');
-  Char(Char.code 'a');
-  Char(Char.code 'b');
-  Char(Char.code 'c');
-  Char(Char.code 'd');
-  Char(Char.code 'e');
-  Char(Char.code 'f');
-  Char(Char.code 'g');
-  Char(Char.code 'h');
+  Char(UChar.of_char ' ');
+  Char(UChar.of_char 'a');
+  Char(UChar.of_char 'b');
+  Char(UChar.of_char 'c');
+  Char(UChar.of_char 'd');
+  Char(UChar.of_char 'e');
+  Char(UChar.of_char 'f');
+  Char(UChar.of_char 'g');
+  Char(UChar.of_char 'h');
   Tab;
   Enter;
-  Char(Char.code 'k');
-  Char(Char.code 'l');
-  Char(Char.code 'm');
-  Char(Char.code 'n');
-  Char(Char.code 'o');
-  Char(Char.code 'p');
-  Char(Char.code 'q');
-  Char(Char.code 'r');
-  Char(Char.code 's');
-  Char(Char.code 't');
-  Char(Char.code 'u');
-  Char(Char.code 'v');
-  Char(Char.code 'w');
-  Char(Char.code 'x');
-  Char(Char.code 'y');
-  Char(Char.code 'z');
+  Char(UChar.of_char 'k');
+  Char(UChar.of_char 'l');
+  Char(UChar.of_char 'm');
+  Char(UChar.of_char 'n');
+  Char(UChar.of_char 'o');
+  Char(UChar.of_char 'p');
+  Char(UChar.of_char 'q');
+  Char(UChar.of_char 'r');
+  Char(UChar.of_char 's');
+  Char(UChar.of_char 't');
+  Char(UChar.of_char 'u');
+  Char(UChar.of_char 'v');
+  Char(UChar.of_char 'w');
+  Char(UChar.of_char 'x');
+  Char(UChar.of_char 'y');
+  Char(UChar.of_char 'z');
   Escape;
-  Char(Char.code '\\');
-  Char(Char.code ']');
-  Char(Char.code '^');
-  Char(Char.code '_');
+  Char(UChar.of_char '\\');
+  Char(UChar.of_char ']');
+  Char(UChar.of_char '^');
+  Char(UChar.of_char '_');
 |]
 
 let sequences = [|
@@ -626,7 +629,7 @@ let rec parse_event cd stream =
                   | '\x00' .. '\x7f' ->
                       (* Other ascii characters *)
                       lwt () = Lwt_stream.junk stream in
-                      return(Lt_event.Key  { control = false; meta = true; shift = false; code = Char(Char.code byte) })
+                      return(Lt_event.Key  { control = false; meta = true; shift = false; code = Char(UChar.of_char byte) })
                   | byte' ->
                       lwt () = Lwt_stream.junk stream in
                       lwt code = parse_char cd stream byte' in
@@ -641,7 +644,7 @@ let rec parse_event cd stream =
         return (Lt_event.Key { control = false; meta = false; shift = false; code = Backspace })
     | '\x00' .. '\x7f' ->
         (* Other ascii characters *)
-        return (Lt_event.Key { control = false; meta = false; shift = false; code = Char(Char.code byte) })
+        return (Lt_event.Key { control = false; meta = false; shift = false; code = Char(UChar.of_char byte) })
     | _ ->
         (* Encoded characters *)
         lwt code = parse_char cd stream byte in
