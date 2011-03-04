@@ -64,21 +64,15 @@ val set_size : t -> Lt_types.size -> unit Lwt.t
 
 (** {6 Modes} *)
 
-(** In raow mode keyboard events are returned as they happen. In
-    normal mode only complete line are returned. *)
+val with_raw_mode : t -> (unit -> 'a Lwt.t) -> 'a Lwt.t
+  (** [with_raw_mode term f] executes [f] while the terminal is in
+      ``raw mode''. In this mode keyboard events are returned as they
+      happen. In normal mode only complete line are returned. *)
 
-val enter_raw_mode : t -> unit Lwt.t
-  (** Put the terminal in raw mode. This does nothing if the terminal
-      is already in raw mode. *)
-
-val leave_raw_mode : t -> unit Lwt.t
-  (** Put the terminal in normal mode. This does nothing if the
-      terminal is in normal mode. *)
-
-val enter_mouse_mode : t -> unit Lwt.t
+val enable_mouse : t -> unit Lwt.t
   (** Enable mouse events reporting. *)
 
-val leave_mouse_mode : t -> unit Lwt.t
+val disable_mouse : t -> unit Lwt.t
   (** Disable mouse events reporting. *)
 
 (** {6 Cursor} *)

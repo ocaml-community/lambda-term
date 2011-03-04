@@ -29,6 +29,9 @@ type t = {
   mutable saved_attr : attributes;
   (* Saved terminal attributes. *)
 
+  mutable raw_mode_count : int;
+  (* How many functions are currently using the raw mode. *)
+
   incoming_fd : Lwt_unix.file_descr;
   outgoing_fd : Lwt_unix.file_descr;
   (* File descriptors. *)
@@ -93,6 +96,7 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
          | 256 -> Lt_color_mappings.colors_256
          | n -> Printf.ksprintf failwith "Lt_term.create: unknown number of colors (%d)" n);
     saved_attr = Attr_none;
+    raw_mode_count = 0;
     incoming_fd;
     outgoing_fd;
     ic;
@@ -192,13 +196,30 @@ let leave_raw_mode term =
         Lt_windows.set_console_mode term.incoming_fd mode;
         return ()
 
-let enter_mouse_mode term =
+let with_raw_mode term f =
+  lwt () =
+    if term.raw_mode_count > 0 then
+      return ()
+    else
+      enter_raw_mode term
+  in
+  term.raw_mode_count <- term.raw_mode_count + 1;
+  try_lwt
+    f ()
+  finally
+    term.raw_mode_count <- term.raw_mode_count - 1;
+    if term.raw_mode_count = 0 then
+      leave_raw_mode term
+    else
+      return ()
+
+let enable_mouse term =
   if term.windows then
     return ()
   else
     Lwt_io.write term.oc "\027[?1000h"
 
-let leave_mouse_mode term =
+let disable_mouse term =
   if term.windows then
     return ()
   else
@@ -273,33 +294,35 @@ let load_state term =
    +-----------------------------------------------------------------+ *)
 
 let read_event term =
-  if term.windows then
-    Lt_windows.read_console_input term.incoming_fd >>= function
-      | Lt_windows.Resize ->
-          lwt size = get_size term in
-          return (Lt_event.Resize size)
-      | Lt_windows.Key key ->
-          return (Lt_event.Key key)
-      | Lt_windows.Mouse mouse ->
-          let window = (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.window in
-          return (Lt_event.Mouse {
-                    mouse with
-                      Lt_mouse.line = mouse.Lt_mouse.line - window.Lt_types.r_line;
-                      Lt_mouse.column = mouse.Lt_mouse.column - window.Lt_types.r_column;
-                  })
-  else if term.size_changed then begin
-    term.size_changed <- false;
-    lwt size = get_size term in
-    return (Lt_event.Resize size)
-  end else
-    pick [Lt_unix.parse_event term.incoming_cd term.input_stream >|= (fun ev -> `Event ev);
-          Lwt_condition.wait term.size_changed_cond] >>= function
-      | `Event ev ->
-          return ev
-      | `Resize ->
-          term.size_changed <- false;
-          lwt size = get_size term in
-          return (Lt_event.Resize size)
+  with_raw_mode term
+    (fun () ->
+       if term.windows then
+         Lt_windows.read_console_input term.incoming_fd >>= function
+           | Lt_windows.Resize ->
+               lwt size = get_size term in
+               return (Lt_event.Resize size)
+           | Lt_windows.Key key ->
+               return (Lt_event.Key key)
+           | Lt_windows.Mouse mouse ->
+               let window = (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.window in
+               return (Lt_event.Mouse {
+                         mouse with
+                           Lt_mouse.line = mouse.Lt_mouse.line - window.Lt_types.r_line;
+                           Lt_mouse.column = mouse.Lt_mouse.column - window.Lt_types.r_column;
+                       })
+       else if term.size_changed then begin
+         term.size_changed <- false;
+         lwt size = get_size term in
+         return (Lt_event.Resize size)
+       end else
+         pick [Lt_unix.parse_event term.incoming_cd term.input_stream >|= (fun ev -> `Event ev);
+               Lwt_condition.wait term.size_changed_cond] >>= function
+           | `Event ev ->
+               return ev
+           | `Resize ->
+               term.size_changed <- false;
+               lwt size = get_size term in
+               return (Lt_event.Resize size))
 
 (* +-----------------------------------------------------------------+
    | Styled printing                                                 |
@@ -555,19 +578,19 @@ let same_style p1 p2 =
       p1.foreground = p2.foreground &&
       p1.background = p2.background
 
-let render_point term buf last_point point =
+let render_point term buf old_point new_point =
   let open Lt_draw in
-  if not (same_style point last_point) then begin
+  if not (same_style new_point old_point) then begin
     (* Reset styles if they are different from the previous point. *)
     Buffer.add_string buf "\027[0";
-    if point.bold then Buffer.add_string buf ";1";
-    if point.underlined then Buffer.add_string buf ";4";
-    if point.blink then Buffer.add_string buf ";5";
-    add_color term buf Codes.foreground point.foreground;
-    add_color term buf Codes.background point.background;
+    if new_point.bold then Buffer.add_string buf ";1";
+    if new_point.underlined then Buffer.add_string buf ";4";
+    if new_point.blink then Buffer.add_string buf ";5";
+    add_color term buf Codes.foreground new_point.foreground;
+    add_color term buf Codes.background new_point.background;
     Buffer.add_char buf 'm';
   end;
-  Buffer.add_string buf (Zed_utf8.singleton point.char)
+  Buffer.add_string buf (Zed_utf8.singleton new_point.char)
 
 let render_update_unix term old_matrix matrix =
   let open Lt_draw in

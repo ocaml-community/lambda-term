@@ -23,10 +23,8 @@ let rec loop term =
 
 lwt () =
   lwt () = Lwt_io.printl "press escape to exit" in
-  lwt () = Lt_term.enter_raw_mode Lt_term.stdout in
-  lwt () = Lt_term.enter_mouse_mode Lt_term.stdout in
+  lwt () = Lt_term.enable_mouse Lt_term.stdout in
   try_lwt
-    loop Lt_term.stdout
+    Lt_term.with_raw_mode Lt_term.stdout (fun () -> loop Lt_term.stdout)
   finally
-    lwt () = Lt_term.leave_mouse_mode Lt_term.stdout in
-    Lt_term.leave_raw_mode Lt_term.stdout
+    Lt_term.disable_mouse Lt_term.stdout
