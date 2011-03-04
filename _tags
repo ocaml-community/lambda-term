@@ -3,52 +3,69 @@
 <src/*>: use_iconv
 
 # OASIS_START
-# DO NOT EDIT (digest: eb62792009747f1624de528865cbc6a5)
+# DO NOT EDIT (digest: eb0441ecdd2c92fd2739047c814a070a)
 # Library lambda-term
 "src": include
 <src/lambda-term.{cma,cmxa}>: use_liblambda-term
 <src/*.ml{,i}>: pkg_zed
 <src/*.ml{,i}>: pkg_lwt.unix
 <src/*.ml{,i}>: pkg_lwt.syntax
+<src/*.ml{,i}>: pkg_lwt.react
 "src/lt_term_stubs.c": pkg_zed
 "src/lt_term_stubs.c": pkg_lwt.unix
 "src/lt_term_stubs.c": pkg_lwt.syntax
+"src/lt_term_stubs.c": pkg_lwt.react
 "src/lt_unix_stubs.c": pkg_zed
 "src/lt_unix_stubs.c": pkg_lwt.unix
 "src/lt_unix_stubs.c": pkg_lwt.syntax
+"src/lt_unix_stubs.c": pkg_lwt.react
 "src/lt_windows_stubs.c": pkg_zed
 "src/lt_windows_stubs.c": pkg_lwt.unix
 "src/lt_windows_stubs.c": pkg_lwt.syntax
+"src/lt_windows_stubs.c": pkg_lwt.react
 "src/lt_iconv_stubs.c": pkg_zed
 "src/lt_iconv_stubs.c": pkg_lwt.unix
 "src/lt_iconv_stubs.c": pkg_lwt.syntax
+"src/lt_iconv_stubs.c": pkg_lwt.react
 # Executable events
 <examples/events.{native,byte}>: use_lambda-term
 <examples/events.{native,byte}>: pkg_zed
 <examples/events.{native,byte}>: pkg_lwt.unix
 <examples/events.{native,byte}>: pkg_lwt.syntax
+<examples/events.{native,byte}>: pkg_lwt.react
 # Executable rgb
 <examples/rgb.{native,byte}>: use_lambda-term
 <examples/rgb.{native,byte}>: pkg_zed
 <examples/rgb.{native,byte}>: pkg_lwt.unix
 <examples/rgb.{native,byte}>: pkg_lwt.syntax
+<examples/rgb.{native,byte}>: pkg_lwt.react
 # Executable colors_256
 <examples/colors_256.{native,byte}>: use_lambda-term
 <examples/colors_256.{native,byte}>: pkg_zed
 <examples/colors_256.{native,byte}>: pkg_lwt.unix
 <examples/colors_256.{native,byte}>: pkg_lwt.syntax
+<examples/colors_256.{native,byte}>: pkg_lwt.react
 # Executable render
 <examples/render.{native,byte}>: use_lambda-term
 <examples/render.{native,byte}>: pkg_zed
 <examples/render.{native,byte}>: pkg_lwt.unix
 <examples/render.{native,byte}>: pkg_lwt.syntax
+<examples/render.{native,byte}>: pkg_lwt.react
 # Executable colors
 <examples/colors.{native,byte}>: use_lambda-term
 <examples/colors.{native,byte}>: pkg_zed
 <examples/colors.{native,byte}>: pkg_lwt.unix
 <examples/colors.{native,byte}>: pkg_lwt.syntax
+<examples/colors.{native,byte}>: pkg_lwt.react
+# Executable hello
+<examples/hello.{native,byte}>: use_lambda-term
+<examples/hello.{native,byte}>: pkg_zed
+<examples/hello.{native,byte}>: pkg_lwt.unix
+<examples/hello.{native,byte}>: pkg_lwt.syntax
+<examples/hello.{native,byte}>: pkg_lwt.react
 <examples/*.ml{,i}>: use_lambda-term
 <examples/*.ml{,i}>: pkg_zed
 <examples/*.ml{,i}>: pkg_lwt.unix
 <examples/*.ml{,i}>: pkg_lwt.syntax
+<examples/*.ml{,i}>: pkg_lwt.react
 # OASIS_STOP

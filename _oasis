@@ -20,9 +20,9 @@ Description: Corss-platform library for terminal manipulation
 
 Library "lambda-term"
   FindlibName: lambda-term
-  BuildDepends: lwt.unix, lwt.syntax, zed
+  BuildDepends: lwt.unix, lwt.syntax, lwt.react, zed
   XMETADescription: Corss-platform library for terminal manipulation
-  XMETARequires: lwt.unix, zed
+  XMETARequires: lwt.unix, lwt.react, zed
   Path: src
   Install: true
   Modules:
@@ -36,7 +36,8 @@ Library "lambda-term"
     Lt_types,
     Lt_draw,
     Lt_mouse,
-    Lt_color_mappings
+    Lt_color_mappings,
+    Lt_widget
   CSources:
     lt_term_stubs.c,
     lt_unix_stubs.c,
@@ -80,6 +81,13 @@ Executable render
   Install: false
   CompiledObject: best
   MainIs: render.ml
+  BuildDepends: lambda-term
+
+Executable hello
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: hello.ml
   BuildDepends: lambda-term
 
 # +-------------------------------------------------------------------+
