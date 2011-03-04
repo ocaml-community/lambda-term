@@ -54,60 +54,110 @@ val colors : t -> int
 val windows : t -> bool
   (** Whether the terminal is in windows mode or not. *)
 
+val is_a_tty : t -> bool Lwt.t
+  (** [is_a_tty term] returns whether the intput and output of the
+      given terminal are connected to a tty device. *)
+
+val incoming_is_a_tty : t -> bool Lwt.t
+  (** [incoming_is_a_tty term] returns whether the input of [term] is
+      a tty device. *)
+
+val outgoing_is_a_tty : t -> bool Lwt.t
+  (** [incoming_is_a_tty term] returns whether the output of [term] is
+      a tty device. *)
+
+exception Not_a_tty
+  (** Exception raised when trying to use a function that can only be
+      used on terminals. *)
+
 (** {6 Sizes} *)
 
 val get_size : t -> Lt_types.size Lwt.t
-  (** Returns the current size of the terminal. *)
+  (** Returns the current size of the terminal.
+
+      It raises {!Not_a_tty} if the output of the given terminal is
+      not a tty. *)
 
 val set_size : t -> Lt_types.size -> unit Lwt.t
-  (** Sets the current size of the terminal. *)
+  (** Sets the current size of the terminal.
+
+      It raises {!Not_a_tty} if the output of the given terminal is
+      not a tty. *)
 
 (** {6 Modes} *)
 
 val with_raw_mode : t -> (unit -> 'a Lwt.t) -> 'a Lwt.t
   (** [with_raw_mode term f] executes [f] while the terminal is in
       ``raw mode''. In this mode keyboard events are returned as they
-      happen. In normal mode only complete line are returned. *)
+      happen. In normal mode only complete line are returned.
+
+      It raises {!Not_a_tty} if input of the given terminal is not
+      tty. *)
 
 val enable_mouse : t -> unit Lwt.t
-  (** Enable mouse events reporting. *)
+  (** Enable mouse events reporting.
+
+      It raises {!Not_a_tty} if the output of the given terminal is
+      not a tty. *)
 
 val disable_mouse : t -> unit Lwt.t
-  (** Disable mouse events reporting. *)
+  (** Disable mouse events reporting.
+
+      It raises {!Not_a_tty} if the output of the given terminal is
+      not a tty. *)
 
 (** {6 Cursor} *)
 
 val show_cursor : t -> unit Lwt.t
-  (** Make the cursor visible. *)
+  (** Make the cursor visible.
+
+      It raises {!Not_a_tty} if the output of the given terminal is
+      not a tty. *)
 
 val hide_cursor : t -> unit Lwt.t
-  (** Make the cursor invisible. *)
+  (** Make the cursor invisible.
+
+      It raises {!Not_a_tty} if the output of the given terminal is
+      not a tty. *)
 
 val goto : t -> Lt_types.coord -> unit Lwt.t
-  (** [goto term coord] moves the cursor to the given coordinates. *)
+  (** [goto term coord] moves the cursor to the given coordinates.
+
+      It raises {!Not_a_tty} if the output of the given terminal is
+      not a tty. *)
 
 val goto_bol : t -> int -> unit Lwt.t
   (** [goto_bol term n] moves the cursor to the beginning of the [n]th
       next/previous line. [goto_bol term 0] moves the cursor to the
       beginning of the current line, [goto_bol term 1] moves the
       cursor to the beginning of the next line, [goto_bol term (-1)]
-      moves the cursor the beginning of the previous line...  *)
+      moves the cursor the beginning of the previous line...
+
+      It raises {!Not_a_tty} if the output of the given terminal is
+      not a tty. *)
 
 (** {6 State} *)
 
 val save_state : t -> unit Lwt.t
   (** Save the current state of the terminal so it can be restored
-      latter. *)
+      latter.
+
+      It raises {!Not_a_tty} if the output of the given terminal is
+      not a tty. *)
 
 val load_state : t -> unit Lwt.t
-  (** Load the previously saved state of the terminal. *)
+  (** Load the previously saved state of the terminal.
+
+      It raises {!Not_a_tty} if the output of the given terminal is
+      not a tty. *)
 
 (** {6 Events} *)
 
 val read_event : t -> Lt_event.t Lwt.t
-  (** Reads and returns one event. This method can be called only when
-      the terminal is in raw mode. Otherwise several kind of events
-      will not be reported. *)
+  (** Reads and returns one event.
+
+      It raises {!Not_a_tty} if the input of the given terminal is not
+      a tty. *)
 
 (** {6 Printing} *)
 
@@ -126,7 +176,7 @@ val read_event : t -> Lt_event.t Lwt.t
     string instead of a string
 
     Notes:
-    - if the terminal is not really a terminal, styles are stripped.
+    - if the terminal is not a tty, styles are stripped.
     - non-ascii characters are recoded on the fly using the terminal
     encoding
 *)
@@ -153,13 +203,19 @@ val eprintls : Lt_style.text -> unit Lwt.t
 (** {6 Rendering} *)
 
 val render : t -> Lt_draw.matrix -> unit Lwt.t
-  (** Render an offscreen array to the given terminal. *)
+  (** Render an offscreen array to the given terminal.
+
+      It raises {!Not_a_tty} if the output of the given terminal is
+      not a tty. *)
 
 val render_update : t -> Lt_draw.matrix -> Lt_draw.matrix -> unit Lwt.t
   (** [render_update displayed to_display] does the same as [render
       to_display] but assumes that [displayed] contains the current
       displayed text. This reduces the amount of text sent to the
-      terminal. *)
+      terminal.
+
+      It raises {!Not_a_tty} if the output of the given terminal is
+      not a tty. *)
 
 (** {6 Misc} *)
 
