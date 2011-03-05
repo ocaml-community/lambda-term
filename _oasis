@@ -97,6 +97,13 @@ Executable clock
   MainIs: clock.ml
   BuildDepends: lambda-term
 
+Executable buttons
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: buttons.ml
+  BuildDepends: lambda-term
+
 # +-------------------------------------------------------------------+
 # | Doc                                                               |
 # +-------------------------------------------------------------------+

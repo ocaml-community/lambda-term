@@ -7,16 +7,19 @@
  * This file is a part of Lambda-Term.
  *)
 
+open CamomileLibraryDyn.Camomile
 open React
 open Lwt
 open Lt_types
 open Lt_draw
+open Lt_key
+open Lt_style
 
 (* +-----------------------------------------------------------------+
    | Definitions                                                     |
    +-----------------------------------------------------------------+ *)
 
-class t =
+class t () =
   let key_pressed, send_key_pressed = E.create () in
   let event, set_can_focus = E.create () in
   let can_focus = S.switch (S.const false) event in
@@ -37,14 +40,14 @@ object(self)
 end
 
 (* +-----------------------------------------------------------------+
-   | Simple widgets                                                  |
+   | Labels                                                          |
    +-----------------------------------------------------------------+ *)
 
 class label text =
   let event, set_text = E.create () in
   let text = S.switch text event in
 object
-  inherit t
+  inherit t ()
 
   method text = text
   method set_text = set_text
@@ -59,11 +62,15 @@ object
     None
 end
 
+(* +-----------------------------------------------------------------+
+   | Boxes                                                           |
+   +-----------------------------------------------------------------+ *)
+
 class box (children : t list signal) =
   let event, set_children = E.create () in
   let children = S.switch children event in
 object
-  inherit t
+  inherit t ()
 
   method children = children
   method set_children = set_children
@@ -165,14 +172,102 @@ object(self)
 end
 
 (* +-----------------------------------------------------------------+
+   | Buttons                                                         |
+   +-----------------------------------------------------------------+ *)
+
+class button text =
+  let event, set_text = E.create () in
+  let text = S.switch text event in
+  let clicked, send_clicked = E.create () in
+object(self)
+  inherit t () as super
+
+  method text = text
+  method set_text = set_text
+
+  method clicked = clicked
+
+  method handle_event ev =
+    super#handle_event ev;
+    match ev with
+      | Lt_event.Key { control = false; meta = false; shift = false; code = Enter } ->
+          send_clicked ()
+      | _ ->
+          ()
+
+  val need_redraw = E.stamp (S.changes text) ()
+  method need_redraw = need_redraw
+
+  method draw ctx focused =
+    let { lines; columns } = Lt_draw.size ctx in
+    let text = S.value text in
+    let len = Zed_utf8.length text in
+    if focused = (self :> t) then
+      Lt_draw.draw_styled ctx (lines / 2) ((columns - len - 4) / 2)
+        [Bold; Foreground white; Background blue; String "< "; String text; String " >"]
+    else
+      Lt_draw.draw_styled ctx (lines / 2) ((columns - len - 4) / 2)
+        [String "< "; String text; String " >"];
+    None
+
+  initializer
+    self#set_can_focus (S.const true)
+end
+
+(* +-----------------------------------------------------------------+
    | Running in a terminal                                           |
    +-----------------------------------------------------------------+ *)
 
+let rec find_focusable widget =
+  if S.value widget#can_focus then
+    Some widget
+  else
+    find_focusable_in_list (S.value widget#children)
+
+and find_focusable_in_list = function
+  | [] ->
+      None
+  | child :: rest ->
+      match find_focusable child with
+        | Some _ as some -> some
+        | None -> find_focusable_in_list rest
+
+type search_result =
+  | Sr_some of t
+  | Sr_last
+  | Sr_none
+
+let rec next_focusable widget current =
+  if widget == current then
+    Sr_last
+  else
+    next_focusable_in_list (S.value widget#children) current
+
+and next_focusable_in_list widgets current =
+  match widgets with
+    | [] ->
+        Sr_none
+    | child :: rest ->
+        match next_focusable child current with
+          | Sr_some _ as result ->
+              result
+          | Sr_none ->
+              next_focusable_in_list rest current
+          | Sr_last ->
+              match find_focusable_in_list rest with
+                | Some widget -> Sr_some widget
+                | None -> Sr_last
+
+  (* An event for the main loop. *)
 type 'a event =
   | Value of 'a
+      (* A value from the waiter thread. *)
   | Event of Lt_event.t
+      (* A event from the terminal. *)
 
 let run term ?(save_state=true) widget waiter =
+  let widget = (widget :> t) in
+
   (* The two matrices used for the rendering. *)
   let matrix_a = ref [||] and matrix_b = ref [||] in
 
@@ -184,7 +279,11 @@ let run term ?(save_state=true) widget waiter =
   let size = ref size in
 
   (* The currently focused widget. *)
-  let focused = ref (widget :> t) in
+  let focused =
+    ref(match find_focusable widget with
+          | Some widget -> widget
+          | None -> widget)
+  in
 
   (* Draw the screen. *)
   let draw () =
@@ -245,8 +344,23 @@ let run term ?(save_state=true) widget waiter =
           (* Redraw with the new size. *)
           lwt () = draw () in
           loop ()
+      | Event(Lt_event.Key { control = false; meta = false; shift = false; code = Tab }) -> begin
+          (* Cycle focus. *)
+          focused :=
+            (match next_focusable widget !focused with
+               | Sr_some widget ->
+                   widget
+               | Sr_none ->
+                   widget
+               | Sr_last ->
+                   match find_focusable widget with
+                     | Some widget -> widget
+                     | None -> widget);
+          lwt () = draw () in
+          loop ()
+        end
       | Event ev ->
-          widget#handle_event ev;
+          !focused#handle_event ev;
           loop ()
       | Value value ->
           cancel thread;

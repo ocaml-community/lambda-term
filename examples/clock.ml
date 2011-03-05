@@ -19,22 +19,21 @@ let format_time time =
     localtime.Unix.tm_sec
 
 lwt () =
-  (* Create a thread waiting for escape to be pressed. *)
-  let waiter, wakener = wait () in
-
   let time, set_time = S.create (Unix.time ()) in
   (* Update the time every second. *)
   ignore (Lwt_engine.on_timer 1.0 true (fun _ -> set_time (Unix.time ())));
 
-  (* Create the label. *)
-  let label = new Lt_widget.label (S.map format_time time) in
+  (* Create the exit button. *)
+  let button = new Lt_widget.button (S.const "exit") in
 
-  (* Exit when escape is pressed. *)
-  Lwt_event.always_notify
-    (function
-       | { Lt_key.code = Lt_key.Escape } -> wakeup wakener ()
-       | _ -> ())
-    label#key_pressed;
+  (* Create widgets. *)
+  let widget =
+    new Lt_widget.vbox
+      (S.const [
+         (new Lt_widget.label (S.map format_time time) :> Lt_widget.t);
+         button#as_widget;
+       ])
+  in
 
   (* Run. *)
-  Lt_widget.run Lt_term.stdout label waiter
+  Lt_widget.run Lt_term.stdout widget (Lwt_event.next button#clicked)

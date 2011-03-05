@@ -13,7 +13,7 @@ open Lt_types
 (** {6 Definitions} *)
 
 (** Type of widgets. *)
-class t : object
+class t : unit -> object
   method as_widget : t
     (** Sub-type the widget to the standard widget type. *)
 
@@ -54,7 +54,6 @@ class label : string signal -> object
     (** The signal holding the displayed text. *)
 
   method set_text : string signal -> unit
-    (** Sets the label. *)
 end
 
 class hbox : t list signal -> object
@@ -67,6 +66,18 @@ class vbox : t list signal -> object
   inherit t
   method children : t list signal
   method set_children : t list signal -> unit
+end
+
+class button : string signal -> object
+  inherit t
+
+  method text : string signal
+    (** The text of the button. *)
+
+  method set_text : string signal -> unit
+
+  method clicked : unit event
+    (** Event which occurs when the button is clicked. *)
 end
 
 (** {6 Running in a terminal} *)

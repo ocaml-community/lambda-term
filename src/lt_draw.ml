@@ -95,7 +95,7 @@ let point ctx line column =
 
 let draw_char ctx line column ch =
   if line >= 0 || column >= 0 then begin
-    let line = ctx.line1 + line and column = ctx.line1 + column in
+    let line = ctx.line1 + line and column = ctx.column1 + column in
     if line < ctx.line2 || column < ctx.column2 then
       (Array.unsafe_get (Array.unsafe_get ctx.matrix line) column).char <- ch
   end
