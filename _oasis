@@ -90,6 +90,13 @@ Executable hello
   MainIs: hello.ml
   BuildDepends: lambda-term
 
+Executable clock
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: clock.ml
+  BuildDepends: lambda-term
+
 # +-------------------------------------------------------------------+
 # | Doc                                                               |
 # +-------------------------------------------------------------------+

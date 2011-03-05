@@ -3,7 +3,7 @@
 <src/*>: use_iconv
 
 # OASIS_START
-# DO NOT EDIT (digest: eb0441ecdd2c92fd2739047c814a070a)
+# DO NOT EDIT (digest: e7e6507f08f33b43dfaa76e8ba0731ef)
 # Library lambda-term
 "src": include
 <src/lambda-term.{cma,cmxa}>: use_liblambda-term
@@ -33,6 +33,12 @@
 <examples/events.{native,byte}>: pkg_lwt.unix
 <examples/events.{native,byte}>: pkg_lwt.syntax
 <examples/events.{native,byte}>: pkg_lwt.react
+# Executable clock
+<examples/clock.{native,byte}>: use_lambda-term
+<examples/clock.{native,byte}>: pkg_zed
+<examples/clock.{native,byte}>: pkg_lwt.unix
+<examples/clock.{native,byte}>: pkg_lwt.syntax
+<examples/clock.{native,byte}>: pkg_lwt.react
 # Executable rgb
 <examples/rgb.{native,byte}>: use_lambda-term
 <examples/rgb.{native,byte}>: pkg_zed

@@ -15,14 +15,20 @@ lwt () =
   let waiter, wakener = wait () in
 
   (* Create the label. *)
-  let label = new Lt_widget.label (S.const "Hello, world!") in
+  let widget =
+    new Lt_widget.vbox
+      (S.const [
+         (new Lt_widget.label (S.const "Hello, world!") :> Lt_widget.t);
+         (new Lt_widget.label (S.const "Press escape to exit.") :> Lt_widget.t);
+       ])
+  in
 
   (* Exit when escape is pressed. *)
   Lwt_event.always_notify
     (function
        | { Lt_key.code = Lt_key.Escape } -> wakeup wakener ()
        | _ -> ())
-    label#key_pressed;
+    widget#key_pressed;
 
   (* Run. *)
-  Lt_widget.run Lt_term.stdout label waiter
+  Lt_widget.run Lt_term.stdout widget waiter

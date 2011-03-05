@@ -60,7 +60,7 @@ exception Out_of_bounds
 let sub ctx rect =
   if rect.r_line < 0 || rect.r_column < 0 || rect.r_lines < 0 || rect.r_columns < 0 then raise Out_of_bounds;
   let line1 = ctx.line1 + rect.r_line and column1 = ctx.column1 + rect.r_column in
-  let line2 = line1 + rect.r_lines and column2 = column1 + rect.r_column in
+  let line2 = line1 + rect.r_lines and column2 = column1 + rect.r_columns in
   if line2 > ctx.line2 || column2 > ctx.column2 then raise Out_of_bounds;
   { ctx with line1; column1; line2; column2 }
 
