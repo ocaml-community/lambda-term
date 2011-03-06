@@ -128,3 +128,8 @@ val write_console_output : Lwt_unix.file_descr -> char_info array array -> Lt_ty
   (** [write_console_output fd chars size coord rect] writes the given
       matrix of characters with their attributes on the given console
       at given position. *)
+
+val fill_console_output_character : Lwt_unix.file_descr -> UChar.t -> int -> Lt_types.coord -> int
+  (** [fill_console_output_character fd char count coord] writes
+      [count] times [char] starting at [coord] on the given
+      console. *)

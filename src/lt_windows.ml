@@ -151,3 +151,9 @@ let write_console_output fd chars size coord rect =
        if Array.length line <> size.Lt_types.columns then invalid_arg "Lt_windows.write_console_output")
     chars;
   write_console_output (Lwt_unix.unix_file_descr fd) chars size coord rect
+
+external fill_console_output_character : Unix.file_descr -> UChar.t -> int -> Lt_types.coord -> int = "lt_windows_fill_console_output_character"
+
+let fill_console_output_character fd char count coord =
+  Lwt_unix.check_descriptor fd;
+  fill_console_output_character (Lwt_unix.unix_file_descr fd) char count coord

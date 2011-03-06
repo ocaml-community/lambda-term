@@ -136,6 +136,30 @@ val goto_bol : t -> int -> unit Lwt.t
       It raises {!Not_a_tty} if the output of the given terminal is
       not a tty. *)
 
+(** {6 Erasing text} *)
+
+val clear_screen : t -> unit Lwt.t
+  (** [clear_screen term] clears the entire screen. *)
+
+val clear_screen_next : t -> unit Lwt.t
+  (** [clear_screen_next term] clears the screen from the cursor to
+      the bottom of the screen. *)
+
+val clear_screen_prev : t -> unit Lwt.t
+  (** [clear_screen_prev term] clears the screen from the cursor to
+      the top of the screen. *)
+
+val clear_line : t -> unit Lwt.t
+  (** [clear_line term] erases the current line. *)
+
+val clear_line_next : t -> unit Lwt.t
+  (** [clear_line_next term] erases the current line from the cursor
+      to the end of the line. *)
+
+val clear_line_prev : t -> unit Lwt.t
+  (** [clear_line_prev term] erases the current line from the cursor
+      to the beginning of the line. *)
+
 (** {6 State} *)
 
 val save_state : t -> unit Lwt.t

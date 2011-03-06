@@ -9,6 +9,7 @@
 
 open CamomileLibraryDyn.Camomile
 open Lwt
+open Lt_types
 
 (* +-----------------------------------------------------------------+
    | The terminal type                                               |
@@ -142,8 +143,8 @@ let outgoing_is_a_tty t = Lazy.force t.outgoing_is_a_tty
    | Sizes                                                           |
    +-----------------------------------------------------------------+ *)
 
-external get_size_from_fd : Unix.file_descr -> Lt_types.size = "lt_term_get_size_from_fd"
-external set_size_from_fd : Unix.file_descr -> Lt_types.size -> unit = "lt_term_set_size_from_fd"
+external get_size_from_fd : Unix.file_descr -> size = "lt_term_get_size_from_fd"
+external set_size_from_fd : Unix.file_descr -> size -> unit = "lt_term_set_size_from_fd"
 
 let get_size_from_fd fd =
   Lwt_unix.check_descriptor fd;
@@ -296,12 +297,12 @@ let goto term coord =
         if term.windows then begin
           let window = (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.window in
           Lt_windows.set_console_cursor_position term.outgoing_fd {
-            Lt_types.line = window.Lt_types.r_line + coord.Lt_types.line;
-            Lt_types.column = window.Lt_types.r_column + coord.Lt_types.column;
+            line = window.r_line + coord.line;
+            column = window.r_column + coord.column;
           };
           return ()
         end else
-          Lwt_io.fprintf term.oc "\027[H\027[%dB\027[%dC" coord.Lt_types.line coord.Lt_types.column
+          Lwt_io.fprintf term.oc "\027[H\027[%dB\027[%dC" coord.line coord.column
     | false ->
         raise_lwt Not_a_tty
 
@@ -313,8 +314,8 @@ let goto_bol term n =
         if term.windows then begin
           let pos = (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.cursor_position in
           Lt_windows.set_console_cursor_position term.outgoing_fd {
-            Lt_types.line = pos.Lt_types.line + n;
-            Lt_types.column = 0;
+            line = pos.line + n;
+            column = 0;
           };
           return ()
         end else
@@ -325,6 +326,102 @@ let goto_bol term n =
                 Lwt_io.fprintf term.oc "\r\027[%dB" n
             | _ ->
                 Lwt_io.write_char term.oc '\r'
+
+(* +-----------------------------------------------------------------+
+   | Erasing text                                                    |
+   +-----------------------------------------------------------------+ *)
+
+let clear_screen term =
+  Lazy.force term.outgoing_is_a_tty >>= function
+    | true ->
+        if term.windows then
+          let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
+          Lt_windows.fill_console_output_character
+            term.outgoing_fd
+            (UChar.of_char ' ')
+            (info.Lt_windows.size.columns * info.Lt_windows.size.lines)
+            { line = 0; column = 0 }
+        else
+          Lwt_io.write term.oc "\027[2J"
+    | false ->
+        raise_lwt Not_a_tty
+
+let clear_screen_next term =
+  Lazy.force term.outgoing_is_a_tty >>= function
+    | true ->
+        if term.windows then
+          let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
+          Lt_windows.fill_console_output_character
+            term.outgoing_fd
+            (UChar.of_char ' ')
+            (info.Lt_windows.size.columns * (info.Lt_windows.size.lines - info.Lt_windows.cursor_position.line)
+             + info.Lt_windows.size.colmuns - info.Lt_windows.cursor_position.column)
+            info.Lt_windows.cursor_position
+        else
+          Lwt_io.write term.oc "\027[J"
+    | false ->
+        raise_lwt Not_a_tty
+
+let clear_screen_prev term =
+  Lazy.force term.outgoing_is_a_tty >>= function
+    | true ->
+        if term.windows then
+          let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
+          Lt_windows.fill_console_output_character
+            term.outgoing_fd
+            (UChar.of_char ' ')
+            (info.Lt_windows.size.columns * info.Lt_windows.cursor_position.line
+             + info.Lt_windows.cursor_position.column)
+            { line = 0; column = 0 }
+        else
+          Lwt_io.write term.oc "\027[1J"
+    | false ->
+        raise_lwt Not_a_tty
+
+let clear_line term =
+  Lazy.force term.outgoing_is_a_tty >>= function
+    | true ->
+        if term.windows then
+          let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
+          Lt_windows.fill_console_output_character
+            term.outgoing_fd
+            (UChar.of_char ' ')
+            info.Lt_windows.size.columns
+            { line = info.Lt_windows.cursor_position.line; column = 0 }
+        else
+          Lwt_io.write term.oc "\027[2K"
+    | false ->
+        raise_lwt Not_a_tty
+
+let clear_screen_next term =
+  Lazy.force term.outgoing_is_a_tty >>= function
+    | true ->
+        if term.windows then
+          let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
+          Lt_windows.fill_console_output_character
+            term.outgoing_fd
+            (UChar.of_char ' ')
+            (info.Lt_windows.size.colmuns - info.Lt_windows.cursor_position.column)
+            info.Lt_windows.cursor_position
+        else
+          Lwt_io.write term.oc "\027[K"
+    | false ->
+        raise_lwt Not_a_tty
+
+let clear_screen_prev term =
+  Lazy.force term.outgoing_is_a_tty >>= function
+    | true ->
+        if term.windows then
+          let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
+          Lt_windows.fill_console_output_character
+            term.outgoing_fd
+            (UChar.of_char ' ')
+            info.Lt_windows.cursor_position.column
+            { line = info.Lt_windows.cursor_position.line; column = 0 }
+        else
+          Lwt_io.write term.oc "\027[1K"
+    | false ->
+        raise_lwt Not_a_tty
 
 (* +-----------------------------------------------------------------+
    | State                                                           |
@@ -368,8 +465,8 @@ let read_event term =
                let window = (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.window in
                return (Lt_event.Mouse {
                          mouse with
-                           Lt_mouse.line = mouse.Lt_mouse.line - window.Lt_types.r_line;
-                           Lt_mouse.column = mouse.Lt_mouse.column - window.Lt_types.r_column;
+                           Lt_mouse.line = mouse.Lt_mouse.line - window.r_line;
+                           Lt_mouse.column = mouse.Lt_mouse.column - window.r_column;
                        })
        else if term.size_changed then begin
          term.size_changed <- false;
@@ -708,8 +805,8 @@ let render_windows term matrix =
     Lt_windows.write_console_output
       term.outgoing_fd
       matrix
-      { Lt_types.lines = Array.length matrix; Lt_types.columns = if matrix = [||] then 0 else Array.length matrix.(0) }
-      { Lt_types.line = 0; Lt_types.column = 0 }
+      { lines = Array.length matrix; columns = if matrix = [||] then 0 else Array.length matrix.(0) }
+      { line = 0; column = 0 }
       (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.window
   );
   return ()

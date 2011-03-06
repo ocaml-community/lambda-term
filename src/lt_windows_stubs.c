@@ -444,6 +444,26 @@ CAMLprim value lt_windows_write_console_output(value val_fd, value val_chars, va
   CAMLreturn(result);
 }
 
+/* +-----------------------------------------------------------------+
+   | Filling                                                         |
+   +-----------------------------------------------------------------+ */
+
+CAMLprim value lt_windows_fill_console_output_character(value val_fd, value val_char, value val_count, value val_coord)
+{
+  COORD coord;
+  DWORD written;
+
+  coord.X = Int_val(Field(val_coord, 1));
+  coord.Y = Int_val(Field(val_coord, 0));
+
+  if (!FillConsoleOutputCharacter(Handle_val(val_fd), Int_val(val_char), Int_val(val_count), coord, &written)) {
+    win32_maperr();
+    uerror("FillConsoleOutputCharacter", Nothing);
+  }
+
+  return Val_int(written);
+}
+
 #else
 
 /* +-----------------------------------------------------------------+
@@ -475,5 +495,6 @@ NA(write_console_output, "WriteConsoleOutput")
 NA(set_console_cursor_position, "SetConsoleCursorPosition")
 NA(get_console_mode, "GetConsoleMode")
 NA(set_console_mode, "SetConsoleMode")
+NA(fill_console_output_character, "FillConsoleOutputCharacter")
 
 #endif
