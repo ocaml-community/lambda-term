@@ -208,8 +208,6 @@ type action =
   | Complete_bar
   | History_prev
   | History_next
-  | History_first
-  | History_last
   | Accept
   | Clear_screen
   | Prev_search
@@ -248,7 +246,7 @@ let bind key =
 let styled_of_rope rope =
   Zed_rope.rev_fold_leaf (fun leaf acc -> String leaf :: acc) rope []
 
-class virtual ['a] engine ?(history: string list=[]) () =
+class virtual ['a] engine ?(history=[]) () =
   let edit : unit Zed_edit.t = Zed_edit.create () in
   let context = Zed_edit.context edit (Zed_edit.new_cursor edit) in
 object(self)
@@ -258,6 +256,12 @@ object(self)
 
   (* The completion thread. *)
   val mutable completion = return ()
+
+  (* The history before the history cursor. *)
+  val mutable history_prev = history
+
+  (* The history after the history cursor. *)
+  val mutable history_next = []
 
   method send_action action =
     (* Cancel completion if the user requested another action. *)
@@ -275,11 +279,32 @@ object(self)
       | Complete_bar_prev
       | Complete_bar_first
       | Complete_bar_last
-      | Complete_bar
-      | History_prev
-      | History_next
-      | History_first
-      | History_last
+      | Complete_bar ->
+          ()
+      | History_prev -> begin
+          match history_prev with
+            | [] ->
+                ()
+            | line :: rest ->
+                let text = Zed_edit.text edit in
+                history_prev <- rest;
+                history_next <- Zed_rope.to_string text :: history_next;
+                Zed_edit.goto context 0;
+                Zed_edit.remove context (Zed_rope.length text);
+                Zed_edit.insert context (Zed_rope.of_string line)
+        end
+      | History_next -> begin
+          match history_next with
+            | [] ->
+                ()
+            | line :: rest ->
+                let text = Zed_edit.text edit in
+                history_prev <- Zed_rope.to_string text :: history_prev;
+                history_next <- rest;
+                Zed_edit.goto context 0;
+                Zed_edit.remove context (Zed_rope.length text);
+                Zed_edit.insert context (Zed_rope.of_string line)
+        end
       | Accept
       | Clear_screen
       | Prev_search ->
@@ -454,7 +479,6 @@ object(self)
         | Lt_event.Key key -> begin
             match bind key with
               | Some Accept ->
-                  lwt () = self#last_draw in
                   return self#eval
               | Some action ->
                   self#send_action action;
@@ -476,7 +500,7 @@ object(self)
       loop ()
     finally
       Lwt_event.disable id;
-      return ()
+      self#last_draw
 end
 
 (* +-----------------------------------------------------------------+

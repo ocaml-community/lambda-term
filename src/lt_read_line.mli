@@ -177,10 +177,6 @@ type action =
       (** Go to the previous entry of the history. *)
   | History_next
       (** Go to the next entry of the history. *)
-  | History_first
-      (** Go to the first entry of the history. *)
-  | History_last
-      (** Go to the last entry of the history. *)
   | Accept
       (** Accept the current input. *)
   | Clear_screen

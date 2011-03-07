@@ -103,4 +103,8 @@ let rec loop history exit_code =
    | Entry point                                                     |
    +-----------------------------------------------------------------+ *)
 
-lwt () = loop [] 0
+lwt () =
+  try_lwt
+    loop [] 0
+  with Lt_read_line.Interrupt ->
+    return ()
