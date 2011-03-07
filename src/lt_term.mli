@@ -126,12 +126,10 @@ val goto : t -> Lt_types.coord -> unit Lwt.t
       It raises {!Not_a_tty} if the output of the given terminal is
       not a tty. *)
 
-val goto_bol : t -> int -> unit Lwt.t
-  (** [goto_bol term n] moves the cursor to the beginning of the [n]th
-      next/previous line. [goto_bol term 0] moves the cursor to the
-      beginning of the current line, [goto_bol term 1] moves the
-      cursor to the beginning of the next line, [goto_bol term (-1)]
-      moves the cursor the beginning of the previous line...
+val move : t -> int -> int -> unit Lwt.t
+  (** [move term lines columns] moves the cursor by the given number
+      of lines and columns. Both [lines] and [columns] may be
+      negavite.
 
       It raises {!Not_a_tty} if the output of the given terminal is
       not a tty. *)

@@ -457,7 +457,7 @@ CAMLprim value lt_windows_fill_console_output_character(value val_fd, value val_
   coord.Y = Int_val(Field(val_coord, 0));
 
   if (!FillConsoleOutputCharacter(Handle_val(val_fd), Int_val(val_char), Int_val(val_count), coord, &written)) {
-    win32_maperr();
+    win32_maperr(GetLastError());
     uerror("FillConsoleOutputCharacter", Nothing);
   }
 
