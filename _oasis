@@ -111,7 +111,7 @@ Executable shell
   Install: false
   CompiledObject: best
   MainIs: shell.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term, str
 
 # +-------------------------------------------------------------------+
 # | Doc                                                               |

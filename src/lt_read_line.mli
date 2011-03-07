@@ -103,7 +103,7 @@ val read_line :
   ?history : history ->
   ?complete : completion ->
   ?clipboard : Zed_edit.clipboard ->
-  ?mode : completion_mode ->
+  ?completion_mode : completion_mode ->
   ?prompt : prompt -> unit -> string Lwt.t
   (** [readline ?history ?complete ?mode ?prompt ()] inputs some text
       from the user. If input is not a terminal, it defaults to
@@ -193,7 +193,7 @@ val bind : Lt_key.t -> action option
 
 (** {6 The read-line engine} *)
 
-class virtual ['a] engine : ?history : history -> unit -> object
+class virtual ['a] engine : ?history : history -> ?completion_mode : completion_mode -> unit -> object
   method virtual eval : 'a
     (** Evaluates the contents of the engine. *)
 
@@ -209,6 +209,12 @@ class virtual ['a] engine : ?history : history -> unit -> object
   method stylise : Lt_style.text * Lt_style.text
     (** Stylise current input. It must returns the text before the
         cursor and the text after the cursor. *)
+
+  method complete : string_set Lwt.t
+    (** Complete current input. *)
+
+  method virtual print_completion : string_set -> unit Lwt.t
+    (** Prints possible completion on the terminal. *)
 end
 
 (** Abstract version of {!engine}. *)
@@ -218,11 +224,13 @@ class virtual ['a] abstract : object
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
   method virtual stylise : Lt_style.text * Lt_style.text
+  method virtual complete : string_set Lwt.t
+  method virtual print_completion : string_set -> unit Lwt.t
 end
 
 (** {6 Predefined classes} *)
 
-class read_line : ?history : history -> unit -> object
+class virtual read_line : ?history : history -> ?completion_mode : completion_mode -> unit -> object
   inherit [Zed_utf8.t] engine
   method eval : Zed_utf8.t
     (** Returns the result as a UTF-8 encoded string. *)
@@ -237,13 +245,17 @@ class virtual ['a] term : Lt_term.t -> object
   method run : 'a Lwt.t
     (** Run this read-line instance. *)
 
-  method draw : unit Lwt.t
-    (** Draws everything. *)
+  method draw_update : unit Lwt.t
+    (** Updates current display and put the cursor at current edition
+        position. *)
 
-  method last_draw : unit Lwt.t
-    (** The last draw operation. It should display the prompt and
-        complete input. It can be overridden to display errors for
-        example. *)
+  method draw_simple : unit Lwt.t
+    (** Draws everything but without the intention of updating
+        latter. Also the cursor should be left after the text
+        displayed. *)
+
+  method draw_accept : unit Lwt.t
+    (** Draws after accepting. *)
 
   val mutable prompt : prompt signal
     (** The signal holding the prompt. *)
@@ -262,4 +274,7 @@ class virtual ['a] term : Lt_term.t -> object
 
   val mutable visible : bool
     (** Whether the instance is visible. *)
+
+  method print_completion : string_set -> unit Lwt.t
+    (** Prints possible completion on the terminal. *)
 end

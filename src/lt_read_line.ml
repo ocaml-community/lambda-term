@@ -246,11 +246,12 @@ let bind key =
 let styled_of_rope rope =
   Zed_rope.rev_fold_leaf (fun leaf acc -> String leaf :: acc) rope []
 
-class virtual ['a] engine ?(history=[]) () =
+class virtual ['a] engine ?(history=[]) ?(completion_mode=`Real_time) () =
   let edit : unit Zed_edit.t = Zed_edit.create () in
   let context = Zed_edit.context edit (Zed_edit.new_cursor edit) in
 object(self)
   method virtual eval : 'a
+  method virtual print_completion : string_set -> unit Lwt.t
   method edit = edit
   method context = context
 
@@ -265,7 +266,7 @@ object(self)
 
   method send_action action =
     (* Cancel completion if the user requested another action. *)
-    cancel completion;
+    if completion_mode = `Classic then cancel completion;
     match action with
       | Edit action ->
           Zed_edit.get_action action context
@@ -274,7 +275,21 @@ object(self)
             raise Interrupt
           else
             Zed_edit.delete_next_char context
-      | Complete
+      | Complete -> begin
+          match completion_mode with
+            | `Real_time ->
+                ()
+            | `Classic ->
+                completion <- begin
+                  lwt set = self#complete in
+                  if String_set.cardinal set > 1 then
+                    protected (self#print_completion set)
+                  else
+                    return ()
+                end
+            | `None ->
+                ()
+        end
       | Complete_bar_next
       | Complete_bar_prev
       | Complete_bar_first
@@ -313,6 +328,8 @@ object(self)
   method stylise =
     let before, after = Zed_rope.break (Zed_edit.text edit) (Zed_cursor.get_position (Zed_edit.cursor context)) in
     (styled_of_rope before, styled_of_rope after)
+
+  method complete = return String_set.empty
 end
 
 class virtual ['a] abstract = object
@@ -321,14 +338,16 @@ class virtual ['a] abstract = object
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
   method virtual stylise : Lt_style.text * Lt_style.text
+  method virtual complete : string_set Lwt.t
+  method virtual print_completion : string_set -> unit Lwt.t
 end
 
 (* +-----------------------------------------------------------------+
    | Predefined classes                                              |
    +-----------------------------------------------------------------+ *)
 
-class read_line ?history () = object(self)
-  inherit [Zed_utf8.t] engine ?history ()
+class virtual read_line ?history ?completion_mode () = object(self)
+  inherit [Zed_utf8.t] engine ?history ?completion_mode ()
   method eval = Zed_rope.to_string (Zed_edit.text self#edit)
 end
 
@@ -401,7 +420,7 @@ object(self)
     (* Move back again to the beginning. *)
     Lt_term.move term (-end_of_display.line) 0
 
-  method draw =
+  method draw_update =
     if draw_queued then
       return ()
     else begin
@@ -432,12 +451,21 @@ object(self)
         return ()
     end
 
-  method last_draw =
-    lwt () = if visible then self#erase else return () in
+  method draw_simple =
     let before, after = self#stylise in
     let before = List.concat [S.value prompt; [Reset]; before] in
     let total = List.concat [before; after; [Reset]] in
     Lt_term.fprintls term total
+
+  method draw_accept =
+    self#draw_simple
+
+  method print_completion set =
+    lwt () = if visible then self#erase else return () in
+    lwt () = self#draw_simple in
+    lwt () = print_words term (String_set.elements set) in
+    displayed <- false;
+    self#draw_update
 
   method hide =
     if visible then begin
@@ -450,7 +478,7 @@ object(self)
     if not visible then begin
       visible <- true;
       displayed <- false;
-      self#draw
+      self#draw_update
     end else
       return ()
 
@@ -462,11 +490,12 @@ object(self)
     (* Redraw everything when needed. *)
     let id =
       Lwt_event.notify_s
-        (fun () -> self#draw)
+        (fun () -> self#draw_update)
         (E.select [
            E.stamp (S.changes size) ();
            E.stamp (Zed_edit.changes self#edit) ();
-           E.stamp (S.changes (Zed_cursor.position (Zed_edit.cursor self#context))) ();      E.stamp (S.changes prompt) ();
+           E.stamp (S.changes (Zed_cursor.position (Zed_edit.cursor self#context))) ();
+           E.stamp (S.changes prompt) ();
          ])
     in
 
@@ -496,21 +525,27 @@ object(self)
     in
 
     try_lwt
-      lwt () = self#draw in
-      loop ()
-    finally
+      lwt () = self#draw_update in
+      lwt result = loop () in
       Lwt_event.disable id;
-      self#last_draw
+      lwt () = if visible then self#erase else return () in
+      lwt () = self#draw_accept in
+      return result
+    with exn ->
+      Lwt_event.disable id;
+      lwt () = if visible then self#erase else return () in
+      lwt () = self#draw_simple in
+      raise_lwt exn
 end
 
 (* +-----------------------------------------------------------------+
    | High-level functions                                            |
    +-----------------------------------------------------------------+ *)
 
-let read_line ?(term=Lt_term.stdout) ?history ?complete ?clipboard ?mode ?(prompt=default_prompt) () =
+let read_line ?(term=Lt_term.stdout) ?history ?complete ?clipboard ?completion_mode ?(prompt=default_prompt) () =
   let prompt_signal = S.const prompt in
   let rl = object
-    inherit read_line ?history ()
+    inherit read_line ?history ?completion_mode ()
     inherit [Zed_utf8.t] term term
     initializer
       prompt <- prompt_signal

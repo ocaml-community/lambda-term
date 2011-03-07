@@ -66,6 +66,40 @@ let make_prompt size exit_code time =
    Foreground lgreen; String " $ "]
 
 (* +-----------------------------------------------------------------+
+   | Completion                                                      |
+   +-----------------------------------------------------------------+ *)
+
+module String_set = Set.Make(String)
+
+let colon_re = Str.regexp ":"
+let get_paths () =
+  try
+    Str.split colon_re (Sys.getenv "PATH")
+  with Not_found ->
+    []
+
+let get_binaries () =
+  Lwt_list.fold_left_s
+    (fun set dir ->
+       Lwt_stream.fold
+         (fun file set -> String_set.add file set)
+         (Lwt_unix.files_of_directory dir)
+         set)
+    String_set.empty
+    (get_paths ())
+
+let complete ctx =
+  (* Get the word before the cursor. *)
+  let word =
+    Zed_rope.to_string
+      (Zed_rope.before
+         (Zed_edit.text (Zed_edit.edit ctx))
+         (Zed_cursor.get_position (Zed_edit.cursor ctx)))
+  in
+  lwt binaries = get_binaries () in
+  return (Lt_read_line.complete ctx word binaries)
+
+(* +-----------------------------------------------------------------+
    | Customization of the read-line engine                           |
    +-----------------------------------------------------------------+ *)
 
@@ -79,6 +113,8 @@ let time =
 class read_line ~history ~exit_code = object(self)
   inherit Lt_read_line.read_line ~history ()
   inherit [Zed_utf8.t] Lt_read_line.term Lt_term.stdout
+
+  method complete = complete self#context
 
   initializer
     prompt <- S.l2 (fun size time -> make_prompt size exit_code time) self#size time
