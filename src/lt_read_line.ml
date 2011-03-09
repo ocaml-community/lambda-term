@@ -1,3 +1,4 @@
+
 (*
  * lt_read_line.ml
  * ---------------
@@ -21,12 +22,6 @@ type prompt = Lt_style.text
    | Completion                                                      |
    +-----------------------------------------------------------------+ *)
 
-type string_set = Set.Make(String).t
-type completion = unit Zed_edit.context -> string_set Lwt.t
-type completion_mode = [ `Classic | `Real_time | `None ]
-
-module String_set = Set.Make(String)
-
 let common_prefix a b =
   let rec loop ofs =
     if ofs = String.length a || ofs = String.length b then
@@ -42,68 +37,11 @@ let common_prefix a b =
   loop 0
 
 let lookup word words =
-  let words = String_set.filter (fun word' -> Zed_utf8.starts_with word' word) words in
-  if String_set.is_empty words then
-    ("", String_set.empty)
-  else
-    (String_set.fold common_prefix words (String_set.choose words), words)
-
-let complete ?(suffix=" ") ctx word words =
-  let prefix, words = lookup word words in
-  if String_set.is_empty words then
-    words
-  else begin
-    (* Insert the end of the longest prefix. *)
-    Zed_edit.insert ctx (Zed_rope.of_string (String.sub prefix (String.length word) (String.length prefix - String.length word)));
-    (* Insert the suffix if there is only one completion. *)
-    if String_set.cardinal words = 1 then Zed_edit.insert ctx (Zed_rope.of_string suffix);
-    words
-  end
-
-let print_words term words =
-  match List.filter ((<>) "") words with
+  match List.filter (fun word' -> Zed_utf8.starts_with word' word) words with
     | [] ->
-        return ()
-    | words ->
-        let max_width = List.fold_left (fun x word -> max x (Zed_utf8.length word)) 0 words + 1 in
-        let count = List.length words in
-        lwt { columns = screen_width } = Lt_term.get_size term in
-        let columns = max 1 (screen_width / max_width) in
-        let lines =
-          if count < columns then
-            1
-          else
-            let l = count / columns in
-            if columns mod count = 0 then l else l + 1
-        in
-        let column_width = screen_width / columns in
-        let m = Array.make_matrix lines columns "" in
-        let rec fill_display line column = function
-          | [] ->
-              ()
-          | word :: words ->
-              m.(line).(column) <- word;
-              let line = line + 1 in
-              if line < lines then
-                fill_display line column words
-              else
-                fill_display 0 (column + 1) words
-        in
-        fill_display 0 0 words;
-        for_lwt line = 0 to lines - 1 do
-          lwt () =
-            for_lwt column = 0 to columns - 1 do
-              let word = m.(line).(column) in
-              lwt () = Lt_term.fprint term word in
-              let len = Zed_utf8.length word in
-              if len < column_width then
-                Lt_term.fprint term (String.make (column_width - len) ' ')
-              else
-                return ()
-            done
-          in
-          Lt_term.fprint term "\n"
-        done
+        ("", [])
+    | (word :: rest) as words ->
+        (List.fold_left common_prefix word rest, words)
 
 (* +-----------------------------------------------------------------+
    | History                                                         |
@@ -246,17 +184,15 @@ let bind key =
 let styled_of_rope rope =
   Zed_rope.rev_fold_leaf (fun leaf acc -> String leaf :: acc) rope []
 
-class virtual ['a] engine ?(history=[]) ?(completion_mode=`Real_time) () =
+class virtual ['a] engine ?(history=[]) () =
   let edit : unit Zed_edit.t = Zed_edit.create () in
   let context = Zed_edit.context edit (Zed_edit.new_cursor edit) in
+  let completion_words, set_completion_words = S.create ([] : (Zed_utf8.t * Zed_utf8.t) list) in
+  let completion_index, set_completion_index = S.create 0 in
 object(self)
   method virtual eval : 'a
-  method virtual print_completion : string_set -> unit Lwt.t
   method edit = edit
   method context = context
-
-  (* The completion thread. *)
-  val mutable completion = return ()
 
   (* The history before the history cursor. *)
   val mutable history_prev = history
@@ -264,9 +200,63 @@ object(self)
   (* The history after the history cursor. *)
   val mutable history_next = []
 
+  (* The thread that compute completion. *)
+  val mutable completion_thread = return ()
+
+  (* The event that compute completion when needed. *)
+  val mutable completion_event = E.never
+
+  (* Whether a completion has been queued. *)
+  val mutable completion_queued = false
+
+  (* The index of the start of the word being completed. *)
+  val mutable completion_start = 0
+
+  initializer
+    completion_event <- (
+      E.map
+        (fun () ->
+           (* Cancel previous thread because it is now useless. *)
+           cancel completion_thread;
+           set_completion_index 0;
+           set_completion_words [];
+           if completion_queued then
+             return ()
+           else begin
+             completion_queued <- true;
+             lwt () = pause () in
+             completion_queued <- false;
+             completion_thread <- (
+               lwt start, comp = self#complete in
+               completion_start <- start;
+               set_completion_words comp;
+               return ()
+             );
+             return ()
+           end)
+        (E.select [
+           E.stamp (Zed_edit.changes edit) ();
+           E.stamp (S.changes (Zed_cursor.position (Zed_edit.cursor context))) ();
+         ])
+    );
+    completion_thread <- (
+      lwt start, comp = self#complete in
+      completion_start <- start;
+      set_completion_words comp;
+      return ()
+    )
+
+  method input_prev =
+    Zed_rope.before (Zed_edit.text edit) (Zed_edit.position context)
+
+  method input_next =
+    Zed_rope.after (Zed_edit.text edit) (Zed_edit.position context)
+
+  method completion_words = completion_words
+  method completion_index = completion_index
+  method complete = return (0, [])
+
   method send_action action =
-    (* Cancel completion if the user requested another action. *)
-    if completion_mode = `Classic then cancel completion;
     match action with
       | Edit action ->
           Zed_edit.get_action action context
@@ -276,26 +266,39 @@ object(self)
           else
             Zed_edit.delete_next_char context
       | Complete -> begin
-          match completion_mode with
-            | `Real_time ->
+          let prefix_length = Zed_edit.position context - completion_start in
+          match S.value completion_words with
+            | [] ->
                 ()
-            | `Classic ->
-                completion <- begin
-                  lwt set = self#complete in
-                  if String_set.cardinal set > 1 then
-                    protected (self#print_completion set)
-                  else
-                    return ()
-                end
-            | `None ->
-                ()
+            | [(completion, suffix)] ->
+                Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after completion prefix_length));
+                Zed_edit.insert context (Zed_rope.of_string suffix)
+            | (completion, suffix) :: rest ->
+                let word = List.fold_left (fun acc (word, _) -> common_prefix acc word) completion rest in
+                Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after word prefix_length))
         end
-      | Complete_bar_next
-      | Complete_bar_prev
-      | Complete_bar_first
-      | Complete_bar_last
+      | Complete_bar_next ->
+          let index = S.value completion_index in
+          if index < List.length (S.value completion_words) - 1 then
+            set_completion_index (index + 1)
+      | Complete_bar_prev ->
+          let index = S.value completion_index in
+          if index > 0 then
+            set_completion_index (index - 1)
+      | Complete_bar_first ->
+          set_completion_index 0
+      | Complete_bar_last ->
+          let len = List.length (S.value completion_words) in
+          if len > 0 then
+            set_completion_index (len - 1)
       | Complete_bar ->
-          ()
+          let words = S.value completion_words in
+          if words <> [] then begin
+            let prefix_length = Zed_edit.position context - completion_start in
+            let completion, suffix = List.nth words (S.value completion_index) in
+            Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after completion prefix_length));
+            Zed_edit.insert context (Zed_rope.of_string suffix)
+          end
       | History_prev -> begin
           match history_prev with
             | [] ->
@@ -328,8 +331,6 @@ object(self)
   method stylise =
     let before, after = Zed_rope.break (Zed_edit.text edit) (Zed_cursor.get_position (Zed_edit.cursor context)) in
     (styled_of_rope before, styled_of_rope after)
-
-  method complete = return String_set.empty
 end
 
 class virtual ['a] abstract = object
@@ -338,16 +339,19 @@ class virtual ['a] abstract = object
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
   method virtual stylise : Lt_style.text * Lt_style.text
-  method virtual complete : string_set Lwt.t
-  method virtual print_completion : string_set -> unit Lwt.t
+  method virtual input_prev : Zed_rope.t
+  method virtual input_next : Zed_rope.t
+  method virtual completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
+  method virtual completion_index : int signal
+  method virtual complete : (int * (Zed_utf8.t * Zed_utf8.t) list) Lwt.t
 end
 
 (* +-----------------------------------------------------------------+
    | Predefined classes                                              |
    +-----------------------------------------------------------------+ *)
 
-class virtual read_line ?history ?completion_mode () = object(self)
-  inherit [Zed_utf8.t] engine ?history ?completion_mode ()
+class virtual read_line ?history () = object(self)
+  inherit [Zed_utf8.t] engine ?history ()
   method eval = Zed_rope.to_string (Zed_edit.text self#edit)
 end
 
@@ -356,6 +360,13 @@ end
    +-----------------------------------------------------------------+ *)
 
 let default_prompt = [String "# "]
+
+let rec drop count l =
+  if count <= 0 then
+    l
+  else match l with
+    | [] -> []
+    | e :: l -> drop (count - 1) l
 
 (* Computes the position of the cursor after printing the given styled
    string. *)
@@ -378,14 +389,81 @@ let rec compute_position size pos = function
   | _ :: rest ->
       compute_position size pos rest
 
+let make_completion_bar_middle index columns words =
+  let rec aux ofs idx = function
+    | [] ->
+        [String(String.make (columns - ofs) ' ')]
+    | (word, suffix) :: words ->
+        let len = Zed_utf8.length word in
+        let ofs' = ofs + len in
+        if ofs' <= columns then
+          if idx = index then
+            Inverse :: String word :: Reset ::
+              if ofs' + 1 > columns then
+                []
+              else
+                String "│" :: aux (ofs' + 1) (idx + 1) words
+          else
+            String word ::
+              if ofs' + 1 > columns then
+                []
+              else
+                String "│" :: aux (ofs' + 1) (idx + 1) words
+        else
+          [String(Zed_utf8.sub word 0 (columns - ofs))]
+  in
+  aux 0 0 words
+
+let make_bar delimiter columns words =
+  let buf = Buffer.create (columns * 3) in
+  let rec aux ofs = function
+    | [] ->
+        for i = ofs + 1 to columns do
+          Buffer.add_string buf "─"
+        done;
+        Buffer.contents buf
+    | (word, suffix) :: words ->
+        let len = Zed_utf8.length word in
+        let ofs' = ofs + len in
+        if ofs' <= columns then begin
+          for i = 1 to len do
+            Buffer.add_string buf "─"
+          done;
+          if ofs' + 1 > columns then
+            Buffer.contents buf
+          else begin
+            Buffer.add_string buf delimiter;
+            aux (ofs' + 1) words
+          end
+        end else begin
+          for i = ofs + 1 to columns do
+            Buffer.add_string buf "─"
+          done;
+          Buffer.contents buf
+        end
+  in
+  aux 0 words
+
+let rec get_index_of_last_displayed_word column columns index words =
+  match words with
+    | [] ->
+        index - 1
+    | (word, suffix) :: words ->
+        let column = column + Zed_utf8.length word in
+        if column <= columns - 1 then
+          get_index_of_last_displayed_word (column + 1) columns (index + 1) words
+        else
+          index - 1
+
 class virtual ['a] term term =
   let size, set_size = S.create { columns = 80; lines = 25 } in
+  let event, set_prompt = E.create () in
+  let prompt = S.switch (S.const default_prompt) event in
 object(self)
   inherit ['a] abstract
   method size = size
-
-  val mutable prompt = S.const default_prompt
-    (* The signal holding the prompt. *)
+  method prompt = prompt
+  method set_prompt = set_prompt
 
   val mutable visible = true
     (* Whether the read-line instance is currently visible. *)
@@ -402,7 +480,35 @@ object(self)
     (* The position of the cursor. *)
 
   val mutable end_of_display = { line = 0; column = 0 }
-    (* THe position of the end of displayed material. *)
+    (* The position of the end of displayed material. *)
+
+  val mutable completion_start = S.const 0
+    (* Index of the first displayed word in the completion bar. *)
+
+  initializer
+    completion_start <- (
+      S.fold
+        (fun start (words, index, columns) ->
+           if index < start then
+             (* The cursor is before the left margin. *)
+             let count = List.length words in
+             let rev_index = count - index - 1 in
+             count - get_index_of_last_displayed_word 1 columns rev_index (drop rev_index (List.rev words)) - 1
+           else if index > get_index_of_last_displayed_word 1 columns start (drop start words) then
+             (* The cursor is after the right margin. *)
+             index
+           else
+             start)
+        0
+        (S.changes
+           (S.l3
+              (fun words index size -> (words, index, size.columns))
+              self#completion_words
+              self#completion_index
+              size))
+    )
+
+  method completion_start = completion_start
 
   method private erase =
     (* Move back to the beginning of printed material. *)
@@ -430,9 +536,20 @@ object(self)
       draw_queued <- false;
 
       if visible then begin
+        let { columns } = S.value size in
+        let start = S.value self#completion_start in
+        let index = S.value self#completion_index in
+        let words = drop start (S.value self#completion_words) in
         let before, after = self#stylise in
         let before = List.concat [S.value prompt; [Reset]; before] in
-        let total = List.concat [before; after; [Reset]] in
+        let after = List.concat [
+          after; [Reset];
+          (* The completion bar. *)
+          [String "\n┌"; String(make_bar "┬" (columns - 2) words); String "┐\n│"];
+          make_completion_bar_middle (index - start) (columns - 2) words;
+          [String "│\n└"; String(make_bar "┴" (columns - 2) words); String "┘\n"]
+        ] in
+        let total = before @ after in
         let size = S.value size in
         lwt () =
           if displayed then
@@ -460,13 +577,6 @@ object(self)
   method draw_accept =
     self#draw_simple
 
-  method print_completion set =
-    lwt () = if visible then self#erase else return () in
-    lwt () = self#draw_simple in
-    lwt () = print_words term (String_set.elements set) in
-    displayed <- false;
-    self#draw_update
-
   method hide =
     if visible then begin
       visible <- false;
@@ -488,14 +598,17 @@ object(self)
     set_size initial_size;
 
     (* Redraw everything when needed. *)
-    let id =
-      Lwt_event.notify_s
+    let event =
+      Lwt_event.map_p
         (fun () -> self#draw_update)
         (E.select [
            E.stamp (S.changes size) ();
            E.stamp (Zed_edit.changes self#edit) ();
            E.stamp (S.changes (Zed_cursor.position (Zed_edit.cursor self#context))) ();
            E.stamp (S.changes prompt) ();
+           E.stamp (S.changes self#completion_words) ();
+           E.stamp (S.changes self#completion_index) ();
+           E.stamp (S.changes self#completion_start) ();
          ])
     in
 
@@ -509,6 +622,12 @@ object(self)
             match bind key with
               | Some Accept ->
                   return self#eval
+              | Some Clear_screen ->
+                  lwt () = Lt_term.clear_screen term in
+                  lwt () = Lt_term.goto term { line = 0; column = 0 } in
+                  displayed <- false;
+                  lwt () = self#draw_update in
+                  loop ()
               | Some action ->
                   self#send_action action;
                   loop ()
@@ -524,30 +643,18 @@ object(self)
             loop ()
     in
 
-    try_lwt
-      lwt () = self#draw_update in
-      lwt result = loop () in
-      Lwt_event.disable id;
-      lwt () = if visible then self#erase else return () in
-      lwt () = self#draw_accept in
-      return result
-    with exn ->
-      Lwt_event.disable id;
-      lwt () = if visible then self#erase else return () in
-      lwt () = self#draw_simple in
-      raise_lwt exn
+    lwt result =
+      try_lwt
+        lwt () = self#draw_update in
+        loop ()
+      with exn ->
+        E.stop event;
+        lwt () = if visible then self#erase else return () in
+        lwt () = self#draw_simple in
+        raise_lwt exn
+    in
+    E.stop event;
+    lwt () = if visible then self#erase else return () in
+    lwt () = self#draw_accept in
+    return result
 end
-
-(* +-----------------------------------------------------------------+
-   | High-level functions                                            |
-   +-----------------------------------------------------------------+ *)
-
-let read_line ?(term=Lt_term.stdout) ?history ?complete ?clipboard ?completion_mode ?(prompt=default_prompt) () =
-  let prompt_signal = S.const prompt in
-  let rl = object
-    inherit read_line ?history ?completion_mode ()
-    inherit [Zed_utf8.t] term term
-    initializer
-      prompt <- prompt_signal
-  end in
-  rl#run

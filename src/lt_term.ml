@@ -301,8 +301,12 @@ let goto term coord =
             column = window.r_column + coord.column;
           };
           return ()
-        end else
-          Lwt_io.fprintf term.oc "\027[H\027[%dB\027[%dC" coord.line coord.column
+        end else begin
+          lwt () = Lwt_io.fprint term.oc "\027[H" in
+          lwt () = if coord.line > 0 then Lwt_io.fprintf term.oc "027[%dB" coord.line else return () in
+          lwt () = if coord.line > 0 then Lwt_io.fprintf term.oc "027[%dC" coord.column else return () in
+          return ()
+        end
     | false ->
         raise_lwt Not_a_tty
 

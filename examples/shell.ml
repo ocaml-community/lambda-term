@@ -19,8 +19,11 @@ open Lt_types
    | Prompt creation                                                 |
    +-----------------------------------------------------------------+ *)
 
-(* [size] is the size of the terminal and [exit_code] is the exit code
-   of the last executed command. *)
+(* The function [make_prompt] creates the prompt. Parameters are:
+
+   - size: the current size of the terminal.
+   - exit_code: the exit code of the last executed command.
+   - time: the current time. *)
 let make_prompt size exit_code time =
   let tm = Unix.localtime time in
   let code = string_of_int exit_code in
@@ -66,7 +69,7 @@ let make_prompt size exit_code time =
    Foreground lgreen; String " $ "]
 
 (* +-----------------------------------------------------------------+
-   | Completion                                                      |
+   | Listing binaries of the path for completion                     |
    +-----------------------------------------------------------------+ *)
 
 module String_set = Set.Make(String)
@@ -78,26 +81,22 @@ let get_paths () =
   with Not_found ->
     []
 
-let get_binaries () =
+(* Get the set of all binaries with a name starting with [prefix]. *)
+let binaries = lazy(
   Lwt_list.fold_left_s
     (fun set dir ->
        Lwt_stream.fold
-         (fun file set -> String_set.add file set)
+         (fun file set ->
+            if file <> "." && file <> ".." then
+              String_set.add file set
+            else
+              set)
          (Lwt_unix.files_of_directory dir)
          set)
     String_set.empty
     (get_paths ())
-
-let complete ctx =
-  (* Get the word before the cursor. *)
-  let word =
-    Zed_rope.to_string
-      (Zed_rope.before
-         (Zed_edit.text (Zed_edit.edit ctx))
-         (Zed_cursor.get_position (Zed_edit.cursor ctx)))
-  in
-  lwt binaries = get_binaries () in
-  return (Lt_read_line.complete ctx word binaries)
+  >|= String_set.elements
+)
 
 (* +-----------------------------------------------------------------+
    | Customization of the read-line engine                           |
@@ -114,10 +113,14 @@ class read_line ~history ~exit_code = object(self)
   inherit Lt_read_line.read_line ~history ()
   inherit [Zed_utf8.t] Lt_read_line.term Lt_term.stdout
 
-  method complete = complete self#context
+  method complete =
+    let prefix  = Zed_rope.to_string self#input_prev in
+    lwt binaries = Lazy.force binaries in
+    let binaries = List.filter (fun file -> Zed_utf8.starts_with file prefix) binaries in
+    return (0, List.map (fun file -> (file, " ")) binaries)
 
   initializer
-    prompt <- S.l2 (fun size time -> make_prompt size exit_code time) self#size time
+    self#set_prompt (S.l2 (fun size time -> make_prompt size exit_code time) self#size time)
 end
 
 (* +-----------------------------------------------------------------+

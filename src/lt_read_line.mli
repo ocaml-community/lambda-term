@@ -9,6 +9,9 @@
 
 (** Interactive line input *)
 
+(** For a complete example of usage of this module, look at the shell
+    example (examples/shell.ml) distributed with Lambda-Term. *)
+
 open CamomileLibrary
 open React
 
@@ -21,59 +24,11 @@ type prompt = Lt_style.text
 
 (** {6 Completion} *)
 
-type string_set = Set.Make(String).t
-    (** Type of sets of UTF-8 encoded strings. *)
-
-type completion = unit Zed_edit.context -> string_set Lwt.t
-  (** Type of a completion function. It takes as argument an edition
-      context and must:
-
-      - insert the found completion at the context cursor
-      - returns a list of possibilities
-
-      Note: the thread launched by the completion function is
-      cancelled using {!Lwt.cancel} if the user continue typing
-      text before the completion function terminates. *)
-
-type completion_mode = [ `Classic | `Real_time | `None ]
-    (** The completion mode.
-
-        - [`Classic] means that when the user hit [Tab] a list of
-          possible completions is proposed,
-
-        - [`Real_time] means that possible completions are shown to
-          the user as he types, and he can navigate in them with
-          [Meta+left], [Meta+right]
-
-        - [`None] means no completion at all *)
-
-val lookup : string -> string_set -> string * string_set
+val lookup : string -> Zed_utf8.t list -> string * Zed_utf8.t list
   (** [lookup word words] lookup for completion of [word] into
       [words]. It returns [(prefix, possibilities)] where
       [possibilities] are all words starting with [word] and [prefix]
       is the longest common prefix of [possibilities]. *)
-
-val complete : ?suffix : string -> unit Zed_edit.context -> string -> string_set -> string_set
-  (** [complete ?suffix ctx word words] basic completion
-      functions.
-
-      - [ctx] is a context for editing the edition engine, pointing to
-        the end of the word to complete,
-      - [word] is the word to complete,
-      - [words] is a list of possible completions for [word].
-
-      It works as follow:
-
-      - if there is no completion, nothing append,
-      - if there is only one, the word is completed and [suffix] is
-        inserted after (it default to [" "]),
-      - if there are several possible completions, the word is
-        completed using the longest prefix.
-
-      The result is the set of all possible completions. *)
-
-val print_words : Lt_term.t -> string list -> unit Lwt.t
-  (** [print_words term strs] pretty-prints a list of words. *)
 
 (** {8 History} *)
 
@@ -96,61 +51,6 @@ val load_history : string -> history Lwt.t
       [Zed_utf8.Invalid] if one of the line of the history is not
       correctly UTF-8 encoded. *)
 
-(** {6 High-level functions} *)
-
-val read_line :
-  ?term : Lt_term.t ->
-  ?history : history ->
-  ?complete : completion ->
-  ?clipboard : Zed_edit.clipboard ->
-  ?completion_mode : completion_mode ->
-  ?prompt : prompt -> unit -> string Lwt.t
-  (** [readline ?history ?complete ?mode ?prompt ()] inputs some text
-      from the user. If input is not a terminal, it defaults to
-      [Lwt_text.read_line Lwt_text.stdin].
-
-      If @param mode contains the current completion mode. It defaults
-      to [`real_time].
-
-      @param prompt defaults to [Lwt_term.Text "# "] *)
-(*
-type password_style = [ `Empty | `Clear | `Text of string ]
-    (** Style which indicate how the password is echoed to the user:
-
-        - with [`Empty] nothing is printed
-        - with [`Clear] the password is displayed has it
-        - with [`Text ch] all characters are replaced by [ch] *)
-
-val read_password :
-  ?clipboard : Zed_edit.clipboard ->
-  ?style : password_style ->
-  ?prompt : prompt -> unit -> string Lwt.t
-  (** [read_password ?clipboard ?clear ~prompt ()] inputs a password
-      from the user. This function fails if input is not a terminal.
-
-      @param style defaults to [`text "*"].
-  *)
-
-val read_keyword :
-  ?history : history ->
-  ?case_sensitive : bool ->
-  ?mode : completion_mode ->
-  ?prompt : prompt ->
-  values :  (string * 'value) list -> unit -> 'value Lwt.t
-  (** [read_keyword ?history ?case_sensitive ?mode ~prompt ~keywords
-      ()] reads one word which is a member of [words]. And returns
-      which keyword the user choosed.
-
-      [case_sensitive] default to [false]. *)
-
-val read_yes_no : ?history : history -> ?mode : completion_mode -> ?prompt : prompt -> unit -> bool Lwt.t
-  (** [read_yes_no ?history ?dynamic prompt ()] is the same as:
-
-      {[
-        read_keyword ?history ?dynamic prompt [("yes", true); ("no", false)] ()
-      ]}
-  *)
-*)
 (** {6 Actions} *)
 
 (** Type of actions. *)
@@ -193,7 +93,7 @@ val bind : Lt_key.t -> action option
 
 (** {6 The read-line engine} *)
 
-class virtual ['a] engine : ?history : history -> ?completion_mode : completion_mode -> unit -> object
+class virtual ['a] engine : ?history : history -> unit -> object
   method virtual eval : 'a
     (** Evaluates the contents of the engine. *)
 
@@ -210,11 +110,26 @@ class virtual ['a] engine : ?history : history -> ?completion_mode : completion_
     (** Stylise current input. It must returns the text before the
         cursor and the text after the cursor. *)
 
-  method complete : string_set Lwt.t
-    (** Complete current input. *)
+  method input_prev : Zed_rope.t
+    (** The input before the cursor. *)
 
-  method virtual print_completion : string_set -> unit Lwt.t
-    (** Prints possible completion on the terminal. *)
+  method input_next : Zed_rope.t
+    (** The input after the cursor. *)
+
+  method completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
+    (** Current possible completions. Each completion is of the form
+        [(word, suffix)] where [word] is the completion itself and
+        [suffix] is a suffix to add if the completion is choosen. *)
+
+  method completion_index : int signal
+    (** The position in the completion bar. *)
+
+  method complete : (int * (Zed_utf8.t * Zed_utf8.t) list) Lwt.t
+    (** Compute possible completions for current input. It returns the
+        index of the beginning of the word being completed and the
+        list of possible completions with their suffixes. The result
+        is made available through the {!completions} signal. This
+        thread may be canceled using {!Lwt.cancel}. *)
 end
 
 (** Abstract version of {!engine}. *)
@@ -224,13 +139,16 @@ class virtual ['a] abstract : object
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
   method virtual stylise : Lt_style.text * Lt_style.text
-  method virtual complete : string_set Lwt.t
-  method virtual print_completion : string_set -> unit Lwt.t
+  method virtual input_prev : Zed_rope.t
+  method virtual input_next : Zed_rope.t
+  method virtual completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
+  method virtual completion_index : int signal
+  method virtual complete : (int * (Zed_utf8.t * Zed_utf8.t) list) Lwt.t
 end
 
 (** {6 Predefined classes} *)
 
-class virtual read_line : ?history : history -> ?completion_mode : completion_mode -> unit -> object
+class virtual read_line : ?history : history -> unit -> object
   inherit [Zed_utf8.t] engine
   method eval : Zed_utf8.t
     (** Returns the result as a UTF-8 encoded string. *)
@@ -257,12 +175,18 @@ class virtual ['a] term : Lt_term.t -> object
   method draw_accept : unit Lwt.t
     (** Draws after accepting. *)
 
-  val mutable prompt : prompt signal
+  method prompt : prompt signal
     (** The signal holding the prompt. *)
+
+  method set_prompt : prompt signal -> unit
+    (** Sets the prompt signal. *)
 
   method size : Lt_types.size signal
     (** The size of the terminal. This can be used for computing the
         prompt. *)
+
+  method completion_start : int signal
+    (** Index of the first displayed word in the completion bar. *)
 
   method hide : unit Lwt.t
     (** Hide this read-line instance. It remains invisible until
@@ -274,7 +198,4 @@ class virtual ['a] term : Lt_term.t -> object
 
   val mutable visible : bool
     (** Whether the instance is visible. *)
-
-  method print_completion : string_set -> unit Lwt.t
-    (** Prints possible completion on the terminal. *)
 end
