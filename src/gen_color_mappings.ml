@@ -50,6 +50,38 @@ let reindex set =
     | n :: rest ->
         loop 0 n rest
 
+let pi = 4. *. atan 1.
+
+let hsv_of_rgb (r, g, b) =
+  let r = float r /. 255. and g = float g /. 255. and b = float b /. 255. in
+  let min = min r (min g b) and max = max r (max g b) in
+  let h =
+    if min = max then
+      0.
+    else if max = r then
+      mod_float (60. *. (g -. b) /. (max -. min) +. 360.) 360.
+    else if max = g then
+      60. *. (b -. r) /. (max -. min) +. 120.
+    else
+      60. *. (r -. g) /. (max -. min) +. 240.
+  and s =
+    if max = 0. then
+      0.
+    else
+      1. -. min /. max
+  and v =
+    max
+  in
+  (h *. pi /. 180., s, v)
+
+let sqr x = x *. x
+
+let dist color1 color2 =
+  let (h1, s1, v1) = hsv_of_rgb color1 and (h2, s2, v2) = hsv_of_rgb color2 in
+  let x1 = s1 *. cos h1 and y1 = s1 *. sin h1 and z1 = v1 in
+  let x2 = s2 *. cos h2 and y2 = s2 *. sin h2 and z2 = v2 in
+  sqr (x1 -. x2) +. sqr (y1 -. y2) +. sqr (z1 -. z2)
+
 let make_map start colors =
   let rec loop idx acc = function
     | [] ->
@@ -82,18 +114,18 @@ let make_map start colors =
   for ir = 0 to count_r - 1 do
     for ig = 0 to count_g - 1 do
       for ib = 0 to count_b - 1 do
-        let r = value_r.(ir) and g = value_g.(ig) and b = value_b.(ib) in
+        let color = (value_r.(ir), value_g.(ig), value_b.(ib)) in
         let rec loop min idx_of_min = function
           | [] ->
               idx_of_min
-          | (idx, (r', g', b')) :: rest ->
-              let d = abs (r - r') + abs (g - g') + abs (b - b') in
+          | (idx, color') :: rest ->
+              let d = dist color color' in
               if d < min then
                 loop d idx rest
               else
                 loop min idx_of_min rest
         in
-        map.[ir + count_r * (ig + count_g * ib)] <- char_of_int (loop max_int 0 colors)
+        map.[ir + count_r * (ig + count_g * ib)] <- char_of_int (loop max_float 0 colors)
       done
     done
   done;
