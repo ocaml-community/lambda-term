@@ -7,7 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
-open React
+open Lwt_react
 open Lwt
 
 (* Format the time. *)
@@ -36,4 +36,4 @@ lwt () =
   in
 
   (* Run. *)
-  Lt_widget.run Lt_term.stdout widget (Lwt_event.next button#clicked)
+  Lt_widget.run Lt_term.stdout widget (E.next button#clicked)

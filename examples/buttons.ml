@@ -7,7 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
-open React
+open Lwt_react
 open Lwt
 open Lt_widget
 
@@ -28,4 +28,4 @@ lwt () =
                              (new button (S.const "button9"))#as_widget]))#as_widget;
        ])
   in
-  run Lt_term.stdout widget (Lwt_event.next button#clicked)
+  run Lt_term.stdout widget (E.next button#clicked)

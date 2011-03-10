@@ -7,7 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
-open React
+open Lwt_react
 open Lwt
 
 lwt () =
@@ -24,7 +24,7 @@ lwt () =
   in
 
   (* Exit when escape is pressed. *)
-  Lwt_event.always_notify
+  E.notify
     (function
        | { Lt_key.code = Lt_key.Escape } -> wakeup wakener ()
        | _ -> ())

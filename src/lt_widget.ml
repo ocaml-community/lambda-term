@@ -8,7 +8,7 @@
  *)
 
 open CamomileLibraryDyn.Camomile
-open React
+open Lwt_react
 open Lwt
 open Lt_types
 open Lt_draw
@@ -376,7 +376,7 @@ let run term ?(save_state=true) widget waiter =
   in
 
   (* Redraw the screen when the widget needs it. *)
-  let id = Lwt_event.notify_s draw widget#need_redraw in
+  let ev_redraw = E.map_s draw widget#need_redraw in
 
   try_lwt
     (* Initial drawing. *)
@@ -384,8 +384,8 @@ let run term ?(save_state=true) widget waiter =
     (* Loop forever. *)
     Lt_term.with_raw_mode term loop
   finally
-    (* Disable redrawing if something went wrong. *)
-    Lwt_event.disable id;
+    (* Disable redrawing. *)
+    E.stop ev_redraw;
     (* Restore the state of the terminal if previously saved. *)
     if save_state then
       Lt_term.load_state term

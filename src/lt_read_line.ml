@@ -9,7 +9,7 @@
  *)
 
 open CamomileLibraryDyn.Camomile
-open React
+open Lwt_react
 open Lwt
 open Lt_types
 open Lt_style
@@ -599,7 +599,7 @@ object(self)
 
     (* Redraw everything when needed. *)
     let event =
-      Lwt_event.map_p
+      E.map_p
         (fun () -> self#draw_update)
         (E.select [
            E.stamp (S.changes size) ();
