@@ -370,16 +370,31 @@ end
    | Predefined classes                                              |
    +-----------------------------------------------------------------+ *)
 
-class virtual read_line ?history () = object(self)
+class read_line ?history () = object(self)
   inherit [Zed_utf8.t] engine ?history ()
   method eval = Zed_rope.to_string (Zed_edit.text self#edit)
 end
 
-class virtual read_password () = object(self)
+class read_password () = object(self)
   inherit [Zed_utf8.t] engine ()
   method stylise = [String(String.make (Zed_rope.length (Zed_edit.text self#edit)) '*')]
   method eval = Zed_rope.to_string (Zed_edit.text self#edit)
   method show_completion = false
+end
+
+class ['a] read_keyword ?history () = object(self)
+  inherit [[ `Value of 'a | `Error of Zed_utf8.t ]] engine ?history ()
+
+  method keywords = []
+
+  method eval =
+    let input = Zed_rope.to_string (Zed_edit.text self#edit) in
+    try `Value(List.assoc input self#keywords) with Not_found -> `Error input
+
+  method complete =
+    let word = Zed_rope.to_string self#input_prev in
+    let keywords = List.filter (fun (keyword, value) -> Zed_utf8.starts_with keyword word) self#keywords in
+    return (0, List.map (fun (keyword, value) -> (keyword, "")) keywords)
 end
 
 (* +-----------------------------------------------------------------+

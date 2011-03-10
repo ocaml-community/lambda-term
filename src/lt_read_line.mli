@@ -152,7 +152,7 @@ end
 (** {6 Predefined classes} *)
 
 (** Simple read-line engine which returns the result as a string. *)
-class virtual read_line : ?history : history -> unit -> object
+class read_line : ?history : history -> unit -> object
   inherit [Zed_utf8.t] engine
 
   method eval : Zed_utf8.t
@@ -169,11 +169,23 @@ end
 
     Also showing completion is disabled.
 *)
-class virtual read_password : unit -> object
+class read_password : unit -> object
   inherit [Zed_utf8.t] engine
 
   method eval : Zed_utf8.t
     (** Returns the result as a UTF-8 encoded string. *)
+end
+
+(** Read a keyword. *)
+class ['a] read_keyword : ?history : history -> unit -> object
+  inherit [[ `Value of 'a | `Error of Zed_utf8.t ]] engine
+
+  method eval : [ `Value of 'a | `Error of Zed_utf8.t ]
+    (** If the input correspond to a keyword, returns its associated
+        value. otherwise returns [`Error input]. *)
+
+  method keywords : (string * 'a) list
+    (** List of keywords with their associated values. *)
 end
 
 (** {6 Running in a terminal} *)
