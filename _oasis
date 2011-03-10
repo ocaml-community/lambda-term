@@ -113,6 +113,13 @@ Executable shell
   MainIs: shell.ml
   BuildDepends: lambda-term, str
 
+Executable "read-password"
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: read_password.ml
+  BuildDepends: lambda-term
+
 # +-------------------------------------------------------------------+
 # | Doc                                                               |
 # +-------------------------------------------------------------------+

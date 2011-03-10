@@ -184,6 +184,25 @@ let bind key =
 let styled_of_rope rope =
   Zed_rope.rev_fold_leaf (fun leaf acc -> String leaf :: acc) rope []
 
+let rec break_styled styled index =
+  if index = 0 then
+    ([], styled)
+  else
+    match styled with
+      | [] ->
+          ([], [])
+      | String str as item :: rest ->
+          let len = Zed_utf8.length str in
+          if index >= len then
+            let a, b = break_styled rest (index - len) in
+            (item :: a, b)
+          else
+            let a, b = Zed_utf8.break str index in
+            ([String a], String b :: rest)
+      | item :: rest ->
+          let a, b = break_styled rest index in
+          (item :: a, b)
+
 class virtual ['a] engine ?(history=[]) () =
   let edit : unit Zed_edit.t = Zed_edit.create () in
   let context = Zed_edit.context edit (Zed_edit.new_cursor edit) in
@@ -193,6 +212,7 @@ object(self)
   method virtual eval : 'a
   method edit = edit
   method context = context
+  method show_completion = true
 
   (* The history before the history cursor. *)
   val mutable history_prev = history
@@ -329,8 +349,7 @@ object(self)
           ()
 
   method stylise =
-    let before, after = Zed_rope.break (Zed_edit.text edit) (Zed_cursor.get_position (Zed_edit.cursor context)) in
-    (styled_of_rope before, styled_of_rope after)
+    styled_of_rope (Zed_edit.text edit)
 end
 
 class virtual ['a] abstract = object
@@ -338,12 +357,13 @@ class virtual ['a] abstract = object
   method virtual send_action : action -> unit
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
-  method virtual stylise : Lt_style.text * Lt_style.text
+  method virtual stylise : Lt_style.text
   method virtual input_prev : Zed_rope.t
   method virtual input_next : Zed_rope.t
   method virtual completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
   method virtual completion_index : int signal
   method virtual complete : (int * (Zed_utf8.t * Zed_utf8.t) list) Lwt.t
+  method virtual show_completion : bool
 end
 
 (* +-----------------------------------------------------------------+
@@ -353,6 +373,13 @@ end
 class virtual read_line ?history () = object(self)
   inherit [Zed_utf8.t] engine ?history ()
   method eval = Zed_rope.to_string (Zed_edit.text self#edit)
+end
+
+class virtual read_password () = object(self)
+  inherit [Zed_utf8.t] engine ()
+  method stylise = [String(String.make (Zed_rope.length (Zed_edit.text self#edit)) '*')]
+  method eval = Zed_rope.to_string (Zed_edit.text self#edit)
+  method show_completion = false
 end
 
 (* +-----------------------------------------------------------------+
@@ -540,15 +567,20 @@ object(self)
         let start = S.value self#completion_start in
         let index = S.value self#completion_index in
         let words = drop start (S.value self#completion_words) in
-        let before, after = self#stylise in
+        let before, after = break_styled self#stylise (Zed_edit.position self#context) in
         let before = List.concat [S.value prompt; [Reset]; before] in
-        let after = List.concat [
-          after; [Reset];
-          (* The completion bar. *)
-          [String "\n┌"; String(make_bar "┬" (columns - 2) words); String "┐\n│"];
-          make_completion_bar_middle (index - start) (columns - 2) words;
-          [String "│\n└"; String(make_bar "┴" (columns - 2) words); String "┘\n"]
-        ] in
+        let after =
+          if self#show_completion then
+            List.concat [
+              after; [Reset];
+              (* The completion bar. *)
+              [String "\n┌"; String(make_bar "┬" (columns - 2) words); String "┐\n│"];
+              make_completion_bar_middle (index - start) (columns - 2) words;
+              [String "│\n└"; String(make_bar "┴" (columns - 2) words); String "┘\n"]
+            ]
+          else
+            after @ [Reset]
+        in
         let total = before @ after in
         let size = S.value size in
         lwt () =
@@ -569,7 +601,7 @@ object(self)
     end
 
   method draw_simple =
-    let before, after = self#stylise in
+    let before, after = break_styled self#stylise (Zed_edit.position self#context) in
     let before = List.concat [S.value prompt; [Reset]; before] in
     let total = List.concat [before; after; [Reset]] in
     Lt_term.fprintls term total

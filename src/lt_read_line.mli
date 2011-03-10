@@ -106,9 +106,8 @@ class virtual ['a] engine : ?history : history -> unit -> object
   method context : unit Zed_edit.context
     (** The context for the edition engine. *)
 
-  method stylise : Lt_style.text * Lt_style.text
-    (** Stylise current input. It must returns the text before the
-        cursor and the text after the cursor. *)
+  method stylise : Lt_style.text
+    (** Stylise current input. *)
 
   method input_prev : Zed_rope.t
     (** The input before the cursor. *)
@@ -130,6 +129,9 @@ class virtual ['a] engine : ?history : history -> unit -> object
         list of possible completions with their suffixes. The result
         is made available through the {!completions} signal. This
         thread may be canceled using {!Lwt.cancel}. *)
+
+  method show_completion : bool
+    (** Whether to show completion or not. It default to [true]. *)
 end
 
 (** Abstract version of {!engine}. *)
@@ -138,18 +140,38 @@ class virtual ['a] abstract : object
   method virtual send_action : action -> unit
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
-  method virtual stylise : Lt_style.text * Lt_style.text
+  method virtual stylise : Lt_style.text
   method virtual input_prev : Zed_rope.t
   method virtual input_next : Zed_rope.t
   method virtual completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
   method virtual completion_index : int signal
   method virtual complete : (int * (Zed_utf8.t * Zed_utf8.t) list) Lwt.t
+  method virtual show_completion : bool
 end
 
 (** {6 Predefined classes} *)
 
+(** Simple read-line engine which returns the result as a string. *)
 class virtual read_line : ?history : history -> unit -> object
   inherit [Zed_utf8.t] engine
+
+  method eval : Zed_utf8.t
+    (** Returns the result as a UTF-8 encoded string. *)
+end
+
+(** Read-line engine for reading a password. The [stylise] method
+    default to replacing all characters by ['*']. You can also for
+    example completely disable displaying the password by doing:
+
+    {[
+      method stylise = []
+    ]}
+
+    Also showing completion is disabled.
+*)
+class virtual read_password : unit -> object
+  inherit [Zed_utf8.t] engine
+
   method eval : Zed_utf8.t
     (** Returns the result as a UTF-8 encoded string. *)
 end

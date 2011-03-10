@@ -3,7 +3,7 @@
 <src/*>: use_iconv
 
 # OASIS_START
-# DO NOT EDIT (digest: c32578bf8eafeef3ca330fc606ee99a9)
+# DO NOT EDIT (digest: 8dc0f4b67a1e77f99daf6ef6ad93bfa0)
 # Library lambda-term
 "src": include
 <src/lambda-term.{cma,cmxa}>: use_liblambda-term
@@ -77,6 +77,12 @@
 <examples/colors.{native,byte}>: pkg_lwt.unix
 <examples/colors.{native,byte}>: pkg_lwt.syntax
 <examples/colors.{native,byte}>: pkg_lwt.react
+# Executable read-password
+<examples/read_password.{native,byte}>: use_lambda-term
+<examples/read_password.{native,byte}>: pkg_zed
+<examples/read_password.{native,byte}>: pkg_lwt.unix
+<examples/read_password.{native,byte}>: pkg_lwt.syntax
+<examples/read_password.{native,byte}>: pkg_lwt.react
 # Executable hello
 <examples/hello.{native,byte}>: use_lambda-term
 <examples/hello.{native,byte}>: pkg_zed
