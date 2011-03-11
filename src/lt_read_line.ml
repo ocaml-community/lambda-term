@@ -411,8 +411,29 @@ let rec drop count l =
     | e :: l -> drop (count - 1) l
 
 (* Computes the position of the cursor after printing the given styled
-   string. *)
-let rec compute_position size pos = function
+   string, assuming the terminal is a windows one. *)
+let rec compute_position_windows size pos = function
+  | [] ->
+      pos
+  | String str :: rest ->
+      let pos =
+        Zed_utf8.fold
+          (fun ch pos ->
+             if ch = newline then
+               { line = pos.line + 1; column = 0 }
+             else if pos.column + 1 = size.columns then
+               { line = pos.line + 1; column = 0 }
+             else
+               { pos with column = pos.column + 1 })
+          str pos
+      in
+      compute_position_windows size pos rest
+  | _ :: rest ->
+      compute_position_windows size pos rest
+
+(* Same thing but for Unix. On Unix the cursor can be at the end of
+   the line. *)
+let rec compute_position_unix size pos = function
   | [] ->
       pos
   | String str :: rest ->
@@ -427,9 +448,9 @@ let rec compute_position size pos = function
                { pos with column = pos.column + 1 })
           str pos
       in
-      compute_position size pos rest
+      compute_position_unix size pos rest
   | _ :: rest ->
-      compute_position size pos rest
+      compute_position_unix size pos rest
 
 let make_completion_bar_middle index columns words =
   let rec aux ofs idx = function
@@ -496,6 +517,11 @@ let rec get_index_of_last_displayed_word column columns index words =
           get_index_of_last_displayed_word (column + 1) columns (index + 1) words
         else
           index - 1
+
+let rec styled_is_empty = function
+  | [] -> true
+  | String str :: rest -> str = "" && styled_is_empty rest
+  | _ :: rest -> styled_is_empty rest
 
 class virtual ['a] term term =
   let size, set_size = S.create { columns = 80; lines = 25 } in
@@ -578,26 +604,6 @@ object(self)
       draw_queued <- false;
 
       if visible then begin
-        let { columns } = S.value size in
-        let start = S.value self#completion_start in
-        let index = S.value self#completion_index in
-        let words = drop start (S.value self#completion_words) in
-        let before, after = break_styled self#stylise (Zed_edit.position self#context) in
-        let before = List.concat [S.value prompt; [Reset]; before] in
-        let after =
-          if self#show_completion then
-            List.concat [
-              after; [Reset];
-              (* The completion bar. *)
-              [String "\n┌"; String(make_bar "┬" (columns - 2) words); String "┐\n│"];
-              make_completion_bar_middle (index - start) (columns - 2) words;
-              [String "│\n└"; String(make_bar "┴" (columns - 2) words); String "┘\n"]
-            ]
-          else
-            after @ [Reset]
-        in
-        let total = before @ after in
-        let size = S.value size in
         lwt () =
           if displayed then
             self#erase
@@ -606,11 +612,55 @@ object(self)
             return ()
           end
         in
-        cursor <- compute_position size { column = 0; line = 0 } before;
-        end_of_display <- compute_position size cursor after;
-        lwt () = Lt_term.fprints term total in
-        lwt () = Lt_term.move term (cursor.line - end_of_display.line) (cursor.column - end_of_display.column) in
-        Lt_term.flush term
+        let { columns } = S.value size in
+        let start = S.value self#completion_start in
+        let index = S.value self#completion_index in
+        let words = drop start (S.value self#completion_words) in
+        let before, after = break_styled self#stylise (Zed_edit.position self#context) in
+        let before = List.concat [S.value prompt; [Reset]; before] in
+        let box =
+          if self#show_completion then
+            List.concat [
+              [String "\n┌"; String(make_bar "┬" (columns - 2) words); String "┐\n│"];
+              make_completion_bar_middle (index - start) (columns - 2) words;
+              [String "│\n└"; String(make_bar "┴" (columns - 2) words); String "┘"]
+            ]
+          else
+            []
+        in
+        let size = S.value size in
+        if Lt_term.windows term then begin
+          let after = List.concat [after; [Reset]; box] in
+          cursor <- compute_position_windows size { column = 0; line = 0 } before;
+          end_of_display <- compute_position_windows size cursor after;
+          lwt () = Lt_term.fprints term (before @ after) in
+          lwt () = Lt_term.move term (cursor.line - end_of_display.line) (cursor.column - end_of_display.column) in
+          Lt_term.flush term
+        end else begin
+          cursor <- compute_position_unix size { column = 0; line = 0 } before;
+          end_of_display <- compute_position_unix size cursor (after @ box);
+          let after =
+            if cursor.column = size.columns && styled_is_empty after then begin
+              (* If the cursor is at the end of line and there is
+                 nothing after, insert a newline character. *)
+              let after = List.concat [after; [String "\n"; Reset]; box] in
+              cursor <- compute_position_unix size { column = 0; line = 0 } before;
+              end_of_display <- compute_position_unix size cursor after;
+              after
+            end else
+              List.concat [after; [Reset]; box]
+          in
+          (* If the cursor is at the end of line, move it to the
+             beginning of the next line. *)
+          if cursor.column = size.columns then
+            cursor <- { column = 0; line = cursor.line + 1 };
+          (* Fix the position of the end of display. *)
+          if end_of_display.column = size.columns then
+            end_of_display <- { end_of_display with column = size.columns - 1 };
+          lwt () = Lt_term.fprints term (before @ after) in
+          lwt () = Lt_term.move term (cursor.line - end_of_display.line) (cursor.column - end_of_display.column) in
+          Lt_term.flush term
+        end
       end else
         return ()
     end
@@ -692,6 +742,9 @@ object(self)
 
     lwt result =
       try_lwt
+        (* Go to the beginning of line otherwise all offset
+           calculation will be false. *)
+        lwt () = Lt_term.fprint term "\r" in
         lwt () = self#draw_update in
         loop ()
       with exn ->
