@@ -65,11 +65,13 @@ lwt () =
   let term = Lt_term.stdout in
   lwt () = Lt_term.save_state term in
   lwt () = Lt_term.hide_cursor term in
+  lwt mode = Lt_term.enter_raw_mode term in
   try_lwt
     lwt size = Lt_term.get_size term in
     let coord = { line = size.lines / 2; column = size.columns / 2 } in
     lwt matrix = render term [||] size coord in
-    Lt_term.with_raw_mode term (fun () -> loop term coord size matrix)
+    loop term coord size matrix
   finally
+    lwt () = Lt_term.leave_raw_mode term mode in
     lwt () = Lt_term.show_cursor term in
     Lt_term.load_state term

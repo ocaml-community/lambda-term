@@ -17,11 +17,6 @@ open Lt_types
 
 exception Not_a_tty
 
-type attributes =
-  | Attr_none
-  | Attr_unix of Unix.terminal_io
-  | Attr_windows of Lt_windows.console_mode
-
 type t = {
   model : string;
   colors : int;
@@ -30,11 +25,8 @@ type t = {
   color_map : Lt_color_mappings.map;
   (* Informations. *)
 
-  mutable saved_attr : attributes;
-  (* Saved terminal attributes. *)
-
-  mutable raw_mode_count : int;
-  (* How many functions are currently using the raw mode. *)
+  mutable raw_mode : bool;
+  (* Whether the terminal is currently in raw mode. *)
 
   incoming_fd : Lwt_unix.file_descr;
   outgoing_fd : Lwt_unix.file_descr;
@@ -103,8 +95,7 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
          | 88 -> Lt_color_mappings.colors_88
          | 256 -> Lt_color_mappings.colors_256
          | n -> Printf.ksprintf failwith "Lt_term.create: unknown number of colors (%d)" n);
-    saved_attr = Attr_none;
-    raw_mode_count = 0;
+    raw_mode = false;
     incoming_fd;
     outgoing_fd;
     ic;
@@ -172,76 +163,58 @@ let set_size term size =
    | Modes                                                           |
    +-----------------------------------------------------------------+ *)
 
-let enter_raw_mode term =
-  match term.saved_attr with
-    | Attr_unix _ | Attr_windows _ ->
-        return ()
-    | Attr_none ->
-        if term.windows then begin
-          let mode = Lt_windows.get_console_mode term.incoming_fd in
-          term.saved_attr <- Attr_windows mode;
-          Lt_windows.set_console_mode term.incoming_fd {
-            mode with
-              Lt_windows.cm_echo_input = false;
-              Lt_windows.cm_line_input = false;
-              Lt_windows.cm_mouse_input = true;
-              Lt_windows.cm_processed_input = false;
-              Lt_windows.cm_window_input = true;
-          };
-          return ()
-        end else begin
-          lwt attr = Lwt_unix.tcgetattr term.incoming_fd in
-          term.saved_attr <- Attr_unix attr;
-          lwt () = Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH {
-            attr with
-              (* Inspired from Python-3.0/Lib/tty.py: *)
-              Unix.c_brkint = false;
-              Unix.c_inpck = false;
-              Unix.c_istrip = false;
-              Unix.c_ixon = false;
-              Unix.c_csize = 8;
-              Unix.c_parenb = false;
-              Unix.c_echo = false;
-              Unix.c_icanon = false;
-              Unix.c_isig = false;
-              Unix.c_vmin = 1;
-              Unix.c_vtime = 0;
-          } in
-          return ()
-        end
+type mode =
+  | Mode_fake
+  | Mode_unix of Unix.terminal_io
+  | Mode_windows of Lt_windows.console_mode
 
-let leave_raw_mode term =
-  match term.saved_attr with
-    | Attr_none ->
+let enter_raw_mode term =
+  if term.raw_mode then
+    return Mode_fake
+  else if term.windows then begin
+    let mode = Lt_windows.get_console_mode term.incoming_fd in
+    Lt_windows.set_console_mode term.incoming_fd {
+      mode with
+        Lt_windows.cm_echo_input = false;
+        Lt_windows.cm_line_input = false;
+        Lt_windows.cm_mouse_input = true;
+        Lt_windows.cm_processed_input = false;
+        Lt_windows.cm_window_input = true;
+    };
+    term.raw_mode <- true;
+    return (Mode_windows mode)
+  end else begin
+    lwt attr = Lwt_unix.tcgetattr term.incoming_fd in
+    lwt () = Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH {
+      attr with
+        (* Inspired from Python-3.0/Lib/tty.py: *)
+        Unix.c_brkint = false;
+        Unix.c_inpck = false;
+        Unix.c_istrip = false;
+        Unix.c_ixon = false;
+        Unix.c_csize = 8;
+        Unix.c_parenb = false;
+        Unix.c_echo = false;
+        Unix.c_icanon = false;
+        Unix.c_isig = false;
+        Unix.c_vmin = 1;
+        Unix.c_vtime = 0;
+    } in
+    term.raw_mode <- true;
+    return (Mode_unix attr)
+  end
+
+let leave_raw_mode term mode =
+  match mode with
+    | Mode_fake ->
         return ()
-    | Attr_unix attr ->
-        term.saved_attr <- Attr_none;
+    | Mode_unix attr ->
+        term.raw_mode <- false;
         Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH attr
-    | Attr_windows mode ->
-        term.saved_attr <- Attr_none;
+    | Mode_windows mode ->
+        term.raw_mode <- false;
         Lt_windows.set_console_mode term.incoming_fd mode;
         return ()
-
-let with_raw_mode term f =
-  Lazy.force term.incoming_is_a_tty >>= function
-    | false ->
-        raise_lwt Not_a_tty
-    | true ->
-        lwt () =
-          if term.raw_mode_count > 0 then
-            return ()
-          else
-            enter_raw_mode term
-        in
-        term.raw_mode_count <- term.raw_mode_count + 1;
-        try_lwt
-          f ()
-        finally
-          term.raw_mode_count <- term.raw_mode_count - 1;
-          if term.raw_mode_count = 0 then
-            leave_raw_mode term
-          else
-            return ()
 
 let enable_mouse term =
   Lazy.force term.outgoing_is_a_tty >>= function
@@ -485,35 +458,33 @@ let load_state term =
    +-----------------------------------------------------------------+ *)
 
 let read_event term =
-  with_raw_mode term
-    (fun () ->
-       if term.windows then
-         Lt_windows.read_console_input term.incoming_fd >>= function
-           | Lt_windows.Resize ->
-               lwt size = get_size term in
-               return (Lt_event.Resize size)
-           | Lt_windows.Key key ->
-               return (Lt_event.Key key)
-           | Lt_windows.Mouse mouse ->
-               let window = (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.window in
-               return (Lt_event.Mouse {
-                         mouse with
-                           Lt_mouse.line = mouse.Lt_mouse.line - window.r_line;
-                           Lt_mouse.column = mouse.Lt_mouse.column - window.r_column;
-                       })
-       else if term.size_changed then begin
-         term.size_changed <- false;
-         lwt size = get_size term in
-         return (Lt_event.Resize size)
-       end else
-         pick [Lt_unix.parse_event term.incoming_cd term.input_stream >|= (fun ev -> `Event ev);
-               Lwt_condition.wait term.size_changed_cond] >>= function
-           | `Event ev ->
-               return ev
-           | `Resize ->
-               term.size_changed <- false;
-               lwt size = get_size term in
-               return (Lt_event.Resize size))
+  if term.windows then
+    Lt_windows.read_console_input term.incoming_fd >>= function
+      | Lt_windows.Resize ->
+          lwt size = get_size term in
+          return (Lt_event.Resize size)
+      | Lt_windows.Key key ->
+          return (Lt_event.Key key)
+      | Lt_windows.Mouse mouse ->
+          let window = (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.window in
+          return (Lt_event.Mouse {
+                    mouse with
+                      Lt_mouse.line = mouse.Lt_mouse.line - window.r_line;
+                      Lt_mouse.column = mouse.Lt_mouse.column - window.r_column;
+                  })
+  else if term.size_changed then begin
+    term.size_changed <- false;
+    lwt size = get_size term in
+    return (Lt_event.Resize size)
+  end else
+    pick [Lt_unix.parse_event term.incoming_cd term.input_stream >|= (fun ev -> `Event ev);
+          Lwt_condition.wait term.size_changed_cond] >>= function
+      | `Event ev ->
+          return ev
+      | `Resize ->
+          term.size_changed <- false;
+          lwt size = get_size term in
+          return (Lt_event.Resize size)
 
 (* +-----------------------------------------------------------------+
    | Styled printing                                                 |

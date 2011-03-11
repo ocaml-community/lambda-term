@@ -752,6 +752,15 @@ object(self)
             loop ()
     in
 
+    lwt mode =
+      match_lwt Lt_term.is_a_tty term with
+        | true ->
+            lwt mode = Lt_term.enter_raw_mode term in
+            return (Some mode)
+        | false ->
+            return None
+    in
+
     lwt result =
       try_lwt
         (* Go to the beginning of line otherwise all offset
@@ -763,6 +772,12 @@ object(self)
         E.stop event;
         lwt () = self#draw_failure in
         raise_lwt exn
+      finally
+        match mode with
+          | Some mode ->
+              Lt_term.leave_raw_mode term mode
+          | None ->
+              return ()
     in
     E.stop event;
     lwt () = self#draw_success in

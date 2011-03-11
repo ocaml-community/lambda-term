@@ -375,6 +375,9 @@ let run term ?(save_state=true) widget waiter =
       return ()
   in
 
+  (* Put the terminal in raw mode. *)
+  lwt mode = Lt_term.enter_raw_mode term in
+
   (* Redraw the screen when the widget needs it. *)
   let ev_redraw = E.map_s draw widget#need_redraw in
 
@@ -382,10 +385,12 @@ let run term ?(save_state=true) widget waiter =
     (* Initial drawing. *)
     lwt () = draw () in
     (* Loop forever. *)
-    Lt_term.with_raw_mode term loop
+    loop ()
   finally
     (* Disable redrawing. *)
     E.stop ev_redraw;
+    (* Restore the terminal mode. *)
+    lwt () = Lt_term.leave_raw_mode term mode in
     (* Restore the state of the terminal if previously saved. *)
     if save_state then
       Lt_term.load_state term

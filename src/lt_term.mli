@@ -86,13 +86,21 @@ val set_size : t -> Lt_types.size -> unit Lwt.t
 
 (** {6 Modes} *)
 
-val with_raw_mode : t -> (unit -> 'a Lwt.t) -> 'a Lwt.t
-  (** [with_raw_mode term f] executes [f] while the terminal is in
-      ``raw mode''. In this mode keyboard events are returned as they
-      happen. In normal mode only complete line are returned.
+type mode
+  (** Type of terminal modes. *)
+
+val enter_raw_mode : t -> mode Lwt.t
+  (** [enter_raw_mode term] puts the terminal in ``raw mode''. In this
+      mode keyboard events are returned as they happen. In normal mode
+      only complete line are returned. It returns the current terminal
+      mode that can be restored using {!leave_raw_mode}.
 
       It raises {!Not_a_tty} if input of the given terminal is not
       tty. *)
+
+val leave_raw_mode : t -> mode -> unit Lwt.t
+  (** [leave_raw_mode term mode] leaves the raw mode by restoring the
+      given mode. *)
 
 val enable_mouse : t -> unit Lwt.t
   (** Enable mouse events reporting.
@@ -176,9 +184,9 @@ val load_state : t -> unit Lwt.t
 (** {6 Events} *)
 
 val read_event : t -> Lt_event.t Lwt.t
-  (** Reads and returns one event.
-
-      It raises {!Not_a_tty} if the input of the given terminal is not
+  (** Reads and returns one event. The terminal should be in raw mode
+      before calling this function, otherwise event will not be
+      reported as they happen. It does not fail if the terminal is not
       a tty. *)
 
 (** {6 Printing} *)
