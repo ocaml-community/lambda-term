@@ -578,6 +578,8 @@ object(self)
 
   method completion_start = completion_start
 
+  val draw_mutex = Lwt_mutex.create ()
+
   method private erase =
     (* Move back to the beginning of printed material. *)
     lwt () = Lt_term.move term (-cursor.line) (-cursor.column) in
@@ -597,87 +599,97 @@ object(self)
   method draw_update =
     if draw_queued then
       return ()
-    else begin
-      (* Wait a bit in order not to draw too often. *)
-      draw_queued <- true;
-      lwt () = pause () in
-      draw_queued <- false;
+    else
+      lwt () = Lwt_mutex.lock draw_mutex in
+      try_lwt
+        (* Wait a bit in order not to draw too often. *)
+        draw_queued <- true;
+        lwt () = pause () in
+        draw_queued <- false;
 
-      if visible then begin
-        lwt () =
-          if displayed then
-            self#erase
-          else begin
-            displayed <- true;
-            return ()
-          end
-        in
-        let { columns } = S.value size in
-        let start = S.value self#completion_start in
-        let index = S.value self#completion_index in
-        let words = drop start (S.value self#completion_words) in
-        let before, after = break_styled self#stylise (Zed_edit.position self#context) in
-        let before = List.concat [S.value prompt; [Reset]; before] in
-        let box =
-          if self#show_completion then
-            List.concat [
-              [String "\n┌"; String(make_bar "┬" (columns - 2) words); String "┐\n│"];
-              make_completion_bar_middle (index - start) (columns - 2) words;
-              [String "│\n└"; String(make_bar "┴" (columns - 2) words); String "┘"]
-            ]
-          else
-            []
-        in
-        let size = S.value size in
-        if Lt_term.windows term then begin
-          let after = List.concat [after; [Reset]; box] in
-          cursor <- compute_position_windows size { column = 0; line = 0 } before;
-          end_of_display <- compute_position_windows size cursor after;
-          lwt () = Lt_term.fprints term (before @ after) in
-          lwt () = Lt_term.move term (cursor.line - end_of_display.line) (cursor.column - end_of_display.column) in
-          Lt_term.flush term
-        end else begin
-          cursor <- compute_position_unix size { column = 0; line = 0 } before;
-          end_of_display <- compute_position_unix size cursor (after @ box);
-          let after =
-            if cursor.column = size.columns && styled_is_empty after then begin
-              (* If the cursor is at the end of line and there is
-                 nothing after, insert a newline character. *)
-              let after = List.concat [after; [String "\n"; Reset]; box] in
-              cursor <- compute_position_unix size { column = 0; line = 0 } before;
-              end_of_display <- compute_position_unix size cursor after;
-              after
-            end else
-              List.concat [after; [Reset]; box]
+        if visible then begin
+          lwt () =
+            if displayed then
+              self#erase
+            else begin
+              displayed <- true;
+              return ()
+            end
           in
-          (* If the cursor is at the end of line, move it to the
-             beginning of the next line. *)
-          if cursor.column = size.columns then
-            cursor <- { column = 0; line = cursor.line + 1 };
-          (* Fix the position of the end of display. *)
-          if end_of_display.column = size.columns then
-            end_of_display <- { end_of_display with column = size.columns - 1 };
-          lwt () = Lt_term.fprints term (before @ after) in
-          lwt () = Lt_term.move term (cursor.line - end_of_display.line) (cursor.column - end_of_display.column) in
-          Lt_term.flush term
-        end
-      end else
+          let { columns } = S.value size in
+          let start = S.value self#completion_start in
+          let index = S.value self#completion_index in
+          let words = drop start (S.value self#completion_words) in
+          let before, after = break_styled self#stylise (Zed_edit.position self#context) in
+          let before = List.concat [S.value prompt; [Reset]; before] in
+          let box =
+            if self#show_completion then
+              List.concat [
+                [String "\n┌"; String(make_bar "┬" (columns - 2) words); String "┐\n│"];
+                make_completion_bar_middle (index - start) (columns - 2) words;
+                [String "│\n└"; String(make_bar "┴" (columns - 2) words); String "┘"]
+              ]
+            else
+              []
+          in
+          let size = S.value size in
+          if Lt_term.windows term then begin
+            let after = List.concat [after; [Reset]; box] in
+            cursor <- compute_position_windows size { column = 0; line = 0 } before;
+            end_of_display <- compute_position_windows size cursor after;
+            lwt () = Lt_term.fprints term (before @ after) in
+            lwt () = Lt_term.move term (cursor.line - end_of_display.line) (cursor.column - end_of_display.column) in
+            Lt_term.flush term
+          end else begin
+            cursor <- compute_position_unix size { column = 0; line = 0 } before;
+            end_of_display <- compute_position_unix size cursor (after @ box);
+            let after =
+              if cursor.column = size.columns && styled_is_empty after then begin
+                (* If the cursor is at the end of line and there is
+                   nothing after, insert a newline character. *)
+                let after = List.concat [after; [String "\n"; Reset]; box] in
+                cursor <- compute_position_unix size { column = 0; line = 0 } before;
+                end_of_display <- compute_position_unix size cursor after;
+                after
+              end else
+                List.concat [after; [Reset]; box]
+            in
+            (* If the cursor is at the end of line, move it to the
+               beginning of the next line. *)
+            if cursor.column = size.columns then
+              cursor <- { column = 0; line = cursor.line + 1 };
+            (* Fix the position of the end of display. *)
+            if end_of_display.column = size.columns then
+              end_of_display <- { end_of_display with column = size.columns - 1 };
+            lwt () = Lt_term.fprints term (before @ after) in
+            lwt () = Lt_term.move term (cursor.line - end_of_display.line) (cursor.column - end_of_display.column) in
+            Lt_term.flush term
+          end
+        end else
+          return ()
+      finally
+        Lwt_mutex.unlock draw_mutex;
         return ()
-    end
 
-  method draw_simple =
-    let before, after = break_styled self#stylise (Zed_edit.position self#context) in
-    let before = List.concat [S.value prompt; [Reset]; before] in
-    let total = List.concat [before; after; [Reset]] in
-    Lt_term.fprintls term total
+  method draw_success =
+    lwt () = Lwt_mutex.lock draw_mutex in
+    try_lwt
+      lwt () = if visible then self#erase else return () in
+      let before, after = break_styled self#stylise (Zed_edit.position self#context) in
+      let before = List.concat [S.value prompt; [Reset]; before] in
+      let total = List.concat [before; after; [Reset]] in
+      Lt_term.fprintls term total
+    finally
+      Lwt_mutex.unlock draw_mutex;
+      return ()
 
-  method draw_accept =
-    self#draw_simple
+  method draw_failure =
+    self#draw_success
 
   method hide =
     if visible then begin
       visible <- false;
-      self#erase
+      Lwt_mutex.with_lock draw_mutex (fun () -> self#erase)
     end else
       return ()
 
@@ -749,12 +761,10 @@ object(self)
         loop ()
       with exn ->
         E.stop event;
-        lwt () = if visible then self#erase else return () in
-        lwt () = self#draw_simple in
+        lwt () = self#draw_failure in
         raise_lwt exn
     in
     E.stop event;
-    lwt () = if visible then self#erase else return () in
-    lwt () = self#draw_accept in
+    lwt () = self#draw_success in
     return result
 end

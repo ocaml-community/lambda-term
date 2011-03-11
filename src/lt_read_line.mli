@@ -201,13 +201,11 @@ class virtual ['a] term : Lt_term.t -> object
     (** Updates current display and put the cursor at current edition
         position. *)
 
-  method draw_simple : unit Lwt.t
-    (** Draws everything but without the intention of updating
-        latter. Also the cursor should be left after the text
-        displayed. *)
+  method draw_success : unit Lwt.t
+    (** Draws after accepting current input. *)
 
-  method draw_accept : unit Lwt.t
-    (** Draws after accepting. *)
+  method draw_failure : unit Lwt.t
+    (** Draws after an exception has been raised. *)
 
   method prompt : prompt signal
     (** The signal holding the prompt. *)
