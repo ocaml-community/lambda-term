@@ -706,10 +706,12 @@ object(self)
     lwt initial_size = Lt_term.get_size term in
     set_size initial_size;
 
+    let running = ref true in
+
     (* Redraw everything when needed. *)
     let event =
       E.map_p
-        (fun () -> self#draw_update)
+        (fun () -> if !running then self#draw_update else return ())
         (E.select [
            E.stamp (S.changes size) ();
            E.stamp (Zed_edit.changes self#edit) ();
@@ -769,6 +771,7 @@ object(self)
         lwt () = self#draw_update in
         loop ()
       with exn ->
+        running := false;
         E.stop event;
         lwt () = self#draw_failure in
         raise_lwt exn
@@ -779,6 +782,7 @@ object(self)
           | None ->
               return ()
     in
+    running := false;
     E.stop event;
     lwt () = self#draw_success in
     return result
