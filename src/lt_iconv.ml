@@ -16,6 +16,22 @@ exception Unterminated_sequence
 exception Insufficient_space
 
 let () =
+  Printexc.register_printer
+    (function
+       | Closed ->
+           Some("iconv: closed conversions descriptor")
+       | Unsupported(enc_of, enc_to) ->
+           Some(Printf.sprintf "iconv: conversion from %S to %S not supported" enc_of enc_to)
+       | Invalid_sequence ->
+           Some("iconv: invalid sequence found")
+       | Unterminated_sequence ->
+           Some("iconv: sequence not terminated found at the end of input")
+       | Insufficient_space ->
+           Some("iconv: insufficient space in output")
+       | _ ->
+           None)
+
+let () =
   Callback.register_exception "lambda-term:iconv:closed" Closed;
   Callback.register_exception "lambda-term:iconv:unsupported" (Unsupported("", ""));
   Callback.register_exception "lambda-term:iconv:invalid-sequence" Invalid_sequence;

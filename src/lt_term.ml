@@ -17,6 +17,12 @@ open Lt_types
 
 exception Not_a_tty
 
+let () =
+  Printexc.register_printer
+    (function
+       | Not_a_tty -> Some "terminal is not a tty"
+       | _ -> None)
+
 type t = {
   model : string;
   colors : int;
