@@ -36,4 +36,5 @@ lwt () =
   in
 
   (* Run. *)
-  Lt_widget.run Lt_term.stdout widget (E.next button#clicked)
+  lwt term = Lazy.force Lt_term.stdout in
+  Lt_widget.run term widget (E.next button#clicked)

@@ -62,7 +62,7 @@ let rec loop term coord size matrix =
         loop term coord size matrix
 
 lwt () =
-  let term = Lt_term.stdout in
+  lwt term = Lazy.force Lt_term.stdout in
   lwt () = Lt_term.save_state term in
   lwt () = Lt_term.hide_cursor term in
   lwt mode = Lt_term.enter_raw_mode term in

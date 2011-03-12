@@ -109,9 +109,9 @@ let time =
   ignore (Lwt_engine.on_timer 1.0 true (fun _ -> set_time (Unix.time ())));
   time
 
-class read_line ~history ~exit_code = object(self)
+class read_line ~term ~history ~exit_code = object(self)
   inherit Lt_read_line.read_line ~history ()
-  inherit [Zed_utf8.t] Lt_read_line.term Lt_term.stdout
+  inherit [Zed_utf8.t] Lt_read_line.term term
 
   method complete =
     let prefix  = Zed_rope.to_string self#input_prev in
@@ -127,11 +127,11 @@ end
    | Main loop                                                       |
    +-----------------------------------------------------------------+ *)
 
-let rec loop history exit_code =
-  lwt size = Lt_term.get_size Lt_term.stdout in
-  lwt command = (new read_line ~history ~exit_code)#run in
+let rec loop term history exit_code =
+  lwt command = (new read_line ~term ~history ~exit_code)#run in
   lwt status = Lwt_process.exec (Lwt_process.shell command) in
   loop
+    term
     (Lt_read_line.add_entry command history)
     (match status with
        | Unix.WEXITED code -> code
@@ -144,6 +144,7 @@ let rec loop history exit_code =
 
 lwt () =
   try_lwt
-    loop [] 0
+    lwt term = Lazy.force Lt_term.stdout in
+    loop term [] 0
   with Lt_read_line.Interrupt ->
     return ()

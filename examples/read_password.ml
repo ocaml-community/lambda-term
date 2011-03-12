@@ -12,14 +12,15 @@
 open Lwt_react
 open Lt_style
 
-class read_password = object(self)
+class read_password term = object(self)
   inherit Lt_read_line.read_password ()
-  inherit [Zed_utf8.t] Lt_read_line.term Lt_term.stdout
+  inherit [Zed_utf8.t] Lt_read_line.term term
 
   initializer
     self#set_prompt (S.const [String "type a password: "])
 end
 
 lwt () =
-  lwt password = (new read_password)#run in
+  lwt term = Lazy.force Lt_term.stdout in
+  lwt password = (new read_password term)#run in
   Lwt_io.printlf "You typed %S" password

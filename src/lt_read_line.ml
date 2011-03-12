@@ -755,7 +755,7 @@ object(self)
     in
 
     lwt mode =
-      match_lwt Lt_term.is_a_tty term with
+      match Lt_term.is_a_tty term with
         | true ->
             lwt mode = Lt_term.enter_raw_mode term in
             return (Some mode)

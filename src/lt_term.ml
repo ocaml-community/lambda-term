@@ -50,8 +50,8 @@ type t = {
   size_changed_cond : [ `Resize | `Event of Lt_event.t ] Lwt_condition.t;
   (* Condition used to wakeup the read_event thread on unix. *)
 
-  incoming_is_a_tty : bool Lwt.t Lazy.t;
-  outgoing_is_a_tty : bool Lwt.t Lazy.t;
+  incoming_is_a_tty : bool;
+  outgoing_is_a_tty : bool;
   (* Whether input/output are tty devices. *)
 }
 
@@ -83,6 +83,8 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
            Lt_unix.system_encoding)
   in
   let colors = colors_of_term model in
+  lwt incoming_is_a_tty = Lwt_unix.isatty incoming_fd
+  and outgoing_is_a_tty = Lwt_unix.isatty outgoing_fd in
   let term = {
     model;
     colors;
@@ -104,8 +106,8 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
     input_stream = Lwt_stream.from (fun () -> Lwt_io.read_char_opt ic);
     size_changed = false;
     size_changed_cond = Lwt_condition.create ();
-    incoming_is_a_tty = lazy(Lwt_unix.isatty incoming_fd);
-    outgoing_is_a_tty = lazy(Lwt_unix.isatty outgoing_fd);
+    incoming_is_a_tty;
+    outgoing_is_a_tty;
   } in
   if not windows then begin
     match Lt_unix.sigwinch with
@@ -118,16 +120,14 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
       | None ->
           ()
   end;
-  term
+  return term
 
 let model t = t.model
 let colors t = t.colors
 let windows t = t.windows
-let is_a_tty t =
-  lwt a = Lazy.force t.incoming_is_a_tty and b = Lazy.force t.outgoing_is_a_tty in
-  return (a && b)
-let incoming_is_a_tty t = Lazy.force t.incoming_is_a_tty
-let outgoing_is_a_tty t = Lazy.force t.outgoing_is_a_tty
+let is_a_tty t = t.incoming_is_a_tty && t.outgoing_is_a_tty
+let incoming_is_a_tty t = t.incoming_is_a_tty
+let outgoing_is_a_tty t = t.outgoing_is_a_tty
 
 (* +-----------------------------------------------------------------+
    | Sizes                                                           |
@@ -145,18 +145,16 @@ let set_size_from_fd fd size =
   return (set_size_from_fd (Lwt_unix.unix_file_descr fd) size)
 
 let get_size term =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        get_size_from_fd term.outgoing_fd
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    get_size_from_fd term.outgoing_fd
+  else
+    raise_lwt Not_a_tty
 
 let set_size term size =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        set_size_from_fd term.outgoing_fd size
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    set_size_from_fd term.outgoing_fd size
+  else
+    raise_lwt Not_a_tty
 
 (* +-----------------------------------------------------------------+
    | Modes                                                           |
@@ -168,289 +166,281 @@ type mode =
   | Mode_windows of Lt_windows.console_mode
 
 let enter_raw_mode term =
-  if term.raw_mode then
-    return Mode_fake
-  else if term.windows then begin
-    let mode = Lt_windows.get_console_mode term.incoming_fd in
-    Lt_windows.set_console_mode term.incoming_fd {
-      mode with
-        Lt_windows.cm_echo_input = false;
-        Lt_windows.cm_line_input = false;
-        Lt_windows.cm_mouse_input = true;
-        Lt_windows.cm_processed_input = false;
-        Lt_windows.cm_window_input = true;
-    };
-    term.raw_mode <- true;
-    return (Mode_windows mode)
-  end else begin
-    lwt attr = Lwt_unix.tcgetattr term.incoming_fd in
-    lwt () = Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH {
-      attr with
-        (* Inspired from Python-3.0/Lib/tty.py: *)
-        Unix.c_brkint = false;
-        Unix.c_inpck = false;
-        Unix.c_istrip = false;
-        Unix.c_ixon = false;
-        Unix.c_csize = 8;
-        Unix.c_parenb = false;
-        Unix.c_echo = false;
-        Unix.c_icanon = false;
-        Unix.c_isig = false;
-        Unix.c_vmin = 1;
-        Unix.c_vtime = 0;
-    } in
-    term.raw_mode <- true;
-    return (Mode_unix attr)
-  end
+  if term.incoming_is_a_tty then
+    if term.raw_mode then
+      return Mode_fake
+    else if term.windows then begin
+      let mode = Lt_windows.get_console_mode term.incoming_fd in
+      Lt_windows.set_console_mode term.incoming_fd {
+        mode with
+          Lt_windows.cm_echo_input = false;
+          Lt_windows.cm_line_input = false;
+          Lt_windows.cm_mouse_input = true;
+          Lt_windows.cm_processed_input = false;
+          Lt_windows.cm_window_input = true;
+      };
+      term.raw_mode <- true;
+      return (Mode_windows mode)
+    end else begin
+      lwt attr = Lwt_unix.tcgetattr term.incoming_fd in
+      lwt () = Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH {
+        attr with
+          (* Inspired from Python-3.0/Lib/tty.py: *)
+          Unix.c_brkint = false;
+          Unix.c_inpck = false;
+          Unix.c_istrip = false;
+          Unix.c_ixon = false;
+          Unix.c_csize = 8;
+          Unix.c_parenb = false;
+          Unix.c_echo = false;
+          Unix.c_icanon = false;
+          Unix.c_isig = false;
+          Unix.c_vmin = 1;
+          Unix.c_vtime = 0;
+      } in
+      term.raw_mode <- true;
+      return (Mode_unix attr)
+    end
+  else
+    raise_lwt Not_a_tty
 
 let leave_raw_mode term mode =
-  match mode with
-    | Mode_fake ->
-        return ()
-    | Mode_unix attr ->
-        term.raw_mode <- false;
-        Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH attr
-    | Mode_windows mode ->
-        term.raw_mode <- false;
-        Lt_windows.set_console_mode term.incoming_fd mode;
-        return ()
+  if term.incoming_is_a_tty then
+    match mode with
+      | Mode_fake ->
+          return ()
+      | Mode_unix attr ->
+          term.raw_mode <- false;
+          Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH attr
+      | Mode_windows mode ->
+          term.raw_mode <- false;
+          Lt_windows.set_console_mode term.incoming_fd mode;
+          return ()
+  else
+    raise_lwt Not_a_tty
 
 let enable_mouse term =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        if term.windows then
-          return ()
-        else
-          Lwt_io.write term.oc "\027[?1000h"
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    if term.windows then
+      return ()
+    else
+      Lwt_io.write term.oc "\027[?1000h"
+  else
+    raise_lwt Not_a_tty
 
 let disable_mouse term =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        if term.windows then
-          return ()
-        else
-          Lwt_io.write term.oc "\027[?1000l"
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    if term.windows then
+      return ()
+    else
+      Lwt_io.write term.oc "\027[?1000l"
+  else
+    raise_lwt Not_a_tty
 
 (* +-----------------------------------------------------------------+
    | Cursor                                                          |
    +-----------------------------------------------------------------+ *)
 
 let show_cursor term =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        if term.windows then begin
-          let size, _ = Lt_windows.get_console_cursor_info term.outgoing_fd in
-          Lt_windows.set_console_cursor_info term.outgoing_fd size true;
-          return ()
-        end else
-          Lwt_io.write term.oc "\027[?25h"
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    if term.windows then begin
+      let size, _ = Lt_windows.get_console_cursor_info term.outgoing_fd in
+      Lt_windows.set_console_cursor_info term.outgoing_fd size true;
+      return ()
+    end else
+      Lwt_io.write term.oc "\027[?25h"
+  else
+    raise_lwt Not_a_tty
 
 let hide_cursor term =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        if term.windows then begin
-          let size, _ = Lt_windows.get_console_cursor_info term.outgoing_fd in
-          Lt_windows.set_console_cursor_info term.outgoing_fd size false;
-          return ()
-        end else
-          Lwt_io.write term.oc "\027[?25l"
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    if term.windows then begin
+      let size, _ = Lt_windows.get_console_cursor_info term.outgoing_fd in
+      Lt_windows.set_console_cursor_info term.outgoing_fd size false;
+      return ()
+    end else
+      Lwt_io.write term.oc "\027[?25l"
+  else
+    raise_lwt Not_a_tty
 
 let goto term coord =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        if term.windows then begin
-          let window = (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.window in
-          Lt_windows.set_console_cursor_position term.outgoing_fd {
-            line = window.r_line + coord.line;
-            column = window.r_column + coord.column;
-          };
-          return ()
-        end else begin
-          lwt () = Lwt_io.fprint term.oc "\027[H" in
-          lwt () = if coord.line > 0 then Lwt_io.fprintf term.oc "\027[%dB" coord.line else return () in
-          lwt () = if coord.line > 0 then Lwt_io.fprintf term.oc "\027[%dC" coord.column else return () in
-          return ()
-        end
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    if term.windows then begin
+      let window = (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.window in
+      Lt_windows.set_console_cursor_position term.outgoing_fd {
+        line = window.r_line + coord.line;
+        column = window.r_column + coord.column;
+      };
+      return ()
+    end else begin
+      lwt () = Lwt_io.fprint term.oc "\027[H" in
+      lwt () = if coord.line > 0 then Lwt_io.fprintf term.oc "\027[%dB" coord.line else return () in
+      lwt () = if coord.line > 0 then Lwt_io.fprintf term.oc "\027[%dC" coord.column else return () in
+      return ()
+    end
+  else
+    raise_lwt Not_a_tty
 
 let move term lines columns =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | false ->
-        raise_lwt Not_a_tty
-    | true ->
-        if term.windows then begin
-          let pos = (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.cursor_position in
-          Lt_windows.set_console_cursor_position term.outgoing_fd {
-            line = pos.line + lines;
-            column = pos.column + columns;
-          };
-          return ()
-        end else
-          lwt () =
-            match lines with
-              | n when n < 0 ->
-                  Lwt_io.fprintf term.oc "\027[%dA" (-n)
-              | n when n > 0 ->
-                  Lwt_io.fprintf term.oc "\027[%dB" n
-              | _ ->
-                  return ()
-          and () =
-            match columns with
-              | n when n < 0 ->
-                  Lwt_io.fprintf term.oc "\027[%dD" (-n)
-              | n when n > 0 ->
-                  Lwt_io.fprintf term.oc "\027[%dC" n
-              | _ ->
-                  return ()
-          in
-          return ()
+  if term.outgoing_is_a_tty then
+    if term.windows then begin
+      let pos = (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.cursor_position in
+      Lt_windows.set_console_cursor_position term.outgoing_fd {
+        line = pos.line + lines;
+        column = pos.column + columns;
+      };
+      return ()
+    end else
+      lwt () =
+        match lines with
+          | n when n < 0 ->
+              Lwt_io.fprintf term.oc "\027[%dA" (-n)
+          | n when n > 0 ->
+              Lwt_io.fprintf term.oc "\027[%dB" n
+          | _ ->
+              return ()
+      and () =
+        match columns with
+          | n when n < 0 ->
+              Lwt_io.fprintf term.oc "\027[%dD" (-n)
+          | n when n > 0 ->
+              Lwt_io.fprintf term.oc "\027[%dC" n
+          | _ ->
+              return ()
+      in
+      return ()
+  else
+    raise_lwt Not_a_tty
 
 (* +-----------------------------------------------------------------+
    | Erasing text                                                    |
    +-----------------------------------------------------------------+ *)
 
 let clear_screen term =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        if term.windows then begin
-          let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
-          let _ =
-            Lt_windows.fill_console_output_character
-              term.outgoing_fd
-              (UChar.of_char ' ')
-              (info.Lt_windows.size.columns * info.Lt_windows.size.lines)
-              { line = 0; column = 0 }
-          in
-          return ()
-        end else
-          Lwt_io.write term.oc "\027[2J"
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    if term.windows then begin
+      let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
+      let _ =
+        Lt_windows.fill_console_output_character
+          term.outgoing_fd
+          (UChar.of_char ' ')
+          (info.Lt_windows.size.columns * info.Lt_windows.size.lines)
+          { line = 0; column = 0 }
+      in
+      return ()
+    end else
+      Lwt_io.write term.oc "\027[2J"
+  else
+    raise_lwt Not_a_tty
 
 let clear_screen_next term =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        if term.windows then begin
-          let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
-          let _ =
-            Lt_windows.fill_console_output_character
-              term.outgoing_fd
-              (UChar.of_char ' ')
-              (info.Lt_windows.size.columns * (info.Lt_windows.size.lines - info.Lt_windows.cursor_position.line)
-               + info.Lt_windows.size.columns - info.Lt_windows.cursor_position.column)
-              info.Lt_windows.cursor_position
-          in
-          return ()
-        end else
-          Lwt_io.write term.oc "\027[J"
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    if term.windows then begin
+      let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
+      let _ =
+        Lt_windows.fill_console_output_character
+          term.outgoing_fd
+          (UChar.of_char ' ')
+          (info.Lt_windows.size.columns * (info.Lt_windows.size.lines - info.Lt_windows.cursor_position.line)
+           + info.Lt_windows.size.columns - info.Lt_windows.cursor_position.column)
+          info.Lt_windows.cursor_position
+      in
+      return ()
+    end else
+      Lwt_io.write term.oc "\027[J"
+  else
+    raise_lwt Not_a_tty
 
 let clear_screen_prev term =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        if term.windows then begin
-          let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
-          let _ =
-            Lt_windows.fill_console_output_character
-              term.outgoing_fd
-              (UChar.of_char ' ')
-              (info.Lt_windows.size.columns * info.Lt_windows.cursor_position.line
-               + info.Lt_windows.cursor_position.column)
-              { line = 0; column = 0 }
-          in
-          return ()
-        end else
-          Lwt_io.write term.oc "\027[1J"
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    if term.windows then begin
+      let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
+      let _ =
+        Lt_windows.fill_console_output_character
+          term.outgoing_fd
+          (UChar.of_char ' ')
+          (info.Lt_windows.size.columns * info.Lt_windows.cursor_position.line
+           + info.Lt_windows.cursor_position.column)
+          { line = 0; column = 0 }
+      in
+      return ()
+    end else
+      Lwt_io.write term.oc "\027[1J"
+  else
+    raise_lwt Not_a_tty
 
 let clear_line term =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        if term.windows then begin
-          let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
-          let _ =
-            Lt_windows.fill_console_output_character
-              term.outgoing_fd
-              (UChar.of_char ' ')
-              info.Lt_windows.size.columns
-              { line = info.Lt_windows.cursor_position.line; column = 0 }
-          in
-          return ()
-        end else
-          Lwt_io.write term.oc "\027[2K"
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    if term.windows then begin
+      let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
+      let _ =
+        Lt_windows.fill_console_output_character
+          term.outgoing_fd
+          (UChar.of_char ' ')
+          info.Lt_windows.size.columns
+          { line = info.Lt_windows.cursor_position.line; column = 0 }
+      in
+      return ()
+    end else
+      Lwt_io.write term.oc "\027[2K"
+  else
+    raise_lwt Not_a_tty
 
 let clear_line_next term =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        if term.windows then begin
-          let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
-          let _ =
-            Lt_windows.fill_console_output_character
-              term.outgoing_fd
-              (UChar.of_char ' ')
-              (info.Lt_windows.size.columns - info.Lt_windows.cursor_position.column)
-              info.Lt_windows.cursor_position
-          in
-          return ()
-        end else
-          Lwt_io.write term.oc "\027[K"
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    if term.windows then begin
+      let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
+      let _ =
+        Lt_windows.fill_console_output_character
+          term.outgoing_fd
+          (UChar.of_char ' ')
+          (info.Lt_windows.size.columns - info.Lt_windows.cursor_position.column)
+          info.Lt_windows.cursor_position
+      in
+      return ()
+    end else
+      Lwt_io.write term.oc "\027[K"
+  else
+    raise_lwt Not_a_tty
 
 let clear_line_prev term =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        if term.windows then begin
-          let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
-          let _ =
-            Lt_windows.fill_console_output_character
-              term.outgoing_fd
-              (UChar.of_char ' ')
-              info.Lt_windows.cursor_position.column
-              { line = info.Lt_windows.cursor_position.line; column = 0 }
-          in
-          return ()
-        end else
-          Lwt_io.write term.oc "\027[1K"
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    if term.windows then begin
+      let info = Lt_windows.get_console_screen_buffer_info term.outgoing_fd in
+      let _ =
+        Lt_windows.fill_console_output_character
+          term.outgoing_fd
+          (UChar.of_char ' ')
+          info.Lt_windows.cursor_position.column
+          { line = info.Lt_windows.cursor_position.line; column = 0 }
+      in
+      return ()
+    end else
+      Lwt_io.write term.oc "\027[1K"
+  else
+    raise_lwt Not_a_tty
 
 (* +-----------------------------------------------------------------+
    | State                                                           |
    +-----------------------------------------------------------------+ *)
 
 let save_state term =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        if term.windows then
-          return ()
-        else
-          Lwt_io.write term.oc "\027[?1049h"
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    if term.windows then
+      return ()
+    else
+      Lwt_io.write term.oc "\027[?1049h"
+  else
+    raise_lwt Not_a_tty
 
 let load_state term =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        if term.windows then
-          return ()
-        else
-          Lwt_io.write term.oc "\027[?1049l"
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    if term.windows then
+      return ()
+    else
+      Lwt_io.write term.oc "\027[?1049l"
+  else
+    raise_lwt Not_a_tty
 
 (* +-----------------------------------------------------------------+
    | Events                                                          |
@@ -689,14 +679,13 @@ let fprints_windows term oc text =
   loop false (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.attributes text
 
 let fprints term text =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        if term.windows then
-          Lwt_io.atomic (fun oc -> fprints_windows term oc text) term.oc
-        else
-          fprint term (expand term text)
-    | false ->
-        fprint term (Lt_style.strip text)
+  if term.outgoing_is_a_tty then
+    if term.windows then
+      Lwt_io.atomic (fun oc -> fprints_windows term oc text) term.oc
+    else
+      fprint term (expand term text)
+  else
+    fprint term (Lt_style.strip text)
 
 let fprintls term text =
   fprints term (text @ [Lt_style.String "\n"])
@@ -815,14 +804,13 @@ let render_windows term matrix =
   return ()
 
 let render_update term old_matrix matrix =
-  Lazy.force term.outgoing_is_a_tty >>= function
-    | true ->
-        if term.windows then
-          render_windows term matrix
-        else
-          render_update_unix term old_matrix matrix
-    | false ->
-        raise_lwt Not_a_tty
+  if term.outgoing_is_a_tty then
+    if term.windows then
+      render_windows term matrix
+    else
+      render_update_unix term old_matrix matrix
+  else
+    raise_lwt Not_a_tty
 
 let render term m = render_update term [||] m
 
@@ -836,18 +824,18 @@ let flush term = Lwt_io.flush term.oc
    | Standard terminals                                              |
    +-----------------------------------------------------------------+ *)
 
-let stdout = create Lwt_unix.stdin Lwt_io.stdin Lwt_unix.stdout Lwt_io.stdout
-let stderr = create Lwt_unix.stdin Lwt_io.stdin Lwt_unix.stderr Lwt_io.stderr
+let stdout = lazy(create Lwt_unix.stdin Lwt_io.stdin Lwt_unix.stdout Lwt_io.stdout)
+let stderr = lazy(create Lwt_unix.stdin Lwt_io.stdin Lwt_unix.stderr Lwt_io.stderr)
 
-let print str = fprint stdout str
-let printl str = fprintl stdout str
-let printf fmt = fprintf stdout fmt
-let prints str = fprints stdout str
-let printlf fmt = fprintlf stdout fmt
-let printls str = fprintls stdout str
-let eprint str = fprint stderr str
-let eprintl str = fprintl stderr str
-let eprintf fmt = fprintf stderr fmt
-let eprints str = fprints stderr str
-let eprintlf fmt = fprintlf stderr fmt
-let eprintls str = fprintls stderr str
+let print str = Lazy.force stdout >>= fun term -> fprint term str
+let printl str = Lazy.force stdout >>= fun term -> fprintl term str
+let printf fmt = Printf.ksprintf print fmt
+let prints str = Lazy.force stdout >>= fun term -> fprints term str
+let printlf fmt = Printf.ksprintf printl fmt
+let printls str = Lazy.force stdout >>= fun term -> fprintls term str
+let eprint str = Lazy.force stderr >>= fun term -> fprint term str
+let eprintl str = Lazy.force stderr >>= fun term -> fprintl term str
+let eprintf fmt = Printf.ksprintf eprint fmt
+let eprints str = Lazy.force stderr >>= fun term -> fprints term str
+let eprintlf fmt = Printf.ksprintf eprintl fmt
+let eprintls str = Lazy.force stderr >>= fun term -> fprintls term str

@@ -28,4 +28,5 @@ lwt () =
                              (new button (S.const "button9"))#as_widget]))#as_widget;
        ])
   in
-  run Lt_term.stdout widget (E.next button#clicked)
+  lwt term = Lazy.force Lt_term.stdout in
+  run term widget (E.next button#clicked)

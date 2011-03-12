@@ -31,4 +31,5 @@ lwt () =
     widget#key_pressed;
 
   (* Run. *)
-  Lt_widget.run Lt_term.stdout widget waiter
+  lwt term = Lazy.force Lt_term.stdout in
+  Lt_widget.run term widget waiter

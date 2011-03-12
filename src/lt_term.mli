@@ -20,7 +20,7 @@ val create :
   ?incoming_encoding : string ->
   ?outgoing_encoding : string ->
   Lwt_unix.file_descr -> Lwt_io.input_channel ->
-  Lwt_unix.file_descr -> Lwt_io.output_channel -> t
+  Lwt_unix.file_descr -> Lwt_io.output_channel -> t Lwt.t
   (** [create ?windows ?model ?incoming_encoding ?outgoing_encoding
       input_fd input_channel outout_fd output_channel] creates a new
       terminal using [input_fd] and [input_channel] for inputs and
@@ -56,17 +56,17 @@ val colors : t -> int
 val windows : t -> bool
   (** Whether the terminal is in windows mode or not. *)
 
-val is_a_tty : t -> bool Lwt.t
-  (** [is_a_tty term] returns whether the intput and output of the
-      given terminal are connected to a tty device. *)
+val is_a_tty : t -> bool
+  (** [is_a_tty term] whether the intput and output of the given
+      terminal are connected to a tty device. *)
 
-val incoming_is_a_tty : t -> bool Lwt.t
-  (** [incoming_is_a_tty term] returns whether the input of [term] is
-      a tty device. *)
+val incoming_is_a_tty : t -> bool
+  (** [incoming_is_a_tty term] whether the input of [term] is a tty
+      device. *)
 
-val outgoing_is_a_tty : t -> bool Lwt.t
-  (** [incoming_is_a_tty term] returns whether the output of [term] is
-      a tty device. *)
+val outgoing_is_a_tty : t -> bool
+  (** [incoming_is_a_tty term] whether the output of [term] is a tty
+      device. *)
 
 exception Not_a_tty
   (** Exception raised when trying to use a function that can only be
@@ -97,12 +97,15 @@ val enter_raw_mode : t -> mode Lwt.t
       only complete line are returned. It returns the current terminal
       mode that can be restored using {!leave_raw_mode}.
 
-      It raises {!Not_a_tty} if input of the given terminal is not
+      It raises {!Not_a_tty} if the input of the given terminal is not
       tty. *)
 
 val leave_raw_mode : t -> mode -> unit Lwt.t
   (** [leave_raw_mode term mode] leaves the raw mode by restoring the
-      given mode. *)
+      given mode.
+
+      It raises {!Not_a_tty} if the input of the given terminal is not
+      tty. *)
 
 val enable_mouse : t -> unit Lwt.t
   (** Enable mouse events reporting.
@@ -256,11 +259,11 @@ val flush : t -> unit Lwt.t
 
 (** {6 Well known instances} *)
 
-val stdout : t
+val stdout : t Lwt.t Lazy.t
   (** Terminal using {!Lwt_unix.stdin} as input and {!Lwt_unix.stdout}
       as output. *)
 
-val stderr : t
+val stderr : t Lwt.t Lazy.t
   (** Terminal using {!Lwt_unix.stdin} as input and {!Lwt_unix.stderr}
       as output. *)
 
