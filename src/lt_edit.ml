@@ -25,6 +25,7 @@ let () =
   { control = false; meta = false; shift = false; code = End } --> Goto_eot;
   { control = false; meta = false; shift = false; code = Insert } --> Switch_erase_mode;
   { control = false; meta = false; shift = false; code = Delete } --> Delete_next_char;
+  { control = false; meta = false; shift = false; code = Enter } --> Newline;
   { control = true; meta = false; shift = false; code = Char(UChar.of_char ' ') } --> Set_mark;
   { control = true; meta = false; shift = false; code = Char(UChar.of_char 'a') } --> Goto_bol;
   { control = true; meta = false; shift = false; code = Char(UChar.of_char 'e') } --> Goto_eol;

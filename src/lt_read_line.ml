@@ -166,7 +166,8 @@ let () =
   { control = false; meta = true; shift = false; code = Right } --> Complete_bar_next;
   { control = false; meta = true; shift = false; code = Home } --> Complete_bar_first;
   { control = false; meta = true; shift = false; code = End } --> Complete_bar_last;
-  { control = false; meta = true; shift = false; code = Tab } --> Complete_bar
+  { control = false; meta = true; shift = false; code = Tab } --> Complete_bar;
+  { control = false; meta = true; shift = false; code = Enter } --> Edit Zed_edit.Newline
 
 let bind key =
   try
