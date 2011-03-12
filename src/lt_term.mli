@@ -19,10 +19,12 @@ val create :
   ?model : string ->
   ?incoming_encoding : string ->
   ?outgoing_encoding : string ->
-  Lwt_unix.file_descr -> Lwt_unix.file_descr -> t
+  Lwt_unix.file_descr -> Lwt_io.input_channel ->
+  Lwt_unix.file_descr -> Lwt_io.output_channel -> t
   (** [create ?windows ?model ?incoming_encoding ?outgoing_encoding
-      input_fd outout_fd] creates a new terminal using [input_fd] for
-      inputs and [output_fd] for outputs.
+      input_fd input_channel outout_fd output_channel] creates a new
+      terminal using [input_fd] and [input_channel] for inputs and
+      [output_fd] and [output_channel] for outputs.
 
       - [windows] is a flag telling whether windows hack should be
       used. It defaults to [Lwt_sys.windows].

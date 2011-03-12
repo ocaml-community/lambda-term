@@ -72,7 +72,7 @@ let colors_of_term = function
   | "rxvt" -> 88
   | _ -> 16
 
-let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding ?outgoing_encoding incoming_fd outgoing_fd =
+let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding ?outgoing_encoding incoming_fd ic outgoing_fd oc =
   let incoming_encoding, outgoing_encoding =
     match windows with
       | true ->
@@ -82,7 +82,6 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
           (Lt_unix.system_encoding,
            Lt_unix.system_encoding)
   in
-  let ic = Lwt_io.of_fd ~mode:Lwt_io.input incoming_fd and oc = Lwt_io.of_fd ~mode:Lwt_io.output outgoing_fd in
   let colors = colors_of_term model in
   let term = {
     model;
@@ -837,8 +836,8 @@ let flush term = Lwt_io.flush term.oc
    | Standard terminals                                              |
    +-----------------------------------------------------------------+ *)
 
-let stdout = create Lwt_unix.stdin Lwt_unix.stdout
-let stderr = create Lwt_unix.stdin Lwt_unix.stderr
+let stdout = create Lwt_unix.stdin Lwt_io.stdin Lwt_unix.stdout Lwt_io.stdout
+let stderr = create Lwt_unix.stdin Lwt_io.stdin Lwt_unix.stderr Lwt_io.stderr
 
 let print str = fprint stdout str
 let printl str = fprintl stdout str
