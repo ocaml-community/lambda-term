@@ -248,7 +248,7 @@ object(self)
              lwt () = pause () in
              completion_queued <- false;
              completion_thread <- (
-               lwt start, comp = self#complete in
+               lwt start, comp = self#completion in
                completion_start <- start;
                set_completion_words comp;
                return ()
@@ -261,7 +261,7 @@ object(self)
          ])
     );
     completion_thread <- (
-      lwt start, comp = self#complete in
+      lwt start, comp = self#completion in
       completion_start <- start;
       set_completion_words comp;
       return ()
@@ -275,7 +275,19 @@ object(self)
 
   method completion_words = completion_words
   method completion_index = completion_index
-  method complete = return (0, [])
+  method completion = return (0, [])
+
+  method complete =
+    let prefix_length = Zed_edit.position context - completion_start in
+    match S.value completion_words with
+      | [] ->
+          ()
+      | [(completion, suffix)] ->
+          Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after completion prefix_length));
+          Zed_edit.insert context (Zed_rope.of_string suffix)
+      | (completion, suffix) :: rest ->
+          let word = List.fold_left (fun acc (word, _) -> common_prefix acc word) completion rest in
+          Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after word prefix_length))
 
   method send_action action =
     match action with
@@ -286,18 +298,8 @@ object(self)
             raise Interrupt
           else
             Zed_edit.delete_next_char context
-      | Complete -> begin
-          let prefix_length = Zed_edit.position context - completion_start in
-          match S.value completion_words with
-            | [] ->
-                ()
-            | [(completion, suffix)] ->
-                Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after completion prefix_length));
-                Zed_edit.insert context (Zed_rope.of_string suffix)
-            | (completion, suffix) :: rest ->
-                let word = List.fold_left (fun acc (word, _) -> common_prefix acc word) completion rest in
-                Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after word prefix_length))
-        end
+      | Complete ->
+          self#complete
       | Complete_bar_next ->
           let index = S.value completion_index in
           if index < List.length (S.value completion_words) - 1 then
@@ -363,7 +365,8 @@ class virtual ['a] abstract = object
   method virtual input_next : Zed_rope.t
   method virtual completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
   method virtual completion_index : int signal
-  method virtual complete : (int * (Zed_utf8.t * Zed_utf8.t) list) Lwt.t
+  method virtual completion : (int * (Zed_utf8.t * Zed_utf8.t) list) Lwt.t
+  method virtual complete : unit
   method virtual show_completion : bool
 end
 
@@ -392,7 +395,7 @@ class ['a] read_keyword ?history () = object(self)
     let input = Zed_rope.to_string (Zed_edit.text self#edit) in
     try `Value(List.assoc input self#keywords) with Not_found -> `Error input
 
-  method complete =
+  method completion =
     let word = Zed_rope.to_string self#input_prev in
     let keywords = List.filter (fun (keyword, value) -> Zed_utf8.starts_with keyword word) self#keywords in
     return (0, List.map (fun (keyword, value) -> (keyword, "")) keywords)

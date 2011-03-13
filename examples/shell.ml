@@ -113,7 +113,7 @@ class read_line ~term ~history ~exit_code = object(self)
   inherit Lt_read_line.read_line ~history ()
   inherit [Zed_utf8.t] Lt_read_line.term term
 
-  method complete =
+  method completion =
     let prefix  = Zed_rope.to_string self#input_prev in
     lwt binaries = Lazy.force binaries in
     let binaries = List.filter (fun file -> Zed_utf8.starts_with file prefix) binaries in
