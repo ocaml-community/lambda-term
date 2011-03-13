@@ -486,12 +486,10 @@ let read_event term =
    +-----------------------------------------------------------------+ *)
 
 module Codes = struct
-  let reset = 0
-  let bold = 1
-  let underline = 4
-  let blink = 5
-  let inverse = 7
-  let hide = 8
+  let bold = ";1"
+  let underline = ";4"
+  let blink = ";5"
+  let reverse = ";7"
   let foreground = 30
   let background = 40
 end
@@ -562,144 +560,6 @@ let map_color term r g b =
      [0..255]. *)
   Char.code (String.unsafe_get map.map (map.index_r.(r) + map.count_r * (map.index_g.(g) + map.count_g * map.index_b.(b))))
 
-let queue_index term q base n =
-  if n < 8 then
-    Queue.add (base + n) q
-  else if n < 16 && term.bold_is_bright then
-    if base = Codes.foreground then begin
-      Queue.add Codes.bold q;
-      Queue.add (base + n - 8) q
-    end else
-      Queue.add (base + n - 8) q
-  else begin
-    Queue.add (base + 8) q;
-    Queue.add 5 q;
-    Queue.add n q
-  end
-
-let queue_color term q base = function
-  | Lt_style.Default ->
-      Queue.add (base + 9) q
-  | Lt_style.Index n ->
-      queue_index term q base n
-  | Lt_style.RGB(r, g, b) ->
-      queue_index term q base (map_color term  r g b)
-
-let expand term text =
-  let open Lt_style in
-
-  let buf = Buffer.create 256 in
-
-  (* Pendings style codes: *)
-  let codes = Queue.create () in
-
-  (* Output pending codes using only one escape sequence: *)
-  let output_pendings () =
-    Buffer.add_string buf "\027[";
-    add_int buf (Queue.take codes);
-    Queue.iter (fun code ->
-                  Buffer.add_char buf ';';
-                  add_int buf code) codes;
-    Queue.clear codes;
-    Buffer.add_char buf 'm';
-  in
-
-  let rec loop = function
-    | [] ->
-        if not (Queue.is_empty codes) then output_pendings ();
-        Buffer.contents buf
-    | instr :: rest ->
-        match instr with
-          | String str  ->
-              if not (Queue.is_empty codes) then output_pendings ();
-              Buffer.add_string buf str;
-              loop rest
-          | Reset ->
-              Queue.add 0 codes;
-              loop rest
-          | Bold ->
-              Queue.add Codes.bold codes;
-              loop rest
-          | Underline ->
-              Queue.add Codes.underline codes;
-              loop rest
-          | Blink ->
-              Queue.add Codes.blink codes;
-              loop rest
-          | Inverse ->
-              Queue.add Codes.inverse codes;
-              loop rest
-          | Hide ->
-              Queue.add Codes.hide codes;
-              loop rest
-          | Foreground col ->
-              queue_color term codes Codes.foreground col;
-              loop rest
-          | Background col ->
-              queue_color term codes Codes.background col;
-              loop rest
-  in
-  loop text
-
-let windows_fg_color term = function
-  | Lt_style.Default -> 7
-  | Lt_style.Index n -> n
-  | Lt_style.RGB(r, g, b) -> map_color term r g b
-
-let windows_bg_color term = function
-  | Lt_style.Default -> 0
-  | Lt_style.Index n -> n
-  | Lt_style.RGB(r, g, b) -> map_color term r g b
-
-let fprints_windows term oc text =
-  let open Lt_style in
-  let rec loop need_to_commit attrs text =
-    match text with
-      | [] ->
-          if need_to_commit then begin
-            lwt () = Lwt_io.flush oc in
-            Lt_windows.set_console_text_attribute term.outgoing_fd attrs;
-            return ()
-          end else
-            return ()
-      | String str :: text ->
-          lwt () =
-            if need_to_commit then begin
-              lwt () = Lwt_io.flush oc in
-              Lt_windows.set_console_text_attribute term.outgoing_fd attrs;
-              return ()
-            end else
-              return ()
-          in
-          lwt () = fprint term str in
-          loop false attrs text
-      | Reset :: text ->
-          loop true { Lt_windows.foreground = 7; Lt_windows.background = 0 } text
-      | (Bold | Underline | Blink | Inverse | Hide) :: text ->
-          loop need_to_commit attrs text
-      | Foreground col :: text ->
-          loop true { attrs with Lt_windows.foreground = windows_fg_color term col } text
-      | Background col :: text ->
-          loop true { attrs with Lt_windows.background = windows_bg_color term col } text
-  in
-  loop false (Lt_windows.get_console_screen_buffer_info term.outgoing_fd).Lt_windows.attributes text
-
-let fprints term text =
-  if term.outgoing_is_a_tty then
-    if term.windows then
-      Lwt_io.atomic (fun oc -> fprints_windows term oc text) term.oc
-    else
-      fprint term (expand term text)
-  else
-    fprint term (Lt_style.strip text)
-
-let fprintls term text =
-  fprints term (text @ [Lt_style.String "\n"])
-
-(* +-----------------------------------------------------------------+
-   | Rendering                                                       |
-   +-----------------------------------------------------------------+ *)
-
 let add_index term buf base n =
   if n < 8 then begin
     Buffer.add_char buf ';';
@@ -727,6 +587,98 @@ let add_color term buf base = function
   | Lt_style.RGB(r, g, b) ->
       add_index term buf base (map_color term  r g b)
 
+let expand term text =
+  if Array.length text = 0 then
+    ""
+  else begin
+    let open Lt_style in
+    let buf = Buffer.create 256 in
+    Buffer.add_string buf "\027[0m";
+    let rec loop idx prev_style =
+      if idx = Array.length text then begin
+        Buffer.add_string buf "\027[0m";
+        Buffer.contents buf
+      end else begin
+        let ch, style = Array.unsafe_get text idx in
+        if not (Lt_style.equal style prev_style) then begin
+          Buffer.add_string buf "\027[0";
+          (match style.bold with Some true -> Buffer.add_string buf Codes.bold | _ -> ());
+          (match style.underline with Some true -> Buffer.add_string buf Codes.underline | _ -> ());
+          (match style.blink with Some true -> Buffer.add_string buf Codes.blink | _ -> ());
+          (match style.reverse with Some true -> Buffer.add_string buf Codes.reverse | _ -> ());
+          (match style.foreground with Some color -> add_color term buf Codes.foreground color | None -> ());
+          (match style.background with Some color -> add_color term buf Codes.background color | None -> ());
+          Buffer.add_char buf 'm';
+        end;
+        Buffer.add_string buf (Zed_utf8.singleton ch);
+        loop (idx + 1) style
+      end
+    in
+    loop 0 none
+  end
+
+let windows_fg_color term = function
+  | Lt_style.Default -> 7
+  | Lt_style.Index n -> n
+  | Lt_style.RGB(r, g, b) -> map_color term r g b
+
+let windows_bg_color term = function
+  | Lt_style.Default -> 0
+  | Lt_style.Index n -> n
+  | Lt_style.RGB(r, g, b) -> map_color term r g b
+
+let windows_default_attributes = { Lt_windows.foreground = 7; Lt_windows.background = 0 }
+
+let fprints_windows term oc text =
+  let open Lt_style in
+  let rec loop idx prev_attr =
+    if idx = Array.length text then begin
+      lwt () = Lwt_io.flush oc in
+      Lt_windows.set_console_text_attribute term.outgoing_fd windows_default_attributes;
+      return ()
+    end else begin
+      let ch, style = Array.unsafe_get text idx in
+      let attr =
+        if style.reverse = Some true then {
+          Lt_windows.foreground = (match style.background with Some color -> windows_bg_color term color | None -> 0);
+          Lt_windows.background = (match style.foreground with Some color -> windows_fg_color term color | None -> 7);
+        } else {
+          Lt_windows.foreground = (match style.foreground with Some color -> windows_fg_color term color | None -> 7);
+          Lt_windows.background = (match style.background with Some color -> windows_bg_color term color | None -> 0);
+        }
+      in
+      lwt () =
+        if attr <> prev_attr then
+          lwt () = Lwt_io.flush oc in
+          Lt_windows.set_console_text_attribute term.outgoing_fd attr;
+          return ()
+        else
+          return ()
+      in
+      lwt () = Lwt_io.write oc (Zed_utf8.singleton ch) in
+      loop (idx + 1) attr
+    end
+  in
+  lwt () = Lwt_io.flush oc in
+  Lt_windows.set_console_text_attribute term.outgoing_fd windows_default_attributes;
+  loop 0 windows_default_attributes
+
+let fprints term text =
+  if term.outgoing_is_a_tty then
+    if term.windows then
+      Lwt_io.atomic (fun oc -> fprints_windows term oc text) term.oc
+    else
+      fprint term (expand term text)
+  else
+    fprint term (Lt_text.to_string text)
+
+let fprintls term text =
+  fprints term (Array.append text (Lt_text.of_string "\n"))
+
+(* +-----------------------------------------------------------------+
+   | Rendering                                                       |
+   +-----------------------------------------------------------------+ *)
+
 let same_style p1 p2 =
   let open Lt_draw in
   p1.bold = p2.bold &&
@@ -740,9 +692,9 @@ let render_point term buf old_point new_point =
   if not (same_style new_point old_point) then begin
     (* Reset styles if they are different from the previous point. *)
     Buffer.add_string buf "\027[0";
-    if new_point.bold then Buffer.add_string buf ";1";
-    if new_point.underline then Buffer.add_string buf ";4";
-    if new_point.blink then Buffer.add_string buf ";5";
+    if new_point.bold then Buffer.add_string buf Codes.bold;
+    if new_point.underline then Buffer.add_string buf Codes.underline;
+    if new_point.blink then Buffer.add_string buf Codes.blink;
     add_color term buf Codes.foreground new_point.foreground;
     add_color term buf Codes.background new_point.background;
     Buffer.add_char buf 'm';

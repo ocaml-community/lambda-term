@@ -42,31 +42,39 @@ let lcyan = Index 14
 let lwhite = Index 15
 
 (* +-----------------------------------------------------------------+
-   | Styled text                                                     |
+   | Styles                                                          |
    +-----------------------------------------------------------------+ *)
 
-type item =
-  | String of string
-  | Reset
-  | Bold
-  | Underline
-  | Blink
-  | Inverse
-  | Hide
-  | Foreground of color
-  | Background of color
+type t = {
+  bold : bool option;
+  underline : bool option;
+  blink : bool option;
+  reverse : bool option;
+  foreground : color option;
+  background : color option;
+}
 
-type text = item list
+let none = {
+  bold = None;
+  underline = None;
+  blink = None;
+  reverse = None;
+  foreground = None;
+  background = None;
+}
 
-let format fmt = Printf.ksprintf (fun str -> String str) fmt
+let bool = function
+  | Some b -> b
+  | None -> false
 
-let strip text =
-  let rec loop acc = function
-    | [] ->
-        Zed_utf8.rev_concat "" acc
-    | String str :: rest ->
-        loop (str :: acc) rest
-    | _ :: rest ->
-        loop acc rest
-  in
-  loop [] text
+let color = function
+  | Some c -> c
+  | None -> Default
+
+let equal s1 s2 =
+  (bool s1.bold = bool s2.bold) &&
+    (bool s1.underline = bool s2.underline) &&
+    (bool s1.blink = bool s2.blink) &&
+    (bool s1.reverse = bool s2.reverse) &&
+    (color s1.foreground = color s2.foreground) &&
+    (color s1.background = color s2.background)

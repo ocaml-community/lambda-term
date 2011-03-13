@@ -17,7 +17,7 @@ class read_password term = object(self)
   inherit [Zed_utf8.t] Lt_read_line.term term
 
   initializer
-    self#set_prompt (S.const [String "type a password: "])
+    self#set_prompt (S.const (Lt_text.of_string "Type a password: "))
 end
 
 lwt () =

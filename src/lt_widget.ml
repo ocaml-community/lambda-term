@@ -175,7 +175,7 @@ end
    | Buttons                                                         |
    +-----------------------------------------------------------------+ *)
 
-class button text =
+class button (text : string signal) =
   let event, set_text = E.create () in
   let text = S.switch text event in
   let clicked, send_clicked = E.create () in
@@ -199,6 +199,7 @@ object(self)
   method need_redraw = need_redraw
 
   method draw ctx focused =
+    None(*
     let { lines; columns } = Lt_draw.size ctx in
     let text = S.value text in
     let len = Zed_utf8.length text in
@@ -209,7 +210,7 @@ object(self)
       Lt_draw.draw_styled ctx (lines / 2) ((columns - len - 4) / 2)
         [String "< "; String text; String " >"];
     None
-
+      *)
   initializer
     self#set_can_focus (S.const true)
 end

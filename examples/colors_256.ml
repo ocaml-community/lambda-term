@@ -12,5 +12,9 @@ open Lt_style
 
 lwt () =
   for_lwt i = 0 to 255 do
-    Lt_term.printls [format "color %d: " i; Foreground(index i); String "example"; Reset]
+    Lt_term.printls
+      (Array.concat [
+         Lt_text.stylise (Printf.sprintf "color %d: " i) none;
+         Lt_text.stylise "example" { none with foreground = Some(index i) };
+       ])
   done

@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 283454c84b27bb4509ac6418f984fd3f)
+# DO NOT EDIT (digest: 662b3f32564e6afc59c4ffaa855ed0ae)
 Lt_term
 Lt_key
 Lt_event
@@ -14,4 +14,5 @@ Lt_color_mappings
 Lt_widget
 Lt_edit
 Lt_read_line
+Lt_text
 # OASIS_STOP

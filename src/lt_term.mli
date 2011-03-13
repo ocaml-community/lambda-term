@@ -219,21 +219,21 @@ val read_event : t -> Lt_event.t Lwt.t
 val fprint : t -> string -> unit Lwt.t
 val fprintl : t -> string -> unit Lwt.t
 val fprintf : t -> ('a, unit, string, unit Lwt.t) format4 -> 'a
-val fprints : t -> Lt_style.text -> unit Lwt.t
+val fprints : t -> Lt_text.t -> unit Lwt.t
 val fprintlf : t -> ('a, unit, string, unit Lwt.t) format4 -> 'a
-val fprintls : t -> Lt_style.text -> unit Lwt.t
+val fprintls : t -> Lt_text.t -> unit Lwt.t
 val print : string -> unit Lwt.t
 val printl : string -> unit Lwt.t
 val printf : ('a, unit, string, unit Lwt.t) format4 -> 'a
-val prints : Lt_style.text -> unit Lwt.t
+val prints : Lt_text.t -> unit Lwt.t
 val printlf : ('a, unit, string, unit Lwt.t) format4 -> 'a
-val printls : Lt_style.text -> unit Lwt.t
+val printls : Lt_text.t -> unit Lwt.t
 val eprint : string -> unit Lwt.t
 val eprintl : string -> unit Lwt.t
 val eprintf : ('a, unit, string, unit Lwt.t) format4 -> 'a
-val eprints : Lt_style.text -> unit Lwt.t
+val eprints : Lt_text.t -> unit Lwt.t
 val eprintlf : ('a, unit, string, unit Lwt.t) format4 -> 'a
-val eprintls : Lt_style.text -> unit Lwt.t
+val eprintls : Lt_text.t -> unit Lwt.t
 
 (** {6 Rendering} *)
 

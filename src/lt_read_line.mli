@@ -19,7 +19,7 @@ exception Interrupt
   (** Exception raised when the user presses [Ctrl^D] with an empty
       input. *)
 
-type prompt = Lt_style.text
+type prompt = Lt_text.t
     (** Type of prompts. *)
 
 (** {6 Completion} *)
@@ -106,8 +106,12 @@ class virtual ['a] engine : ?history : history -> unit -> object
   method context : unit Zed_edit.context
     (** The context for the edition engine. *)
 
-  method stylise : Lt_style.text
+  method stylise_input : Lt_text.t
     (** Stylise current input. *)
+
+  method stylise : Lt_text.t
+    (** Add highlighting of the selection to the result of
+        {!stylise_input}. *)
 
   method input_prev : Zed_rope.t
     (** The input before the cursor. *)
@@ -144,7 +148,8 @@ class virtual ['a] abstract : object
   method virtual send_action : action -> unit
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
-  method virtual stylise : Lt_style.text
+  method virtual stylise_input : Lt_text.t
+  method virtual stylise : Lt_text.t
   method virtual input_prev : Zed_rope.t
   method virtual input_next : Zed_rope.t
   method virtual completion_words : (Zed_utf8.t * Zed_utf8.t) list signal

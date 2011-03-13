@@ -16,7 +16,7 @@ open Lt_style
 open Lt_key
 
 exception Interrupt
-type prompt = Lt_style.text
+type prompt = Lt_text.t
 
 (* +-----------------------------------------------------------------+
    | Completion                                                      |
@@ -182,28 +182,6 @@ let bind key =
    | The read-line engine                                            |
    +-----------------------------------------------------------------+ *)
 
-let styled_of_rope rope =
-  Zed_rope.rev_fold_leaf (fun leaf acc -> String leaf :: acc) rope []
-
-let rec break_styled styled index =
-  if index = 0 then
-    ([], styled)
-  else
-    match styled with
-      | [] ->
-          ([], [])
-      | String str as item :: rest ->
-          let len = Zed_utf8.length str in
-          if index >= len then
-            let a, b = break_styled rest (index - len) in
-            (item :: a, b)
-          else
-            let a, b = Zed_utf8.break str index in
-            ([String a], String b :: rest)
-      | item :: rest ->
-          let a, b = break_styled rest index in
-          (item :: a, b)
-
 class virtual ['a] engine ?(history=[]) () =
   let edit : unit Zed_edit.t = Zed_edit.create () in
   let context = Zed_edit.context edit (Zed_edit.new_cursor edit) in
@@ -351,8 +329,22 @@ object(self)
       | Prev_search ->
           ()
 
+  method stylise_input =
+    Lt_text.of_string (Zed_rope.to_string (Zed_edit.text edit))
+
   method stylise =
-    styled_of_rope (Zed_edit.text edit)
+    let txt = self#stylise_input in
+    if Zed_edit.get_selection edit then begin
+      let len = Array.length txt in
+      let pos = Zed_edit.position context and mark = Zed_cursor.get_position (Zed_edit.mark edit) in
+      let a = min (min pos mark) len and b = min (max pos mark) len in
+      for i = a to b - 1 do
+        let ch, style = txt.(i) in
+        txt.(i) <- (ch, { style with underline = Some true })
+      done;
+      txt
+    end else
+      txt
 end
 
 class virtual ['a] abstract = object
@@ -360,7 +352,8 @@ class virtual ['a] abstract = object
   method virtual send_action : action -> unit
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
-  method virtual stylise : Lt_style.text
+  method virtual stylise_input : Lt_text.t
+  method virtual stylise : Lt_text.t
   method virtual input_prev : Zed_rope.t
   method virtual input_next : Zed_rope.t
   method virtual completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
@@ -381,7 +374,7 @@ end
 
 class read_password () = object(self)
   inherit [Zed_utf8.t] engine ()
-  method stylise = [String(String.make (Zed_rope.length (Zed_edit.text self#edit)) '*')]
+  method stylise_input = Array.make (Zed_rope.length (Zed_edit.text self#edit)) (UChar.of_char '*', Lt_style.none)
   method eval = Zed_rope.to_string (Zed_edit.text self#edit)
   method show_completion = false
 end
@@ -405,7 +398,7 @@ end
    | Running in a terminal                                           |
    +-----------------------------------------------------------------+ *)
 
-let default_prompt = [String "# "]
+let default_prompt = Lt_text.of_string "# "
 
 let rec drop count l =
   if count <= 0 then
@@ -416,70 +409,54 @@ let rec drop count l =
 
 (* Computes the position of the cursor after printing the given styled
    string, assuming the terminal is a windows one. *)
-let rec compute_position_windows size pos = function
-  | [] ->
-      pos
-  | String str :: rest ->
-      let pos =
-        Zed_utf8.fold
-          (fun ch pos ->
-             if ch = newline then
-               { line = pos.line + 1; column = 0 }
-             else if pos.column + 1 = size.columns then
-               { line = pos.line + 1; column = 0 }
-             else
-               { pos with column = pos.column + 1 })
-          str pos
-      in
-      compute_position_windows size pos rest
-  | _ :: rest ->
-      compute_position_windows size pos rest
+let compute_position_windows size pos text =
+  Array.fold_left
+    (fun pos (ch, style) ->
+       if ch = newline then
+         { line = pos.line + 1; column = 0 }
+       else if pos.column + 1 = size.columns then
+         { line = pos.line + 1; column = 0 }
+       else
+         { pos with column = pos.column + 1 })
+    pos text
 
 (* Same thing but for Unix. On Unix the cursor can be at the end of
    the line. *)
-let rec compute_position_unix size pos = function
-  | [] ->
-      pos
-  | String str :: rest ->
-      let pos =
-        Zed_utf8.fold
-          (fun ch pos ->
-             if ch = newline then
-               { line = pos.line + 1; column = 0 }
-             else if pos.column = size.columns then
-               { line = pos.line + 1; column = 1 }
-             else
-               { pos with column = pos.column + 1 })
-          str pos
-      in
-      compute_position_unix size pos rest
-  | _ :: rest ->
-      compute_position_unix size pos rest
+let compute_position_unix size pos text =
+  Array.fold_left
+    (fun pos (ch, style) ->
+       if ch = newline then
+         { line = pos.line + 1; column = 0 }
+       else if pos.column = size.columns then
+         { line = pos.line + 1; column = 1 }
+       else
+         { pos with column = pos.column + 1 })
+    pos text
 
 let make_completion_bar_middle index columns words =
   let rec aux ofs idx = function
     | [] ->
-        [String(String.make (columns - ofs) ' ')]
+        [Array.make (columns - ofs) (UChar.of_char ' ', Lt_style.none)]
     | (word, suffix) :: words ->
         let len = Zed_utf8.length word in
         let ofs' = ofs + len in
         if ofs' <= columns then
           if idx = index then
-            Inverse :: String word :: Reset ::
+            Lt_text.stylise word { Lt_style.none with reverse = Some true } ::
               if ofs' + 1 > columns then
                 []
               else
-                String "│" :: aux (ofs' + 1) (idx + 1) words
+                Lt_text.of_string "│" :: aux (ofs' + 1) (idx + 1) words
           else
-            String word ::
+            Lt_text.stylise word Lt_style.none ::
               if ofs' + 1 > columns then
                 []
               else
-                String "│" :: aux (ofs' + 1) (idx + 1) words
+                Lt_text.of_string "│" :: aux (ofs' + 1) (idx + 1) words
         else
-          [String(Zed_utf8.sub word 0 (columns - ofs))]
+          [Lt_text.of_string (Zed_utf8.sub word 0 (columns - ofs))]
   in
-  aux 0 0 words
+  Array.concat (aux 0 0 words)
 
 let make_bar delimiter columns words =
   let buf = Buffer.create (columns * 3) in
@@ -521,11 +498,6 @@ let rec get_index_of_last_displayed_word column columns index words =
           get_index_of_last_displayed_word (column + 1) columns (index + 1) words
         else
           index - 1
-
-let rec styled_is_empty = function
-  | [] -> true
-  | String str :: rest -> str = "" && styled_is_empty rest
-  | _ :: rest -> styled_is_empty rest
 
 class virtual ['a] term term =
   let size, set_size = S.create { columns = 80; lines = 25 } in
@@ -624,39 +596,46 @@ object(self)
           let start = S.value self#completion_start in
           let index = S.value self#completion_index in
           let words = drop start (S.value self#completion_words) in
-          let before, after = break_styled self#stylise (Zed_edit.position self#context) in
-          let before = List.concat [S.value prompt; [Reset]; before] in
+          let styled = self#stylise in
+          let position = min (Zed_edit.position self#context) (Array.length styled) in
+          let before = Array.sub styled 0 position in
+          let after = Array.sub styled position (Array.length styled - position) in
+          let before = Array.append (S.value prompt) before in
           let box =
             if self#show_completion then
-              List.concat [
-                [String "\n┌"; String(make_bar "┬" (columns - 2) words); String "┐\n│"];
+              Array.concat [
+                Lt_text.of_string "\n┌";
+                Lt_text.of_string (make_bar "┬" (columns - 2) words);
+                Lt_text.of_string "┐\n│";
                 make_completion_bar_middle (index - start) (columns - 2) words;
-                [String "│\n└"; String(make_bar "┴" (columns - 2) words); String "┘"]
+                Lt_text.of_string "│\n└";
+                Lt_text.of_string (make_bar "┴" (columns - 2) words);
+                Lt_text.of_string "┘";
               ]
             else
-              []
+              [||]
           in
           let size = S.value size in
           if Lt_term.windows term then begin
-            let after = List.concat [after; [Reset]; box] in
+            let after = Array.append after box in
             cursor <- compute_position_windows size { column = 0; line = 0 } before;
             end_of_display <- compute_position_windows size cursor after;
-            lwt () = Lt_term.fprints term (before @ after) in
+            lwt () = Lt_term.fprints term (Array.append before after) in
             lwt () = Lt_term.move term (cursor.line - end_of_display.line) (cursor.column - end_of_display.column) in
             Lt_term.flush term
           end else begin
             cursor <- compute_position_unix size { column = 0; line = 0 } before;
-            end_of_display <- compute_position_unix size cursor (after @ box);
+            end_of_display <- compute_position_unix size cursor (Array.append after box);
             let after =
-              if cursor.column = size.columns && styled_is_empty after then begin
+              if cursor.column = size.columns && after = [||] then begin
                 (* If the cursor is at the end of line and there is
                    nothing after, insert a newline character. *)
-                let after = List.concat [after; [String "\n"; Reset]; box] in
+                let after = Array.concat [after; Lt_text.of_string "\n"; box] in
                 cursor <- compute_position_unix size { column = 0; line = 0 } before;
                 end_of_display <- compute_position_unix size cursor after;
                 after
               end else
-                List.concat [after; [Reset]; box]
+                Array.append after box
             in
             (* If the cursor is at the end of line, move it to the
                beginning of the next line. *)
@@ -665,7 +644,7 @@ object(self)
             (* Fix the position of the end of display. *)
             if end_of_display.column = size.columns then
               end_of_display <- { end_of_display with column = size.columns - 1 };
-            lwt () = Lt_term.fprints term (before @ after) in
+            lwt () = Lt_term.fprints term (Array.append before after) in
             lwt () = Lt_term.move term (cursor.line - end_of_display.line) (cursor.column - end_of_display.column) in
             Lt_term.flush term
           end
@@ -679,10 +658,7 @@ object(self)
     lwt () = Lwt_mutex.lock draw_mutex in
     try_lwt
       lwt () = if visible then self#erase else return () in
-      let before, after = break_styled self#stylise (Zed_edit.position self#context) in
-      let before = List.concat [S.value prompt; [Reset]; before] in
-      let total = List.concat [before; after; [Reset]] in
-      Lt_term.fprintls term total
+      Lt_term.fprintls term (Array.append (S.value prompt) self#stylise)
     finally
       Lwt_mutex.unlock draw_mutex;
       return ()

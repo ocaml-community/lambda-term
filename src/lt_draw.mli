@@ -80,7 +80,3 @@ val draw_string : context -> int -> int -> string -> unit
   (** [draw_string ctx line column str] draws the given string at
       given coordinates. This does not affect styles. [str] may
       contains newlines. *)
-
-val draw_styled : context -> int -> int -> Lt_style.text -> unit
-  (** [draw_styled ctx line column text] draws the given styled text
-      at given coordinates. *)

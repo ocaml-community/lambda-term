@@ -50,41 +50,22 @@ val lmagenta : color
 val lcyan : color
 val lwhite : color
 
-(** {6 Styled text} *)
+(** {6 Styles} *)
 
-type item =
-  | String of string
-      (** Some UTF-8 encoded text *)
-  | Reset
-      (** Resets all styles to default *)
-  | Bold
-      (** Put the text following this item in bold. This does nothing
-          on windows. *)
-  | Underline
-      (** Put the text following this item underlined. This does
-          nothing on windows. *)
-  | Blink
-      (** Make the text following this item to blink. This does
-          nothing on windows. *)
-  | Inverse
-      (** Inverse the foreground and background for the text following
-          this item. This does nothing on windows. *)
-  | Hide
-      (** Hide the text following this item. This does nothing on
-          windows. *)
-  | Foreground of color
-      (** Set the foreground color. *)
-  | Background of color
-      (** Set the background color. *)
+(** Type of text styles. *)
+type t = {
+  bold : bool option;
+  underline : bool option;
+  blink : bool option;
+  reverse : bool option;
+  foreground : color option;
+  background : color option;
+}
 
-type text = item list
-    (** Type of a styled text. For example [Foreground lred; String
-        "foo"; Reset] means to put the string [foo] in light red then
-        to reset all attributes *)
+val none : t
+  (** Style with all fields set to [None]. *)
 
-val format : ('a, unit, string, item) format4 -> 'a
-  (** [format fmt] produces a [String str] item from the given format
-      string and parameters. *)
-
-val strip : text -> string
-  (** [strip text] removes all styles from the given styled text. *)
+val equal : t -> t -> bool
+  (** [equal s1 s2] returns [true] iff [s1] and [s2] are equal after
+      having replaced all [None] fields by [Some false] or [Some
+      Default]. *)
