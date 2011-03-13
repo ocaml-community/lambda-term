@@ -49,10 +49,10 @@ type item =
   | String of string
   | Reset
   | Bold
-  | Underlined
+  | Underline
   | Blink
   | Inverse
-  | Hidden
+  | Hide
   | Foreground of color
   | Background of color
 

@@ -60,7 +60,7 @@ type item =
   | Bold
       (** Put the text following this item in bold. This does nothing
           on windows. *)
-  | Underlined
+  | Underline
       (** Put the text following this item underlined. This does
           nothing on windows. *)
   | Blink
@@ -69,7 +69,7 @@ type item =
   | Inverse
       (** Inverse the foreground and background for the text following
           this item. This does nothing on windows. *)
-  | Hidden
+  | Hide
       (** Hide the text following this item. This does nothing on
           windows. *)
   | Foreground of color

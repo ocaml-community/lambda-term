@@ -18,7 +18,7 @@ type point = {
   (** The unicode character. *)
   mutable bold : bool;
   (** Whether the character is in bold or not. *)
-  mutable underlined : bool;
+  mutable underline : bool;
   (** Whether the character is underlined or not. *)
   mutable blink : bool;
   (** Whether the character is blinking or not. *)

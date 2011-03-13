@@ -488,10 +488,10 @@ let read_event term =
 module Codes = struct
   let reset = 0
   let bold = 1
-  let underlined = 4
+  let underline = 4
   let blink = 5
   let inverse = 7
-  let hidden = 8
+  let hide = 8
   let foreground = 30
   let background = 40
 end
@@ -620,8 +620,8 @@ let expand term text =
           | Bold ->
               Queue.add Codes.bold codes;
               loop rest
-          | Underlined ->
-              Queue.add Codes.underlined codes;
+          | Underline ->
+              Queue.add Codes.underline codes;
               loop rest
           | Blink ->
               Queue.add Codes.blink codes;
@@ -629,8 +629,8 @@ let expand term text =
           | Inverse ->
               Queue.add Codes.inverse codes;
               loop rest
-          | Hidden ->
-              Queue.add Codes.hidden codes;
+          | Hide ->
+              Queue.add Codes.hide codes;
               loop rest
           | Foreground col ->
               queue_color term codes Codes.foreground col;
@@ -675,7 +675,7 @@ let fprints_windows term oc text =
           loop false attrs text
       | Reset :: text ->
           loop true { Lt_windows.foreground = 7; Lt_windows.background = 0 } text
-      | (Bold | Underlined | Blink | Inverse | Hidden) :: text ->
+      | (Bold | Underline | Blink | Inverse | Hide) :: text ->
           loop need_to_commit attrs text
       | Foreground col :: text ->
           loop true { attrs with Lt_windows.foreground = windows_fg_color term col } text
@@ -730,7 +730,7 @@ let add_color term buf base = function
 let same_style p1 p2 =
   let open Lt_draw in
   p1.bold = p2.bold &&
-      p1.underlined = p2.underlined &&
+      p1.underline = p2.underline &&
       p1.blink = p2.blink &&
       p1.foreground = p2.foreground &&
       p1.background = p2.background
@@ -741,7 +741,7 @@ let render_point term buf old_point new_point =
     (* Reset styles if they are different from the previous point. *)
     Buffer.add_string buf "\027[0";
     if new_point.bold then Buffer.add_string buf ";1";
-    if new_point.underlined then Buffer.add_string buf ";4";
+    if new_point.underline then Buffer.add_string buf ";4";
     if new_point.blink then Buffer.add_string buf ";5";
     add_color term buf Codes.foreground new_point.foreground;
     add_color term buf Codes.background new_point.background;
@@ -758,7 +758,7 @@ let render_update_unix term old_matrix matrix =
   let last_point = ref {
     char = UChar.of_char ' ';
     bold = false;
-    underlined = false;
+    underline = false;
     blink = false;
     foreground = Lt_style.default;
     background = Lt_style.default;

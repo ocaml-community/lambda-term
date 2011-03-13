@@ -14,7 +14,7 @@ open Lt_style
 type point = {
   mutable char : UChar.t;
   mutable bold : bool;
-  mutable underlined : bool;
+  mutable underline : bool;
   mutable blink : bool;
   mutable foreground : Lt_style.color;
   mutable background : Lt_style.color;
@@ -31,7 +31,7 @@ let make_matrix size =
          (fun _ -> {
             char = UChar.of_char ' ';
             bold = false;
-            underlined = false;
+            underline = false;
             blink = false;
             foreground = Lt_style.default;
             background = Lt_style.default;
@@ -73,7 +73,7 @@ let clear ctx =
       let point = Array.unsafe_get (Array.unsafe_get ctx.matrix line) column in
       point.char <- space;
       point.bold <- false;
-      point.underlined <- false;
+      point.underline <- false;
       point.blink <- false;
       point.foreground <- Lt_style.default;
       point.background <- Lt_style.default
@@ -117,9 +117,9 @@ let draw_string ctx line column str =
 
 type style_mask = {
   mutable sm_bold : bool;
-  mutable sm_underlined : bool;
+  mutable sm_underline : bool;
   mutable sm_blink : bool;
-  mutable sm_hidden : bool;
+  mutable sm_hide : bool;
   mutable sm_foreground : Lt_style.color option;
   mutable sm_background : Lt_style.color option;
 }
@@ -127,9 +127,9 @@ type style_mask = {
 let draw_styled ctx line column txt =
   let sm = {
     sm_bold = false;
-    sm_underlined = false;
+    sm_underline = false;
     sm_blink = false;
-    sm_hidden = false;
+    sm_hide = false;
     sm_foreground = None;
     sm_background = None;
   } in
@@ -141,9 +141,9 @@ let draw_styled ctx line column txt =
       else begin
         if line >= ctx.line1 && line < ctx.line2 && column >= ctx.column1 && column < ctx.column2 then begin
           let point = Array.unsafe_get (Array.unsafe_get ctx.matrix line) column in
-          if not sm.sm_hidden then point.char <- ch;
+          if not sm.sm_hide then point.char <- ch;
           if sm.sm_bold then point.bold <- true;
-          if sm.sm_underlined then point.underlined <- true;
+          if sm.sm_underline then point.underline <- true;
           if sm.sm_blink then point.blink <- true;
           (match sm.sm_foreground with
              | Some c -> point.foreground <- c
@@ -163,17 +163,17 @@ let draw_styled ctx line column txt =
         loop_string line column str 0 rest
     | Reset :: rest ->
         sm.sm_bold <- false;
-        sm.sm_underlined <- false;
+        sm.sm_underline <- false;
         sm.sm_blink <- false;
-        sm.sm_hidden <- false;
+        sm.sm_hide <- false;
         sm.sm_foreground <- None;
         sm.sm_background <- None;
         loop line column rest
     | Bold :: rest ->
         sm.sm_bold <- true;
         loop line column rest
-    | Underlined :: rest ->
-        sm.sm_underlined <- true;
+    | Underline :: rest ->
+        sm.sm_underline <- true;
         loop line column rest
     | Blink :: rest ->
         sm.sm_blink <- true;
@@ -183,8 +183,8 @@ let draw_styled ctx line column txt =
         sm.sm_foreground <- background;
         sm.sm_background <- foreground;
         loop line column rest
-    | Hidden :: rest ->
-        sm.sm_hidden <- true;
+    | Hide :: rest ->
+        sm.sm_hide <- true;
         loop line column rest
     | Foreground color :: rest ->
         sm.sm_foreground <- Some color;
