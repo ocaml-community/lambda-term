@@ -33,7 +33,7 @@ Library "lambda-term"
     Lt_windows,
     Lt_iconv,
     Lt_style,
-    Lt_types,
+    Lt_geom,
     Lt_draw,
     Lt_mouse,
     Lt_color_mappings,

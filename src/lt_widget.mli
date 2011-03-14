@@ -8,7 +8,7 @@
  *)
 
 open React
-open Lt_types
+open Lt_geom
 
 (** {6 Definitions} *)
 

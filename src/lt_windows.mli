@@ -59,15 +59,15 @@ type text_attributes = {
 
 (** Type of informations about a console. *)
 type console_screen_buffer_info = {
-  size : Lt_types.size;
+  size : Lt_geom.size;
   (** The size of the console buffer. *)
-  cursor_position : Lt_types.coord;
+  cursor_position : Lt_geom.coord;
   (** The line and column of the cursor. *)
   attributes : text_attributes;
   (** Text attributes. *)
-  window : Lt_types.rect;
+  window : Lt_geom.rect;
   (** The displayed windows in the console buffer. *)
-  maximum_window_size : Lt_types.size;
+  maximum_window_size : Lt_geom.size;
   (** The maximum window size for the current screen. *)
 }
 
@@ -104,7 +104,7 @@ val set_console_cursor_info : Lwt_unix.file_descr -> int -> bool -> unit
   (** [set_console_cursor_info fd size visible] sets the size and
       visible status of the cursor on the given console. *)
 
-val set_console_cursor_position : Lwt_unix.file_descr -> Lt_types.coord -> unit
+val set_console_cursor_position : Lwt_unix.file_descr -> Lt_geom.coord -> unit
   (** Move the cursor to the specified location in the screen
       buffer. *)
 
@@ -124,12 +124,12 @@ type char_info = {
   (** The background color. *)
 }
 
-val write_console_output : Lwt_unix.file_descr -> char_info array array -> Lt_types.size -> Lt_types.coord -> Lt_types.rect -> Lt_types.rect
+val write_console_output : Lwt_unix.file_descr -> char_info array array -> Lt_geom.size -> Lt_geom.coord -> Lt_geom.rect -> Lt_geom.rect
   (** [write_console_output fd chars size coord rect] writes the given
       matrix of characters with their attributes on the given console
       at given position. *)
 
-val fill_console_output_character : Lwt_unix.file_descr -> UChar.t -> int -> Lt_types.coord -> int
+val fill_console_output_character : Lwt_unix.file_descr -> UChar.t -> int -> Lt_geom.coord -> int
   (** [fill_console_output_character fd char count coord] writes
       [count] times [char] starting at [coord] on the given
       console. *)

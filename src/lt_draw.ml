@@ -8,7 +8,7 @@
  *)
 
 open CamomileLibraryDyn.Camomile
-open Lt_types
+open Lt_geom
 open Lt_style
 
 type point = {
@@ -25,10 +25,10 @@ type matrix = point array array
 
 let make_matrix size =
   Array.init
-    size.Lt_types.lines
+    size.Lt_geom.lines
     (fun _ ->
        Array.init
-         size.Lt_types.columns
+         size.Lt_geom.columns
          (fun _ -> {
             char = UChar.of_char ' ';
             bold = false;

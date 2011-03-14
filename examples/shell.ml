@@ -14,7 +14,7 @@ open React
 open Lwt
 open Lt_style
 open Lt_text
-open Lt_types
+open Lt_geom
 
 (* +-----------------------------------------------------------------+
    | Prompt creation                                                 |

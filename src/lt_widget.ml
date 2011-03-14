@@ -10,7 +10,7 @@
 open CamomileLibraryDyn.Camomile
 open Lwt_react
 open Lwt
-open Lt_types
+open Lt_geom
 open Lt_draw
 open Lt_key
 open Lt_style

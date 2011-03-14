@@ -1,6 +1,6 @@
 (*
- * lt_types.mli
- * ------------
+ * lt_geom.mli
+ * -----------
  * Copyright : (c) 2011, Jeremie Dimino <jeremie@dimino.org>
  * Licence   : BSD3
  *

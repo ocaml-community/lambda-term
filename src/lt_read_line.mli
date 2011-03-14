@@ -223,7 +223,7 @@ class virtual ['a] term : Lt_term.t -> object
   method set_prompt : prompt signal -> unit
     (** Sets the prompt signal. *)
 
-  method size : Lt_types.size signal
+  method size : Lt_geom.size signal
     (** The size of the terminal. This can be used for computing the
         prompt. *)
 

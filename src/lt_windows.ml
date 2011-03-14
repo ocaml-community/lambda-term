@@ -78,11 +78,11 @@ type text_attributes = {
 }
 
 type console_screen_buffer_info = {
-  size : Lt_types.size;
-  cursor_position : Lt_types.coord;
+  size : Lt_geom.size;
+  cursor_position : Lt_geom.coord;
   attributes : text_attributes;
-  window : Lt_types.rect;
-  maximum_window_size : Lt_types.size;
+  window : Lt_geom.rect;
+  maximum_window_size : Lt_geom.size;
 }
 
 external get_console_screen_buffer_info : Unix.file_descr -> console_screen_buffer_info = "lt_windows_get_console_screen_buffer_info"
@@ -123,7 +123,7 @@ let set_console_cursor_info fd size visible =
   Lwt_unix.check_descriptor fd;
   set_console_cursor_info (Lwt_unix.unix_file_descr fd) size visible
 
-external set_console_cursor_position : Unix.file_descr -> Lt_types.coord -> unit = "lt_windows_set_console_cursor_position"
+external set_console_cursor_position : Unix.file_descr -> Lt_geom.coord -> unit = "lt_windows_set_console_cursor_position"
 
 let set_console_cursor_position fd coord =
   Lwt_unix.check_descriptor fd;
@@ -141,18 +141,18 @@ type char_info = {
   ci_background : int;
 }
 
-external write_console_output : Unix.file_descr -> char_info array array -> Lt_types.size -> Lt_types.coord -> Lt_types.rect -> Lt_types.rect = "lt_windows_write_console_output"
+external write_console_output : Unix.file_descr -> char_info array array -> Lt_geom.size -> Lt_geom.coord -> Lt_geom.rect -> Lt_geom.rect = "lt_windows_write_console_output"
 
 let write_console_output fd chars size coord rect =
   Lwt_unix.check_descriptor fd;
-  if Array.length chars <> size.Lt_types.lines then invalid_arg "Lt_windows.write_console_output";
+  if Array.length chars <> size.Lt_geom.lines then invalid_arg "Lt_windows.write_console_output";
   Array.iter
     (fun line ->
-       if Array.length line <> size.Lt_types.columns then invalid_arg "Lt_windows.write_console_output")
+       if Array.length line <> size.Lt_geom.columns then invalid_arg "Lt_windows.write_console_output")
     chars;
   write_console_output (Lwt_unix.unix_file_descr fd) chars size coord rect
 
-external fill_console_output_character : Unix.file_descr -> UChar.t -> int -> Lt_types.coord -> int = "lt_windows_fill_console_output_character"
+external fill_console_output_character : Unix.file_descr -> UChar.t -> int -> Lt_geom.coord -> int = "lt_windows_fill_console_output_character"
 
 let fill_console_output_character fd char count coord =
   Lwt_unix.check_descriptor fd;

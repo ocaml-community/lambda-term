@@ -74,13 +74,13 @@ exception Not_a_tty
 
 (** {6 Sizes} *)
 
-val get_size : t -> Lt_types.size Lwt.t
+val get_size : t -> Lt_geom.size Lwt.t
   (** Returns the current size of the terminal.
 
       It raises {!Not_a_tty} if the output of the given terminal is
       not a tty. *)
 
-val set_size : t -> Lt_types.size -> unit Lwt.t
+val set_size : t -> Lt_geom.size -> unit Lwt.t
   (** Sets the current size of the terminal.
 
       It raises {!Not_a_tty} if the output of the given terminal is
@@ -133,7 +133,7 @@ val hide_cursor : t -> unit Lwt.t
       It raises {!Not_a_tty} if the output of the given terminal is
       not a tty. *)
 
-val goto : t -> Lt_types.coord -> unit Lwt.t
+val goto : t -> Lt_geom.coord -> unit Lwt.t
   (** [goto term coord] moves the cursor to the given coordinates.
 
       It raises {!Not_a_tty} if the output of the given terminal is
@@ -269,10 +269,10 @@ val stderr : t Lwt.t Lazy.t
 
 (** {6 Low-level functions} *)
 
-val get_size_from_fd : Lwt_unix.file_descr -> Lt_types.size Lwt.t
+val get_size_from_fd : Lwt_unix.file_descr -> Lt_geom.size Lwt.t
   (** [get_size_from_fd fd] returns the size of the terminal accessible via
       the given file descriptor. *)
 
-val set_size_from_fd : Lwt_unix.file_descr -> Lt_types.size -> unit Lwt.t
+val set_size_from_fd : Lwt_unix.file_descr -> Lt_geom.size -> unit Lwt.t
   (** [set_size_from_fd fd size] tries to set the size of the terminal
       accessible via the given file descriptor. *)

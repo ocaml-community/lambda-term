@@ -11,7 +11,7 @@
 
 (** Event from the terminal. *)
 type t =
-  | Resize of Lt_types.size
+  | Resize of Lt_geom.size
       (** The terminal has been resized. *)
   | Key of Lt_key.t
       (** A key has been pressed. *)

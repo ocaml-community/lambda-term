@@ -10,7 +10,7 @@
 (** Drawing *)
 
 open CamomileLibrary
-open Lt_types
+open Lt_geom
 
 (** Type of a point in a matrix of styled characters. *)
 type point = {
@@ -35,14 +35,14 @@ type matrix = point array array
         then columns, i.e. to access the point at line [l] and column
         [c] in matrix [m] you should use [m.(l).(c)]. *)
 
-val make_matrix : Lt_types.size -> matrix
+val make_matrix : Lt_geom.size -> matrix
   (** [matrix size] creates a matrix of the given size containing only
       blank characters. *)
 
 type context
   (** Type of contexts. A context is used for drawing. *)
 
-val context : matrix -> Lt_types.size -> context
+val context : matrix -> Lt_geom.size -> context
   (** [context m s] creates a context from a matrix [m] of size
       [s]. It raises [Invalid_argument] if [s] is not the size of
       [m]. *)

@@ -9,7 +9,7 @@
 
 open CamomileLibraryDyn.Camomile
 open Lwt
-open Lt_types
+open Lt_geom
 open Lt_draw
 open Lt_key
 

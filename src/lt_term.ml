@@ -9,7 +9,7 @@
 
 open CamomileLibraryDyn.Camomile
 open Lwt
-open Lt_types
+open Lt_geom
 
 (* +-----------------------------------------------------------------+
    | The terminal type                                               |
