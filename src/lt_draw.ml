@@ -16,6 +16,7 @@ type point = {
   mutable bold : bool;
   mutable underline : bool;
   mutable blink : bool;
+  mutable reverse : bool;
   mutable foreground : Lt_style.color;
   mutable background : Lt_style.color;
 }
@@ -33,6 +34,7 @@ let make_matrix size =
             bold = false;
             underline = false;
             blink = false;
+            reverse = false;
             foreground = Lt_style.default;
             background = Lt_style.default;
           }))
@@ -75,6 +77,7 @@ let clear ctx =
       point.bold <- false;
       point.underline <- false;
       point.blink <- false;
+      point.reverse <- false;
       point.foreground <- Lt_style.default;
       point.background <- Lt_style.default
     done
@@ -110,6 +113,53 @@ let draw_string ctx line column str =
         if line >= ctx.line1 && line < ctx.line2 && column >= ctx.column1 && column < ctx.column2 then
           (Array.unsafe_get (Array.unsafe_get ctx.matrix line) column).char <- ch;
         loop line (column + 1) ofs
+      end
+    end
+  in
+  loop (ctx.line1 + line) (ctx.column1 + column) 0
+
+let draw_styled ctx line column str =
+  let rec loop line column idx =
+    if idx < Array.length str then begin
+      let ch, style = Array.unsafe_get str idx in
+      if ch = newline then
+        loop (line + 1) ctx.column1 (idx + 1)
+      else begin
+        if line >= ctx.line1 && line < ctx.line2 && column >= ctx.column1 && column < ctx.column2 then begin
+          let point = Array.unsafe_get (Array.unsafe_get ctx.matrix line) column in
+          point.char <- ch;
+          begin
+            match Lt_style.bold style with
+              | Some x -> point.bold <- x
+              | None -> ()
+          end;
+          begin
+            match Lt_style.underline style with
+              | Some x -> point.underline <- x
+              | None -> ()
+          end;
+          begin
+            match Lt_style.blink style with
+              | Some x -> point.blink <- x
+              | None -> ()
+          end;
+          begin
+            match Lt_style.reverse style with
+              | Some x -> point.reverse <- x
+              | None -> ()
+          end;
+          begin
+            match Lt_style.foreground style with
+              | Some x -> point.foreground <- x
+              | None -> ()
+          end;
+          begin
+            match Lt_style.background style with
+              | Some x -> point.background <- x
+              | None -> ()
+          end
+        end;
+        loop line (column + 1) (idx + 1)
       end
     end
   in

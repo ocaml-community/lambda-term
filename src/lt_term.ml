@@ -695,6 +695,7 @@ let render_point term buf old_point new_point =
     if new_point.bold then Buffer.add_string buf Codes.bold;
     if new_point.underline then Buffer.add_string buf Codes.underline;
     if new_point.blink then Buffer.add_string buf Codes.blink;
+    if new_point.reverse then Buffer.add_string buf Codes.reverse;
     add_color term buf Codes.foreground new_point.foreground;
     add_color term buf Codes.background new_point.background;
     Buffer.add_char buf 'm';
@@ -712,6 +713,7 @@ let render_update_unix term old_matrix matrix =
     bold = false;
     underline = false;
     blink = false;
+    reverse = false;
     foreground = Lt_style.default;
     background = Lt_style.default;
   } in
@@ -743,11 +745,16 @@ let render_windows term matrix =
     Array.map
       (fun line ->
          Array.map
-           (fun point -> {
-              Lt_windows.ci_char = windows_map_char point.char;
-              Lt_windows.ci_foreground = windows_fg_color term point.foreground;
-              Lt_windows.ci_background = windows_bg_color term point.background;
-            })
+           (fun point ->
+              if point.reverse then {
+                Lt_windows.ci_char = windows_map_char point.char;
+                Lt_windows.ci_foreground = windows_bg_color term point.background;
+                Lt_windows.ci_background = windows_fg_color term point.foreground;
+              } else {
+                Lt_windows.ci_char = windows_map_char point.char;
+                Lt_windows.ci_foreground = windows_fg_color term point.foreground;
+                Lt_windows.ci_background = windows_bg_color term point.background;
+              })
            line)
       matrix
   in

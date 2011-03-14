@@ -54,6 +54,13 @@ type t = {
   background : color option;
 }
 
+let bold s = s.bold
+let underline s = s.underline
+let blink s = s.blink
+let reverse s = s.reverse
+let foreground s = s.foreground
+let background s = s.background
+
 let none = {
   bold = None;
   underline = None;
@@ -61,6 +68,20 @@ let none = {
   reverse = None;
   foreground = None;
   background = None;
+}
+
+let merge_field f1 f2 =
+  match f2 with
+    | Some _ -> f2
+    | None -> f1
+
+let merge s1 s2 = {
+  bold = merge_field s1.bold s2.bold;
+  underline = merge_field s1.underline s2.underline;
+  blink = merge_field s1.blink s2.blink;
+  reverse = merge_field s1.reverse s2.reverse;
+  foreground = merge_field s1.foreground s2.foreground;
+  background = merge_field s1.background s2.background;
 }
 
 let bool = function

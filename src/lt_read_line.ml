@@ -13,6 +13,7 @@ open Lwt_react
 open Lwt
 open Lt_types
 open Lt_style
+open Lt_text
 open Lt_key
 
 exception Interrupt
@@ -330,7 +331,7 @@ object(self)
           ()
 
   method stylise_input =
-    Lt_text.of_string (Zed_rope.to_string (Zed_edit.text edit))
+    Lt_text.of_rope (Zed_edit.text edit)
 
   method stylise =
     let txt = self#stylise_input in
@@ -436,27 +437,27 @@ let compute_position_unix size pos text =
 let make_completion_bar_middle index columns words =
   let rec aux ofs idx = function
     | [] ->
-        [Array.make (columns - ofs) (UChar.of_char ' ', Lt_style.none)]
+        [S(String.make (columns - ofs) ' ')]
     | (word, suffix) :: words ->
         let len = Zed_utf8.length word in
         let ofs' = ofs + len in
         if ofs' <= columns then
           if idx = index then
-            Lt_text.stylise word { Lt_style.none with reverse = Some true } ::
+            B_reverse true :: S word :: E_reverse ::
               if ofs' + 1 > columns then
                 []
               else
-                Lt_text.of_string "│" :: aux (ofs' + 1) (idx + 1) words
+                S"│" :: aux (ofs' + 1) (idx + 1) words
           else
-            Lt_text.stylise word Lt_style.none ::
+            S word ::
               if ofs' + 1 > columns then
                 []
               else
-                Lt_text.of_string "│" :: aux (ofs' + 1) (idx + 1) words
+                S"│" :: aux (ofs' + 1) (idx + 1) words
         else
-          [Lt_text.of_string (Zed_utf8.sub word 0 (columns - ofs))]
+          [S(Zed_utf8.sub word 0 (columns - ofs))]
   in
-  Array.concat (aux 0 0 words)
+  eval (aux 0 0 words)
 
 let make_bar delimiter columns words =
   let buf = Buffer.create (columns * 3) in

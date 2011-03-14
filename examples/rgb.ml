@@ -9,6 +9,7 @@
 
 open Lwt
 open Lt_style
+open Lt_text
 
 lwt () =
   if Array.length Sys.argv <> 4 then begin
@@ -18,9 +19,6 @@ lwt () =
     let r = int_of_string Sys.argv.(1)
     and g = int_of_string Sys.argv.(2)
     and b = int_of_string Sys.argv.(3) in
-    Lt_term.printls
-      (Array.concat [
-         Lt_text.stylise (Printf.sprintf "color with component (%d, %d, %d): " r g b) none;
-         Lt_text.stylise "example" { none with foreground = Some(rgb r g b) };
-       ])
+    Lt_term.printls (eval [S(Printf.sprintf "color with component (%d, %d, %d): " r g b);
+                           B_fg(rgb r g b); S"example"; E_fg])
   end

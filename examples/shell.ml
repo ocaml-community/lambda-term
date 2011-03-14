@@ -13,6 +13,7 @@ open CamomileLibraryDyn.Camomile
 open React
 open Lwt
 open Lt_style
+open Lt_text
 open Lt_types
 
 (* +-----------------------------------------------------------------+
@@ -55,25 +56,29 @@ let make_prompt size exit_code time =
       path
   in
 
-  Array.concat [
-    Lt_text.stylise "─( " { none with bold = Some true; foreground = Some lblue };
-    Lt_text.stylise (Printf.sprintf "%02d:%02d:%02d" tm.Unix.tm_hour tm.Unix.tm_min tm.Unix.tm_sec)
-      { none with bold = Some true; foreground = Some lmagenta };
-    Lt_text.stylise " )─< " { none with bold = Some true; foreground = Some lblue };
-    Lt_text.stylise path { none with bold = Some true; foreground = Some lyellow };
-    Lt_text.stylise " >─" { none with bold = Some true; foreground = Some lblue };
-    Lt_text.stylise
-      (Zed_utf8.make
-         (size.columns - 24 - Zed_utf8.length code - Zed_utf8.length path)
-         (UChar.of_int 0x2500))
-      { none with bold = Some true; foreground = Some lblue };
-    Lt_text.stylise "[ " { none with bold = Some true; foreground = Some lblue };
-    Lt_text.stylise code { none with foreground = Some(if exit_code = 0 then lwhite else lred) };
-    Lt_text.stylise " ]─" { none with bold = Some true; foreground = Some lblue };
-    Lt_text.stylise (try Sys.getenv "USER" with Not_found -> "") { none with bold = Some true; foreground = Some lred };
-    Lt_text.stylise "@" { none with bold = Some true; foreground = Some lgreen };
-    Lt_text.stylise (Unix.gethostname ()) { none with bold = Some true; foreground = Some lblue };
-    Lt_text.stylise " $ " { none with bold = Some true; foreground = Some lgreen };
+  eval [
+    B_bold true;
+
+    B_fg lblue;
+    S"─( ";
+    B_fg lmagenta; S(Printf.sprintf "%02d:%02d:%02d" tm.Unix.tm_hour tm.Unix.tm_min tm.Unix.tm_sec); E_fg;
+    S" )─< ";
+    B_fg lyellow; S path; E_fg;
+    S" >─";
+    S(Zed_utf8.make
+        (size.columns - 24 - Zed_utf8.length code - Zed_utf8.length path)
+        (UChar.of_int 0x2500));
+    S"[ ";
+    B_fg(if exit_code = 0 then lwhite else lred); S code; E_fg;
+    S" ]─";
+    E_fg;
+
+    B_fg lred; S(try Sys.getenv "USER" with Not_found -> ""); E_fg;
+    B_fg lgreen; S"@"; E_fg;
+    B_fg lblue; S(Unix.gethostname ()); E_fg;
+    B_fg lgreen; S" $ "; E_fg;
+
+    E_bold;
   ]
 
 (* +-----------------------------------------------------------------+

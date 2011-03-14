@@ -62,8 +62,19 @@ type t = {
   background : color option;
 }
 
+val bold : t -> bool option
+val underline : t -> bool option
+val blink : t -> bool option
+val reverse : t -> bool option
+val foreground : t -> color option
+val background : t -> color option
+
 val none : t
   (** Style with all fields set to [None]. *)
+
+val merge : t -> t -> t
+  (** [merge s1 s2] is [s2] with all undefined fields set to ones of
+      [s1]. *)
 
 val equal : t -> t -> bool
   (** [equal s1 s2] returns [true] iff [s1] and [s2] are equal after
