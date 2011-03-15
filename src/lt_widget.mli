@@ -13,7 +13,7 @@ open Lt_geom
 (** {6 Definitions} *)
 
 (** Type of widgets. *)
-class t : unit -> object
+class t : object
   method as_widget : t
     (** Sub-type the widget to the standard widget type. *)
 

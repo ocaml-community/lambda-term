@@ -20,17 +20,17 @@ open Lt_text
    | Definitions                                                     |
    +-----------------------------------------------------------------+ *)
 
-class t () =
+class _t () =
   let key_pressed, send_key_pressed = E.create () in
   let event, set_can_focus = E.create () in
   let can_focus = S.switch (S.const false) event in
 object(self)
-  method as_widget = (self :> t)
-  method children : t list signal = S.const []
+  method as_widget = (self :> _t)
+  method children : _t list signal = S.const []
   method can_focus = can_focus
   method set_can_focus = set_can_focus
   method need_redraw : unit event = E.never
-  method draw (ctx : Lt_draw.context) (focused : t) : coord option = None
+  method draw (ctx : Lt_draw.context) (focused : _t) : coord option = None
   method key_pressed = key_pressed
 
   method handle_event = function
@@ -40,6 +40,8 @@ object(self)
         ()
 end
 
+class t = object inherit _t () end
+
 (* +-----------------------------------------------------------------+
    | Labels                                                          |
    +-----------------------------------------------------------------+ *)
@@ -48,7 +50,7 @@ class label text =
   let event, set_text = E.create () in
   let text = S.switch text event in
 object
-  inherit t ()
+  inherit t
 
   method text = text
   method set_text = set_text
@@ -71,7 +73,7 @@ class box (children : t list signal) =
   let event, set_children = E.create () in
   let children = S.switch children event in
 object
-  inherit t ()
+  inherit t
 
   method children = children
   method set_children = set_children
@@ -181,7 +183,7 @@ class button text =
   let text = S.switch text event in
   let clicked, send_clicked = E.create () in
 object(self)
-  inherit t () as super
+  inherit t as super
 
   method text = text
   method set_text = set_text
