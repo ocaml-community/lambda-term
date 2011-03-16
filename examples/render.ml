@@ -15,18 +15,8 @@ open Lt_key
 
 let render term old_matrix size coord =
   let m = make_matrix size in
-  for l = 1 to size.lines - 2 do
-    m.(l).(0).char <- UChar.of_int 0x2502;
-    m.(l).(size.columns - 1).char <- UChar.of_int 0x2502
-  done;
-  for c = 1 to size.columns - 2 do
-    m.(0).(c).char <- UChar.of_int 0x2500;
-    m.(size.lines - 1).(c).char <- UChar.of_int 0x2500
-  done;
-  m.(0).(0).char <- UChar.of_int 0x250c;
-  m.(0).(size.columns - 1).char <- UChar.of_int 0x2510;
-  m.(size.lines - 1).(0).char <- UChar.of_int 0x2514;
-  m.(size.lines - 1).(size.columns - 1).char <- UChar.of_int 0x2518;
+  let ctx = context m size in
+  draw_frame ctx { r_line = 0; r_column = 0; r_lines = size.lines; r_columns = size.columns };
   m.(coord.line).(coord.column).char <- UChar.of_char 'O';
   lwt () = Lt_term.render_update term old_matrix m in
   return m

@@ -24,11 +24,12 @@ lwt () =
   in
 
   (* Exit when escape is pressed. *)
-  E.notify
-    (function
-       | { Lt_key.code = Lt_key.Escape } -> wakeup wakener ()
-       | _ -> ())
-    widget#key_pressed;
+  E.keep
+    (E.map
+       (function
+          | { Lt_key.code = Lt_key.Escape } -> wakeup wakener ()
+          | _ -> ())
+       widget#key_pressed);
 
   (* Run. *)
   lwt term = Lazy.force Lt_term.stdout in

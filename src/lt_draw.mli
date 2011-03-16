@@ -86,3 +86,28 @@ val draw_string : context -> int -> int -> string -> unit
 val draw_styled : context -> int -> int -> Lt_text.t -> unit
   (** [draw_styled ctx line column text] draws the given styled text
       at given coordinates. *)
+
+(** Type of an connection in a piece that can be connected to other
+    pieces. *)
+type connection =
+  | Blank
+      (** No connection. *)
+  | Light
+      (** Connection with a light line. *)
+  | Heavy
+      (** Connection with a heavy line. *)
+
+type piece = { top : connection; bottom : connection; left : connection; right : connection }
+    (** Type of a piece, given by its four connection. *)
+
+val draw_piece : context -> int -> int -> piece -> unit
+  (** Draws a piece. It may modify pieces around it. *)
+
+val draw_hline : context -> int -> int -> int -> unit
+  (** [draw_hline ctx line column length] draws an horizontal line. *)
+
+val draw_vline : context -> int -> int -> int -> unit
+  (** [draw_hline ctx line column length] draws an vertical line. *)
+
+val draw_frame : context -> rect -> unit
+  (** Draws a rectangle. *)
