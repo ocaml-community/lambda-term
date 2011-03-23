@@ -68,6 +68,15 @@ class vbox : t list signal -> object
   method set_children : t list signal -> unit
 end
 
+class frame : t signal -> object
+  inherit t
+  method child : t signal
+  method set_child : t signal -> unit
+end
+
+class hline : t
+class vline : t
+
 class button : string signal -> object
   inherit t
 

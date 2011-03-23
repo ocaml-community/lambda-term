@@ -174,6 +174,55 @@ object(self)
     loop 0.0 children None
 end
 
+class frame child =
+  let event, set_child = E.create () in
+  let child = S.switch child event in
+object
+  inherit t
+
+  method child = child
+  method set_child = set_child
+  val children = S.map (fun x -> [x]) child
+  method children = children
+
+  val need_redraw =
+    let s = S.map (fun child -> child#need_redraw) child in
+    E.switch (S.value s) (S.changes s)
+  method need_redraw = need_redraw
+
+  method draw ctx focused =
+    let size = size ctx in
+    if size.lines >= 1 && size.columns >= 1 then
+      draw_frame ctx { r_line = 0;
+                       r_column = 0;
+                       r_lines = size.lines;
+                       r_columns = size.columns };
+    (S.value child)#draw
+      (sub ctx { r_line = min 1 size.lines;
+                 r_column = min 1 size.columns;
+                 r_lines = max 0 (size.lines - 2);
+                 r_columns = max 0 (size.columns - 2) })
+      focused
+end
+
+class hline = object
+  inherit t
+
+  method draw ctx focused =
+    let size = size ctx in
+    draw_hline ctx 0 0 size.columns;
+    None
+end
+
+class vline = object
+  inherit t
+
+  method draw ctx focused =
+    let size = size ctx in
+    draw_vline ctx 0 0 size.lines;
+    None
+end
+
 (* +-----------------------------------------------------------------+
    | Buttons                                                         |
    +-----------------------------------------------------------------+ *)

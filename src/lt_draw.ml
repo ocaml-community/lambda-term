@@ -44,6 +44,7 @@ let make_matrix size =
 
 type context = {
   matrix : matrix;
+  matrix_size : size;
   line1 : int;
   column1 : int;
   line2 : int;
@@ -53,7 +54,7 @@ type context = {
 let context m s =
   if Array.length m <> s.lines then invalid_arg "Lt_draw.context";
   Array.iter (fun l -> if Array.length l <> s.columns then invalid_arg "Lt_draw.context") m;
-  { matrix = m; line1 = 0; column1 = 0; line2 = s.lines; column2 = s.columns }
+  { matrix = m; matrix_size = s; line1 = 0; column1 = 0; line2 = s.lines; column2 = s.columns }
 
 let size ctx = {
   lines = ctx.line2 - ctx.line1;
@@ -346,7 +347,7 @@ let draw_piece ctx line column piece =
   let line = ctx.line1 + line and column = ctx.column1 + column in
   if line >= ctx.line1 && column >= ctx.column1 && line < ctx.line2 && column < ctx.column2 then begin
     let piece =
-      if line > ctx.line1 then begin
+      if line > 0 then begin
         let point = unsafe_get ctx.matrix (line - 1) column in
         match piece_of_char point.char with
           | None ->
@@ -365,7 +366,7 @@ let draw_piece ctx line column piece =
         piece
     in
     let piece =
-      if line < ctx.line2 - 1 then begin
+      if line < ctx.matrix_size.lines - 1 then begin
         let point = unsafe_get ctx.matrix (line + 1) column in
         match piece_of_char point.char with
           | None ->
@@ -384,7 +385,7 @@ let draw_piece ctx line column piece =
         piece
     in
     let piece =
-      if column > ctx.column1 then begin
+      if column > 0 then begin
         let point = unsafe_get ctx.matrix line (column - 1) in
         match piece_of_char point.char with
           | None ->
@@ -403,7 +404,7 @@ let draw_piece ctx line column piece =
         piece
     in
     let piece =
-      if column < ctx.column2 - 1 then begin
+      if column < ctx.matrix_size.columns - 1 then begin
         let point = unsafe_get ctx.matrix line (column + 1) in
         match piece_of_char point.char with
           | None ->
