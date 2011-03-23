@@ -24,6 +24,11 @@ class _t () =
   let key_pressed, send_key_pressed = E.create () in
   let event, set_can_focus = E.create () in
   let can_focus = S.switch (S.const false) event in
+  let event, set_expand_horz = E.create () in
+  let size, set_size = S.create { lines = 0; columns = 0 } in
+  let expand_horz = S.switch (S.const false) event in
+  let event, set_expand_vert = E.create () in
+  let expand_vert = S.switch (S.const false) event in
 object(self)
   method as_widget = (self :> _t)
   method children : _t list signal = S.const []
@@ -36,8 +41,19 @@ object(self)
   method handle_event = function
     | Lt_event.Key key ->
         send_key_pressed key
+    | Lt_event.Resize size ->
+        set_size size
     | ev ->
         ()
+
+  method size = size
+
+  method requested_size = S.const { lines = 0; columns = 0 }
+
+  method expand_horz = expand_horz
+  method set_expand_horz = set_expand_horz
+  method expand_vert = expand_vert
+  method set_expand_vert = set_expand_vert
 end
 
 class t = object inherit _t () end
@@ -46,10 +62,28 @@ class t = object inherit _t () end
    | Labels                                                          |
    +-----------------------------------------------------------------+ *)
 
+let newline = UChar.of_char '\n'
+
+let text_size str =
+  let rec loop ofs lines columns max_columns =
+    if ofs = String.length str then
+      { lines; columns = max columns max_columns }
+    else
+      let chr, ofs = Zed_utf8.unsafe_extract_next str ofs in
+      if chr = newline then
+        if ofs = String.length str then
+          { lines; columns = max columns max_columns }
+        else
+          loop ofs (lines + 1) 0 (max columns max_columns)
+      else
+        loop ofs lines (columns + 1) max_columns
+  in
+  loop 0 1 0 0
+
 class label text =
   let event, set_text = E.create () in
   let text = S.switch text event in
-object
+object(self)
   inherit t
 
   method text = text
@@ -58,11 +92,18 @@ object
   val need_redraw = E.stamp (S.changes text) ()
   method need_redraw = need_redraw
 
+  val requested_size = S.map text_size text
+  method requested_size = requested_size
+
   method draw ctx focused =
     let { lines; columns } = Lt_draw.size ctx in
     let text = S.value text in
     Lt_draw.draw_string ctx (lines / 2) ((columns - Zed_utf8.length text) / 2) text;
     None
+
+  initializer
+    self#set_expand_horz (S.const true);
+    self#set_expand_vert (S.const true)
 end
 
 (* +-----------------------------------------------------------------+
@@ -72,7 +113,7 @@ end
 class box (children : t list signal) =
   let event, set_children = E.create () in
   let children = S.switch children event in
-object
+object(self)
   inherit t
 
   method children = children
@@ -86,6 +127,26 @@ object
     in
     E.switch (S.value signal) (S.changes signal)
   method need_redraw = need_redraw
+
+  val mutable children_infos = S.const []
+    (* A signal holding a list of elements of the form [(child,
+       expand_horz, expand_vert, requested_size)] for all children of the
+       box. *)
+
+  initializer
+    let s =
+      S.map
+        (List.rev_map
+           (fun child ->
+              S.l3 ~eq:(==)
+                (fun expand_horz expand_vert size -> (child, expand_horz, expand_vert, size))
+                child#expand_horz
+                child#expand_vert
+                child#requested_size))
+        self#children
+    in
+    let s = S.map (S.merge ~eq:(==) (fun l x -> x :: l) []) s in
+    children_infos <- (S.switch (S.value s) (S.changes s))
 end
 
 let choose_cursor c1 c2 =
@@ -98,86 +159,214 @@ class hbox children =
 object(self)
   inherit box children
 
+  val mutable requested_size = S.const { lines = 0; columns = 0 }
+  method requested_size = requested_size
+
+  val mutable children_columns = S.const []
+    (* Signal holding the list of columns of children. *)
+
+  initializer
+    self#set_expand_horz (S.map (List.exists (fun (child, expand_horz, expand_vert, req_size) -> expand_horz)) children_infos);
+    self#set_expand_vert (S.map (List.for_all (fun (child, expand_horz, expand_vert, req_size) -> expand_vert)) children_infos);
+
+    requested_size <- (
+      S.map
+        (List.fold_left
+           (fun acc (child, expand_horz, expand_vert, req_size) ->
+              { lines = max acc.lines req_size.lines; columns = acc.columns + req_size.columns })
+           { lines = 0; columns = 0 })
+        children_infos
+    );
+
+    children_columns <- (
+      S.l2
+        (fun infos size ->
+           let total_requested_columns =
+             List.fold_left
+               (fun acc (child, expand_horz, expand_vert, req_size) -> acc + req_size.columns)
+               0 infos
+           in
+           if total_requested_columns <= size.columns then
+             (* There is enough space for everybody, we split free
+                space between children that can expand. *)
+             (* Count the number of children that can expand. *)
+             let count_can_expand =
+               List.fold_left
+                 (fun acc (child, expand_horz, expand_vert, req_size) ->
+                    if expand_horz then acc + 1 else acc)
+                 0 infos
+             in
+             (* Divide free space between these children. *)
+             let widthf = if count_can_expand = 0 then 0. else float (size.columns - total_requested_columns) /. float count_can_expand in
+             (* Compute widths of children. *)
+             let rec loop columnf = function
+               | [] ->
+                   []
+               | [(child, expand_horz, expand_vert, req_size)] ->
+                   let width = size.columns - truncate columnf in
+                   child#handle_event (Lt_event.Resize { lines = size.lines; columns = width });
+                   [(child, width)]
+               | (child, expand_horz, expand_vert, req_size) :: rest ->
+                   if expand_horz then begin
+                     let column = truncate columnf in
+                     let width = req_size.columns + truncate (columnf +. widthf) - column in
+                     child#handle_event (Lt_event.Resize { lines = size.lines; columns = width });
+                     (child, width) :: loop (columnf +. float req_size.columns +. widthf) rest
+                   end else begin
+                     child#handle_event (Lt_event.Resize { lines = size.lines; columns = req_size.columns });
+                     (child, req_size.columns) :: loop (columnf +. float req_size.columns) rest
+                   end
+             in
+             loop 0. infos
+           else
+             (* There is not enough space for everybody. *)
+             if total_requested_columns = 0 then
+               List.map (fun (child, _, _, _) -> (child, 0)) infos
+             else
+               let rec loop column = function
+                 | [] ->
+                     []
+                 | [(child, _, _, _)] ->
+                     let width = size.columns - column in
+                     child#handle_event (Lt_event.Resize { lines = size.lines; columns = width });
+                     [(child, width)]
+                 | (child, _, _, req_size) :: rest ->
+                     let width = req_size.columns * size.columns / total_requested_columns in
+                     child#handle_event (Lt_event.Resize { lines = size.lines; columns = width });
+                     (child, width) :: loop (column + width) rest
+               in
+               loop 0 infos)
+        children_infos self#size
+    )
+
   method draw ctx focused =
-    let { lines; columns } = Lt_draw.size ctx in
-    let children = S.value self#children in
-    let n = List.length children in
-    let widthf = float columns /. float n in
-    let rec loop columnf children cursor =
+    let size = Lt_draw.size ctx in
+    let rec loop column children cursor =
       match children with
         | [] ->
             None
-        | [child] ->
-            let column = truncate columnf in
+        | (child, columns) :: rest ->
             let cursor' =
               child#draw (Lt_draw.sub ctx {
                             r_line = 0;
                             r_column = column;
-                            r_lines = lines;
-                            r_columns = columns - column;
+                            r_lines = size.lines;
+                            r_columns = columns;
                           }) focused
             in
-            choose_cursor cursor cursor'
-        | child :: rest ->
-            let column = truncate columnf in
-            let width = truncate (columnf +. widthf) - column in
-            let cursor' =
-              child#draw (Lt_draw.sub ctx {
-                            r_line = 0;
-                            r_column = column;
-                            r_lines = lines;
-                            r_columns = width;
-                          }) focused
-            in
-            loop (columnf +. widthf) rest (choose_cursor cursor cursor')
+            loop (column + columns) rest (choose_cursor cursor cursor')
     in
-    loop 0.0 children None
+    loop 0 (S.value children_columns) None
 end
 
 class vbox children =
 object(self)
   inherit box children
 
+  val mutable requested_size = S.const { lines = 0; columns = 0 }
+  method requested_size = requested_size
+
+  val mutable children_lines = S.const []
+    (* Signal holding the list of lines of children. *)
+
+  initializer
+    self#set_expand_horz (S.map (List.for_all (fun (child, expand_horz, expand_vert, req_size) -> expand_horz)) children_infos);
+    self#set_expand_vert (S.map (List.exists (fun (child, expand_horz, expand_vert, req_size) -> expand_vert)) children_infos);
+
+    requested_size <- (
+      S.map
+        (List.fold_left
+           (fun acc (child, expand_horz, expand_vert, req_size) ->
+              { lines = acc.lines + req_size.lines; columns = max acc.columns req_size.columns })
+           { lines = 0; columns = 0 })
+        children_infos
+    );
+
+    children_lines <- (
+      S.l2
+        (fun infos size ->
+           let total_requested_lines =
+             List.fold_left
+               (fun acc (child, expand_horz, expand_vert, req_size) -> acc + req_size.lines)
+               0 infos
+           in
+           if total_requested_lines <= size.lines then
+             (* There is enough space for everybody, we split free
+                space between children that can expand. *)
+             (* Count the number of children that can expand. *)
+             let count_can_expand =
+               List.fold_left
+                 (fun acc (child, expand_horz, expand_vert, req_size) ->
+                    if expand_vert then acc + 1 else acc)
+                 0 infos
+             in
+             (* Divide free space between these children. *)
+             let heightf = if count_can_expand = 0 then 0. else float (size.lines - total_requested_lines) /. float count_can_expand in
+             (* Compute heights of children. *)
+             let rec loop linef = function
+               | [] ->
+                   []
+               | [(child, expand_horz, expand_vert, req_size)] ->
+                   let height = size.lines - truncate linef in
+                   child#handle_event (Lt_event.Resize { lines = height; columns = size.columns });
+                   [(child, height)]
+               | (child, expand_horz, expand_vert, req_size) :: rest ->
+                   if expand_vert then begin
+                     let line = truncate linef in
+                     let height = req_size.lines + truncate (linef +. heightf) - line in
+                     child#handle_event (Lt_event.Resize { lines = height; columns = size.columns });
+                     (child, height) :: loop (linef +. float req_size.lines +. heightf) rest
+                   end else begin
+                     child#handle_event (Lt_event.Resize { lines = req_size.lines; columns = size.columns });
+                     (child, req_size.lines) :: loop (linef +. float req_size.lines) rest
+                   end
+             in
+             loop 0. infos
+           else
+             (* There is not enough space for everybody. *)
+             if total_requested_lines = 0 then
+               List.map (fun (child, _, _, _) -> (child, 0)) infos
+             else
+               let rec loop line = function
+                 | [] ->
+                     []
+                 | [(child, _, _, _)] ->
+                     let height = size.lines - line in
+                     child#handle_event (Lt_event.Resize { lines = height; columns = size.columns });
+                     [(child, height)]
+                 | (child, _, _, req_size) :: rest ->
+                     let height = req_size.lines * size.lines / total_requested_lines in
+                     child#handle_event (Lt_event.Resize { lines = height; columns = size.columns });
+                     (child, height) :: loop (line + height) rest
+               in
+               loop 0 infos)
+        children_infos self#size
+    )
+
   method draw ctx focused =
-    let { lines; columns } = Lt_draw.size ctx in
-    let children = S.value self#children in
-    let n = List.length children in
-    let heightf = float lines /. float n in
-    let rec loop linef children cursor =
+    let size = Lt_draw.size ctx in
+    let rec loop line children cursor =
       match children with
         | [] ->
             None
-        | [child] ->
-            let line = truncate linef in
+        | (child, lines) :: rest ->
             let cursor' =
               child#draw (Lt_draw.sub ctx {
                             r_line = line;
                             r_column = 0;
-                            r_lines = lines - line;
-                            r_columns = columns;
+                            r_lines = lines;
+                            r_columns = size.columns;
                           }) focused
             in
-            choose_cursor cursor cursor'
-        | child :: rest ->
-            let line = truncate linef in
-            let height = truncate (linef +. heightf) - line in
-            let cursor' =
-              child#draw (Lt_draw.sub ctx {
-                            r_line = line;
-                            r_column = 0;
-                            r_lines = height;
-                            r_columns = columns;
-                          }) focused
-            in
-            loop (linef +. heightf) rest (choose_cursor cursor cursor')
+            loop (line + lines) rest (choose_cursor cursor cursor')
     in
-    loop 0.0 children None
+    loop 0 (S.value children_lines) None
 end
 
 class frame child =
   let event, set_child = E.create () in
   let child = S.switch child event in
-object
+object(self)
   inherit t
 
   method child = child
@@ -189,6 +378,17 @@ object
     let s = S.map (fun child -> child#need_redraw) child in
     E.switch (S.value s) (S.changes s)
   method need_redraw = need_redraw
+
+  val mutable handle_size_changes = S.const ()
+  initializer
+    handle_size_changes <- (
+      S.map
+        (fun size ->
+           (S.value child)#handle_event
+             (Lt_event.Resize { lines = max 0 (size.lines - 2);
+                                columns = max 0 (size.columns - 2) }))
+        self#size
+    )
 
   method draw ctx focused =
     let size = size ctx in
@@ -203,24 +403,40 @@ object
                  r_lines = max 0 (size.lines - 2);
                  r_columns = max 0 (size.columns - 2) })
       focused
+
+  initializer
+  let s = S.map ~eq:(==) (fun child -> child#expand_horz) child in
+  self#set_expand_horz (S.switch (S.value s) (S.changes s));
+  let s = S.map ~eq:(==) (fun child -> child#expand_vert) child in
+  self#set_expand_vert (S.switch (S.value s) (S.changes s))
 end
 
-class hline = object
+class hline = object(self)
   inherit t
+
+  method requested_size = S.const { lines = 1; columns = 0 }
 
   method draw ctx focused =
     let size = size ctx in
     draw_hline ctx 0 0 size.columns;
     None
+
+  initializer
+    self#set_expand_horz (S.const true)
 end
 
-class vline = object
+class vline = object(self)
   inherit t
+
+  method requested_size = S.const { lines = 0; columns = 1 }
 
   method draw ctx focused =
     let size = size ctx in
     draw_vline ctx 0 0 size.lines;
     None
+
+  initializer
+    self#set_expand_vert (S.const true)
 end
 
 (* +-----------------------------------------------------------------+
@@ -250,6 +466,9 @@ object(self)
   val need_redraw = E.stamp (S.changes text) ()
   method need_redraw = need_redraw
 
+  val requested_size = S.map (fun text -> { lines = 1; columns = 4 + Zed_utf8.length text }) text
+  method requested_size = requested_size
+
   method draw ctx focused =
     let { lines; columns } = Lt_draw.size ctx in
     let text = S.value text in
@@ -263,6 +482,8 @@ object(self)
     None
 
   initializer
+    self#set_expand_horz (S.const true);
+    self#set_expand_vert (S.const true);
     self#set_can_focus (S.const true)
 end
 
@@ -388,11 +609,12 @@ let run term ?(save_state=true) widget waiter =
   let rec loop () =
     let thread = Lt_term.read_event term >|= fun x -> Event x in
     choose [thread; waiter] >>= function
-      | Event(Lt_event.Resize new_size) ->
+      | Event(Lt_event.Resize new_size as ev) ->
           (* New size, discard current matrices. *)
           matrix_a := [||];
           matrix_b := [||];
           size := new_size;
+          widget#handle_event ev;
           (* Redraw with the new size. *)
           lwt () = draw () in
           loop ()
@@ -434,6 +656,9 @@ let run term ?(save_state=true) widget waiter =
   let ev_redraw = E.map_s draw widget#need_redraw in
 
   try_lwt
+    (* Initialises the size of widgets. *)
+    lwt size = Lt_term.get_size term in
+    widget#handle_event (Lt_event.Resize size);
     (* Initial drawing. *)
     lwt () = draw () in
     (* Loop forever. *)

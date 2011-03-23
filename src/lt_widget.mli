@@ -24,7 +24,6 @@ class t : object
     (** Whether the focus can receive the focus or not. *)
 
   method set_can_focus : bool signal -> unit
-    (** Sets the {!can_focus} signal. *)
 
   method need_redraw : unit event
     (** Event which occurs when the widget need to be redrawn. *)
@@ -42,6 +41,25 @@ class t : object
   method key_pressed : Lt_key.t event
     (** Event occuring when the widget has the focus and a key is
         pressed. *)
+
+  method size : size signal
+    (** The signal holding the current size of the widget. This size
+        is updated when the widget receive a {!Lt_event.Resize}
+        event. *)
+
+  method requested_size : size signal
+    (** The size wanted by the widget. *)
+
+  method expand_horz : bool signal
+    (** Whether to expand the widget horizontally if there is free
+        space. *)
+
+  method expand_vert : bool signal
+    (** Whether to expand the widget vertically if there is free
+        space. *)
+
+  method set_expand_horz : bool signal -> unit
+  method set_expand_vert : bool signal -> unit
 end
 
 (** {6 Simple widgets} *)
