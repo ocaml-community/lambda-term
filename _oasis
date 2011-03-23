@@ -79,11 +79,11 @@ Executable rgb
   MainIs: rgb.ml
   BuildDepends: lambda-term
 
-Executable render
+Executable move
   Path: examples
   Install: false
   CompiledObject: best
-  MainIs: render.ml
+  MainIs: move.ml
   BuildDepends: lambda-term
 
 Executable hello

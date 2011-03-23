@@ -3,7 +3,7 @@
 <src/*>: use_iconv
 
 # OASIS_START
-# DO NOT EDIT (digest: 8dc0f4b67a1e77f99daf6ef6ad93bfa0)
+# DO NOT EDIT (digest: 339576516a3cdbf75ff0f10b9ab10ff1)
 # Library lambda-term
 "src": include
 <src/lambda-term.{cma,cmxa}>: use_liblambda-term
@@ -51,12 +51,6 @@
 <examples/colors_256.{native,byte}>: pkg_lwt.unix
 <examples/colors_256.{native,byte}>: pkg_lwt.syntax
 <examples/colors_256.{native,byte}>: pkg_lwt.react
-# Executable render
-<examples/render.{native,byte}>: use_lambda-term
-<examples/render.{native,byte}>: pkg_zed
-<examples/render.{native,byte}>: pkg_lwt.unix
-<examples/render.{native,byte}>: pkg_lwt.syntax
-<examples/render.{native,byte}>: pkg_lwt.react
 # Executable buttons
 <examples/buttons.{native,byte}>: use_lambda-term
 <examples/buttons.{native,byte}>: pkg_zed
@@ -71,6 +65,12 @@
 <examples/shell.{native,byte}>: pkg_lwt.syntax
 <examples/shell.{native,byte}>: pkg_lwt.react
 <examples/*.ml{,i}>: pkg_str
+# Executable move
+<examples/move.{native,byte}>: use_lambda-term
+<examples/move.{native,byte}>: pkg_zed
+<examples/move.{native,byte}>: pkg_lwt.unix
+<examples/move.{native,byte}>: pkg_lwt.syntax
+<examples/move.{native,byte}>: pkg_lwt.react
 # Executable colors
 <examples/colors.{native,byte}>: use_lambda-term
 <examples/colors.{native,byte}>: pkg_zed
