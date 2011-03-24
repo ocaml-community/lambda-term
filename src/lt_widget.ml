@@ -136,6 +136,40 @@ let label ?(horz_align=H_align_center) ?(vert_align=V_align_center) text =
      ~vert_align:(S.const vert_align)
      (S.const text))#as_widget
 
+class title ?(horz_align=S.const H_align_center) text =
+  let event, set_text = E.create () in
+  let text = S.switch text event in
+  let event, set_horz_align = E.create () in
+  let horz_align = S.switch horz_align event in
+object(self)
+  inherit t
+
+  method text = text
+  method set_text = set_text
+
+  method horz_align = horz_align
+  method set_horz_align = set_horz_align
+
+  val need_redraw = E.select [
+    E.stamp (S.changes text) ();
+    E.stamp (S.changes horz_align) ();
+  ]
+  method need_redraw = need_redraw
+
+  val requested_size = S.map (fun text -> { lines = 1; columns = 4 + Zed_utf8.length text }) text
+  method requested_size = requested_size
+
+  method draw ctx focused =
+    Lt_draw.draw_string_aligned ctx 0 (S.value horz_align) ("[ " ^ S.value text ^ " ]");
+    None
+
+  initializer
+    self#set_expand_horz (S.const true)
+end
+
+let title ?(horz_align=H_align_center) text =
+  (new title ~horz_align:(S.const horz_align) (S.const text))#as_widget
+
 (* +-----------------------------------------------------------------+
    | Boxes                                                           |
    +-----------------------------------------------------------------+ *)

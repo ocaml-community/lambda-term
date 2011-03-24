@@ -86,6 +86,20 @@ end
 
 val label : ?horz_align : horz_alignment -> ?vert_align : vert_alignment -> string -> t
 
+class title : ?horz_align : horz_alignment signal -> string signal -> object
+  inherit t
+
+  method text : string signal
+    (** The signal holding the title. *)
+
+  method set_text : string signal -> unit
+
+  method horz_align : horz_alignment signal
+  method set_horz_align : horz_alignment signal -> unit
+end
+
+val title : ?horz_align : horz_alignment -> string -> t
+
 class hbox : t list signal -> object
   inherit t
   method children : t list signal
