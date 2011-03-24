@@ -65,16 +65,21 @@ end
 (** {6 Simple widgets} *)
 
 (** A widget displaying some text. *)
-class label : string signal -> object
+class label : ?alignment : Lt_draw.alignment signal -> string signal -> object
   inherit t
 
   method text : string signal
     (** The signal holding the displayed text. *)
 
   method set_text : string signal -> unit
+
+  method alignment : Lt_draw.alignment signal
+    (** The alignment of the text. *)
+
+  method set_alignment : Lt_draw.alignment signal -> unit
 end
 
-val label : string -> t
+val label : ?alignment : Lt_draw.alignment -> string -> t
 
 class hbox : t list signal -> object
   inherit t

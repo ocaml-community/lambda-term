@@ -80,16 +80,24 @@ let text_size str =
   in
   loop 0 1 0 0
 
-class label text =
+class label ?(alignment=S.const Lt_draw.C_align) text =
   let event, set_text = E.create () in
   let text = S.switch text event in
+  let event, set_alignment = E.create () in
+  let alignment = S.switch alignment event in
 object(self)
   inherit t
 
   method text = text
   method set_text = set_text
 
-  val need_redraw = E.stamp (S.changes text) ()
+  method alignment = alignment
+  method set_alignment = set_alignment
+
+  val need_redraw = E.select [
+    E.stamp (S.changes text) ();
+    E.stamp (S.changes alignment) ();
+  ]
   method need_redraw = need_redraw
 
   val requested_size = S.map text_size text
@@ -98,7 +106,8 @@ object(self)
   method draw ctx focused =
     let { lines; columns } = Lt_draw.size ctx in
     let text = S.value text in
-    Lt_draw.draw_string ctx (lines / 2) ((columns - Zed_utf8.length text) / 2) text;
+    let { columns = height } = S.value requested_size in
+    Lt_draw.draw_string_aligned ctx ((lines - height) / 2) (S.value alignment) text;
     None
 
   initializer
@@ -106,7 +115,7 @@ object(self)
     self#set_expand_vert (S.const true)
 end
 
-let label text = (new label (S.const text))#as_widget
+let label ?(alignment=C_align) text = (new label ~alignment:(S.const alignment) (S.const text))#as_widget
 
 (* +-----------------------------------------------------------------+
    | Boxes                                                           |

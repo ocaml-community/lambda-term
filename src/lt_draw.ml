@@ -42,6 +42,38 @@ let make_matrix size =
             background = Lt_style.default;
           }))
 
+let set_style point style =
+  begin
+    match Lt_style.bold style with
+      | Some x -> point.bold <- x
+      | None -> ()
+  end;
+  begin
+    match Lt_style.underline style with
+      | Some x -> point.underline <- x
+      | None -> ()
+  end;
+  begin
+    match Lt_style.blink style with
+      | Some x -> point.blink <- x
+      | None -> ()
+  end;
+  begin
+    match Lt_style.reverse style with
+      | Some x -> point.reverse <- x
+      | None -> ()
+  end;
+  begin
+    match Lt_style.foreground style with
+      | Some x -> point.foreground <- x
+      | None -> ()
+  end;
+  begin
+    match Lt_style.background style with
+      | Some x -> point.background <- x
+      | None -> ()
+  end
+
 type context = {
   matrix : matrix;
   matrix_size : size;
@@ -132,42 +164,106 @@ let draw_styled ctx line column str =
         if line >= ctx.line1 && line < ctx.line2 && column >= ctx.column1 && column < ctx.column2 then begin
           let point = unsafe_get ctx.matrix line column in
           point.char <- ch;
-          begin
-            match Lt_style.bold style with
-              | Some x -> point.bold <- x
-              | None -> ()
-          end;
-          begin
-            match Lt_style.underline style with
-              | Some x -> point.underline <- x
-              | None -> ()
-          end;
-          begin
-            match Lt_style.blink style with
-              | Some x -> point.blink <- x
-              | None -> ()
-          end;
-          begin
-            match Lt_style.reverse style with
-              | Some x -> point.reverse <- x
-              | None -> ()
-          end;
-          begin
-            match Lt_style.foreground style with
-              | Some x -> point.foreground <- x
-              | None -> ()
-          end;
-          begin
-            match Lt_style.background style with
-              | Some x -> point.background <- x
-              | None -> ()
-          end
+          set_style point style
         end;
         loop line (column + 1) (idx + 1)
       end
     end
   in
   loop (ctx.line1 + line) (ctx.column1 + column) 0
+
+type alignment =
+  | C_align
+  | L_align
+  | R_align
+
+let draw_string_aligned ctx line alignment str =
+  let rec search_end_of_line ofs len =
+    if ofs = String.length str then
+      len
+    else
+      let ch, ofs = Zed_utf8.unsafe_extract_next str ofs in
+      if ch = newline then
+        len
+      else
+        search_end_of_line ofs (len + 1)
+  in
+  let rec loop line column ofs =
+    if ofs < String.length str then begin
+      let ch, ofs = Zed_utf8.unsafe_extract_next str ofs in
+      if ch = newline then
+        ofs
+      else begin
+        if line >= ctx.line1 && line < ctx.line2 && column >= ctx.column1 && column < ctx.column2 then
+          (unsafe_get ctx.matrix line column).char <- ch;
+        loop line (column + 1) ofs
+      end
+    end else
+      ofs
+  in
+  let rec loop_lines line ofs =
+    if ofs < String.length str then begin
+      let len = search_end_of_line ofs 0 in
+      let ofs =
+        loop line
+          (match alignment with
+             | C_align ->
+                 ctx.column1 + (ctx.column2 - ctx.column1 - len) / 2
+             | L_align ->
+                 ctx.column1
+             | R_align ->
+                 ctx.column2 - len)
+          ofs
+      in
+      loop_lines (line + 1) ofs
+    end
+  in
+  loop_lines (ctx.line1 + line) 0
+
+let draw_styled_aligned ctx line alignment str =
+  let rec search_end_of_line idx len =
+    if idx = Array.length str then
+      len
+    else
+      if fst (Array.unsafe_get str idx) = newline then
+        len
+      else
+        search_end_of_line (idx + 1) (len + 1)
+  in
+  let rec loop line column idx =
+    if idx < Array.length str then begin
+      let ch, style = Array.unsafe_get str idx in
+      if ch = newline then
+        idx + 1
+      else begin
+        if line >= ctx.line1 && line < ctx.line2 && column >= ctx.column1 && column < ctx.column2 then begin
+          let point = unsafe_get ctx.matrix line column in
+          point.char <- ch;
+          set_style point style
+        end;
+        loop line (column + 1) (idx + 1)
+      end
+    end else
+      idx
+  in
+  let rec loop_lines line idx =
+    if idx < Array.length str then begin
+      let len = search_end_of_line idx 0 in
+      let idx =
+        loop line
+          (match alignment with
+             | C_align ->
+                 ctx.column1 + (ctx.column2 - ctx.column1 - len) / 2
+             | L_align ->
+                 ctx.column1
+             | R_align ->
+                 ctx.column2 - len)
+          idx
+      in
+      loop_lines (line + 1) idx
+    end
+  in
+  loop_lines (ctx.line1 + line) 0
 
 type connection =
   | Blank
