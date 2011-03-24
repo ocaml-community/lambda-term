@@ -56,5 +56,5 @@ lwt () =
   let widget = new widget in
   Lt_widget.run
     term
-    (new Lt_widget.frame (S.const widget))
+    (Lt_widget.frame widget)
     (E.next (E.fmap (function { code = Escape } -> Some () | _ -> None) widget#key_pressed))

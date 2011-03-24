@@ -28,11 +28,10 @@ lwt () =
 
   (* Create widgets. *)
   let widget =
-    new Lt_widget.vbox
-      (S.const [
-         (new Lt_widget.label (S.map format_time time) :> Lt_widget.t);
-         button#as_widget;
-       ])
+    Lt_widget.vbox [
+      (new Lt_widget.label (S.map format_time time))#as_widget;
+      button#as_widget;
+    ]
   in
 
   (* Run. *)

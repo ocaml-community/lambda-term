@@ -12,32 +12,30 @@ open Lwt
 open Lt_widget
 
 lwt () =
-  let button = new button (S.const "exit") in
+  let button_exit = new button (S.const "exit") in
   let widget =
-    new frame
-      (S.const
-         (new vbox
-            (S.const [
-               button#as_widget;
-               new hline;
-               (new hbox (S.const [(new button (S.const "button1"))#as_widget;
-                                   new vline;
-                                   (new button (S.const "button2"))#as_widget;
-                                   new vline;
-                                   (new button (S.const "button3"))#as_widget]))#as_widget;
-               new hline;
-               (new hbox (S.const [(new button (S.const "button4"))#as_widget;
-                                   new vline;
-                                   (new button (S.const "button5"))#as_widget;
-                                   new vline;
-                                   (new button (S.const "button6"))#as_widget]))#as_widget;
-               new hline;
-               (new hbox (S.const [(new button (S.const "button7"))#as_widget;
-                                   new vline;
-                                   (new button (S.const "button8"))#as_widget;
-                                   new vline;
-                                   (new button (S.const "button9"))#as_widget]))#as_widget;
-             ]))#as_widget)
+    frame
+      (vbox [
+         button_exit#as_widget;
+         hline ();
+         hbox [button "button1";
+               vline ();
+               button "button2";
+               vline ();
+               button "button3"];
+         hline ();
+         hbox [button "button4";
+               vline ();
+               button "button5";
+               vline ();
+               button "button6"];
+         hline ();
+         hbox [button "button7";
+               vline ();
+               button "button8";
+               vline ();
+               button "button9"];
+       ])
   in
   lwt term = Lazy.force Lt_term.stdout in
-  run term widget (E.next button#clicked)
+  run term widget (E.next button_exit#clicked)

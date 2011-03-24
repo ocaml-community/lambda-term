@@ -106,6 +106,8 @@ object(self)
     self#set_expand_vert (S.const true)
 end
 
+let label text = (new label (S.const text))#as_widget
+
 (* +-----------------------------------------------------------------+
    | Boxes                                                           |
    +-----------------------------------------------------------------+ *)
@@ -259,6 +261,8 @@ object(self)
     loop 0 (S.value children_columns) None
 end
 
+let hbox children = (new hbox (S.const children))#as_widget
+
 class vbox children =
 object(self)
   inherit box children
@@ -363,6 +367,8 @@ object(self)
     loop 0 (S.value children_lines) None
 end
 
+let vbox children = (new vbox (S.const children))#as_widget
+
 class frame child =
   let event, set_child = E.create () in
   let child = S.switch child event in
@@ -411,6 +417,8 @@ object(self)
   self#set_expand_vert (S.switch (S.value s) (S.changes s))
 end
 
+let frame widget = (new frame (S.const widget))#as_widget
+
 class hline = object(self)
   inherit t
 
@@ -425,6 +433,8 @@ class hline = object(self)
     self#set_expand_horz (S.const true)
 end
 
+let hline () = new hline
+
 class vline = object(self)
   inherit t
 
@@ -438,6 +448,8 @@ class vline = object(self)
   initializer
     self#set_expand_vert (S.const true)
 end
+
+let vline () = new vline
 
 (* +-----------------------------------------------------------------+
    | Buttons                                                         |
@@ -486,6 +498,8 @@ object(self)
     self#set_expand_vert (S.const true);
     self#set_can_focus (S.const true)
 end
+
+let button text = (new button (S.const text))#as_widget
 
 (* +-----------------------------------------------------------------+
    | Running in a terminal                                           |

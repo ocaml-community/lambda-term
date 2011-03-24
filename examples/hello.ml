@@ -16,11 +16,10 @@ lwt () =
 
   (* Create the label. *)
   let widget =
-    new Lt_widget.vbox
-      (S.const [
-         (new Lt_widget.label (S.const "Hello, world!") :> Lt_widget.t);
-         (new Lt_widget.label (S.const "Press escape to exit.") :> Lt_widget.t);
-       ])
+    Lt_widget.vbox [
+      Lt_widget.label "Hello, world!";
+      Lt_widget.label "Press escape to exit.";
+    ]
   in
 
   (* Exit when escape is pressed. *)

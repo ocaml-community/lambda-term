@@ -74,11 +74,15 @@ class label : string signal -> object
   method set_text : string signal -> unit
 end
 
+val label : string -> t
+
 class hbox : t list signal -> object
   inherit t
   method children : t list signal
   method set_children : t list signal -> unit
 end
+
+val hbox : t list -> t
 
 class vbox : t list signal -> object
   inherit t
@@ -86,14 +90,21 @@ class vbox : t list signal -> object
   method set_children : t list signal -> unit
 end
 
+val vbox : t list -> t
+
 class frame : t signal -> object
   inherit t
   method child : t signal
   method set_child : t signal -> unit
 end
 
+val frame : t -> t
+
 class hline : t
 class vline : t
+
+val hline : unit -> t
+val vline : unit -> t
 
 class button : string signal -> object
   inherit t
@@ -106,6 +117,8 @@ class button : string signal -> object
   method clicked : unit event
     (** Event which occurs when the button is clicked. *)
 end
+
+val button : string -> t
 
 (** {6 Running in a terminal} *)
 
