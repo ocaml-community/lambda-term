@@ -160,6 +160,7 @@ object(self)
   method requested_size = requested_size
 
   method draw ctx focused =
+    Lt_draw.draw_hline ctx 0 0 (S.value self#size).columns;
     Lt_draw.draw_string_aligned ctx 0 (S.value horz_align) ("[ " ^ S.value text ^ " ]");
     None
 
