@@ -65,7 +65,11 @@ end
 (** {6 Simple widgets} *)
 
 (** A widget displaying some text. *)
-class label : ?alignment : Lt_draw.alignment signal -> string signal -> object
+class label :
+  ?horz_align : horz_alignment signal ->
+  ?vert_align : vert_alignment signal ->
+  string signal ->
+object
   inherit t
 
   method text : string signal
@@ -73,13 +77,14 @@ class label : ?alignment : Lt_draw.alignment signal -> string signal -> object
 
   method set_text : string signal -> unit
 
-  method alignment : Lt_draw.alignment signal
-    (** The alignment of the text. *)
+  method horz_align : horz_alignment signal
+  method vert_align : vert_alignment signal
 
-  method set_alignment : Lt_draw.alignment signal -> unit
+  method set_horz_align : horz_alignment signal -> unit
+  method set_vert_align : vert_alignment signal -> unit
 end
 
-val label : ?alignment : Lt_draw.alignment -> string -> t
+val label : ?horz_align : horz_alignment -> ?vert_align : vert_alignment -> string -> t
 
 class hbox : t list signal -> object
   inherit t

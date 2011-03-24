@@ -80,23 +80,29 @@ let text_size str =
   in
   loop 0 1 0 0
 
-class label ?(alignment=S.const Lt_draw.C_align) text =
+class label ?(horz_align=S.const H_align_center) ?(vert_align=S.const V_align_center) text =
   let event, set_text = E.create () in
   let text = S.switch text event in
-  let event, set_alignment = E.create () in
-  let alignment = S.switch alignment event in
+  let event, set_horz_align = E.create () in
+  let horz_align = S.switch horz_align event in
+  let event, set_vert_align = E.create () in
+  let vert_align = S.switch vert_align event in
 object(self)
   inherit t
 
   method text = text
   method set_text = set_text
 
-  method alignment = alignment
-  method set_alignment = set_alignment
+  method horz_align = horz_align
+  method set_horz_align = set_horz_align
+
+  method vert_align = vert_align
+  method set_vert_align = set_vert_align
 
   val need_redraw = E.select [
     E.stamp (S.changes text) ();
-    E.stamp (S.changes alignment) ();
+    E.stamp (S.changes horz_align) ();
+    E.stamp (S.changes vert_align) ();
   ]
   method need_redraw = need_redraw
 
@@ -104,10 +110,19 @@ object(self)
   method requested_size = requested_size
 
   method draw ctx focused =
-    let { lines; columns } = Lt_draw.size ctx in
+    let { lines } = Lt_draw.size ctx in
     let text = S.value text in
-    let { columns = height } = S.value requested_size in
-    Lt_draw.draw_string_aligned ctx ((lines - height) / 2) (S.value alignment) text;
+    let { lines = height } = S.value requested_size in
+    let line =
+      match S.value vert_align with
+        | V_align_top ->
+            0
+        | V_align_center ->
+            (lines - height) / 2
+        | V_align_bottom ->
+            lines - height
+    in
+    Lt_draw.draw_string_aligned ctx line (S.value horz_align) text;
     None
 
   initializer
@@ -115,7 +130,11 @@ object(self)
     self#set_expand_vert (S.const true)
 end
 
-let label ?(alignment=C_align) text = (new label ~alignment:(S.const alignment) (S.const text))#as_widget
+let label ?(horz_align=H_align_center) ?(vert_align=V_align_center) text =
+  (new label
+     ~horz_align:(S.const horz_align)
+     ~vert_align:(S.const vert_align)
+     (S.const text))#as_widget
 
 (* +-----------------------------------------------------------------+
    | Boxes                                                           |

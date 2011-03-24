@@ -48,3 +48,15 @@ val r_columns : rect -> int
 
 val string_of_rect : rect -> string
   (** Returns the string representation of the given rectangle. *)
+
+(** Horizontal alignment. *)
+type horz_alignment =
+  | H_align_left
+  | H_align_center
+  | H_align_right
+
+(** Vertical alignement. *)
+type vert_alignment =
+  | V_align_top
+  | V_align_center
+  | V_align_bottom

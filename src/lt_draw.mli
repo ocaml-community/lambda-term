@@ -102,19 +102,10 @@ val draw_styled : context -> int -> int -> Lt_text.t -> unit
   (** [draw_styled ctx line column text] draws the given styled text
       at given coordinates. *)
 
-(** Text alignment. *)
-type alignment =
-  | C_align
-      (** THe text is centered. *)
-  | L_align
-      (** The text is aligned to the left. *)
-  | R_align
-      (** The text is aligned to the right. *)
-
-val draw_string_aligned : context -> int -> alignment -> string -> unit
+val draw_string_aligned : context -> int -> horz_alignment -> string -> unit
   (** Draws a string with the given alignment. *)
 
-val draw_styled_aligned : context -> int -> alignment -> Lt_text.t -> unit
+val draw_styled_aligned : context -> int -> horz_alignment -> Lt_text.t -> unit
   (** Draws a styled string with the given aglienment. *)
 
 (** Type of an connection in a piece that can be connected to other

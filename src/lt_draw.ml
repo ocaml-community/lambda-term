@@ -172,13 +172,8 @@ let draw_styled ctx line column str =
   in
   loop (ctx.line1 + line) (ctx.column1 + column) 0
 
-type alignment =
-  | C_align
-  | L_align
-  | R_align
-
 let draw_string_aligned ctx line alignment str =
-  let rec search_end_of_line ofs len =
+  let rec line_length ofs len =
     if ofs = String.length str then
       len
     else
@@ -186,7 +181,7 @@ let draw_string_aligned ctx line alignment str =
       if ch = newline then
         len
       else
-        search_end_of_line ofs (len + 1)
+        line_length ofs (len + 1)
   in
   let rec loop line column ofs =
     if ofs < String.length str then begin
@@ -203,16 +198,15 @@ let draw_string_aligned ctx line alignment str =
   in
   let rec loop_lines line ofs =
     if ofs < String.length str then begin
-      let len = search_end_of_line ofs 0 in
       let ofs =
         loop line
           (match alignment with
-             | C_align ->
-                 ctx.column1 + (ctx.column2 - ctx.column1 - len) / 2
-             | L_align ->
+             | H_align_left ->
                  ctx.column1
-             | R_align ->
-                 ctx.column2 - len)
+             | H_align_center ->
+                 ctx.column1 + (ctx.column2 - ctx.column1 - line_length ofs 0) / 2
+             | H_align_right ->
+                 ctx.column2 - line_length ofs 0)
           ofs
       in
       loop_lines (line + 1) ofs
@@ -221,14 +215,14 @@ let draw_string_aligned ctx line alignment str =
   loop_lines (ctx.line1 + line) 0
 
 let draw_styled_aligned ctx line alignment str =
-  let rec search_end_of_line idx len =
+  let rec line_length idx len =
     if idx = Array.length str then
       len
     else
       if fst (Array.unsafe_get str idx) = newline then
         len
       else
-        search_end_of_line (idx + 1) (len + 1)
+        line_length (idx + 1) (len + 1)
   in
   let rec loop line column idx =
     if idx < Array.length str then begin
@@ -248,16 +242,15 @@ let draw_styled_aligned ctx line alignment str =
   in
   let rec loop_lines line idx =
     if idx < Array.length str then begin
-      let len = search_end_of_line idx 0 in
       let idx =
         loop line
           (match alignment with
-             | C_align ->
-                 ctx.column1 + (ctx.column2 - ctx.column1 - len) / 2
-             | L_align ->
+             | H_align_left ->
                  ctx.column1
-             | R_align ->
-                 ctx.column2 - len)
+             | H_align_center ->
+                 ctx.column1 + (ctx.column2 - ctx.column1 - line_length idx 0) / 2
+             | H_align_right ->
+                 ctx.column2 - line_length idx 0)
           idx
       in
       loop_lines (line + 1) idx

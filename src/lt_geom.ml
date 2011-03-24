@@ -45,3 +45,13 @@ let string_of_rect rect =
   Printf.sprintf
     "{ r_line = %d; r_column = %d; r_lines = %d; r_columns = %d }"
     rect.r_line rect.r_column rect.r_lines rect.r_columns
+
+type horz_alignment =
+  | H_align_left
+  | H_align_center
+  | H_align_right
+
+type vert_alignment =
+  | V_align_top
+  | V_align_center
+  | V_align_bottom
