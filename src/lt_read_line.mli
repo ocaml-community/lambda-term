@@ -83,6 +83,8 @@ type action =
       (** Clear the screen. *)
   | Prev_search
       (** Search backward in the history. *)
+  | Cancel_search
+      (** Cancel search mode. *)
 
 val bindings : (Lt_key.t, action) Hashtbl.t
   (** Bindings. *)
@@ -94,11 +96,22 @@ val bind : Lt_key.t -> action option
 (** {6 The read-line engine} *)
 
 class virtual ['a] engine : ?history : history -> unit -> object
+
+  (** {6 Result} *)
+
   method virtual eval : 'a
     (** Evaluates the contents of the engine. *)
 
+  (** {6 Actions} *)
+
+  method insert : UChar.t -> unit
+    (** Inserts the given character. Note that is it also possible to
+        manipulate directly the edition context. *)
+
   method send_action : action -> unit
-    (** Evolve according to the given action. *)
+    (** Evolves according to the given action. *)
+
+  (** {6 State} *)
 
   method edit : unit Zed_edit.t
     (** The edition engine used by this read-line engine. *)
@@ -106,18 +119,27 @@ class virtual ['a] engine : ?history : history -> unit -> object
   method context : unit Zed_edit.context
     (** The context for the edition engine. *)
 
-  method stylise_input : Lt_text.t
-    (** Stylise current input. *)
-
-  method stylise : Lt_text.t
-    (** Add highlighting of the selection to the result of
-        {!stylise_input}. *)
-
   method input_prev : Zed_rope.t
     (** The input before the cursor. *)
 
   method input_next : Zed_rope.t
     (** The input after the cursor. *)
+
+  method search_mode : bool signal
+    (** Whether we are currently in backward search mode. *)
+
+  method stylise : Lt_text.t * int
+    (** Returns the stylised input and the position of the cursor. *)
+
+  method history : (Zed_utf8.t list * Zed_utf8.t list) signal
+    (** The history zipper. *)
+
+  method message : Lt_text.t option signal
+    (** A message to display in the completion box. When [None] the
+        completion should be displayed, and when [Some msg] [msg]
+        should be displayed. *)
+
+  (** {6 Completion} *)
 
   method completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
     (** Current possible completions. Each completion is of the form
@@ -138,25 +160,28 @@ class virtual ['a] engine : ?history : history -> unit -> object
     (** Complete current input. This is the method called when the
         user presses Tab. *)
 
-  method show_completion : bool
-    (** Whether to show completion or not. It default to [true]. *)
+  method show_box : bool
+    (** Whether to show the box or not. It default to [true]. *)
 end
 
 (** Abstract version of {!engine}. *)
 class virtual ['a] abstract : object
   method virtual eval : 'a
   method virtual send_action : action -> unit
+  method virtual insert : UChar.t -> unit
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
-  method virtual stylise_input : Lt_text.t
-  method virtual stylise : Lt_text.t
+  method virtual stylise : Lt_text.t * int
+  method virtual history : (Zed_utf8.t list * Zed_utf8.t list) signal
+  method virtual message : Lt_text.t option signal
   method virtual input_prev : Zed_rope.t
   method virtual input_next : Zed_rope.t
   method virtual completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
   method virtual completion_index : int signal
   method virtual completion : (int * (Zed_utf8.t * Zed_utf8.t) list) Lwt.t
   method virtual complete : unit
-  method virtual show_completion : bool
+  method virtual show_box : bool
+  method virtual search_mode : bool signal
 end
 
 (** {6 Predefined classes} *)
@@ -174,7 +199,7 @@ end
     example completely disable displaying the password by doing:
 
     {[
-      method stylise = []
+      method stylise = ([||], 0)
     ]}
 
     Also showing completion is disabled.

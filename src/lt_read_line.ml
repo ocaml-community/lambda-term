@@ -150,6 +150,7 @@ type action =
   | Accept
   | Clear_screen
   | Prev_search
+  | Cancel_search
 
 let bindings = Hashtbl.create 128
 
@@ -168,7 +169,8 @@ let () =
   { control = false; meta = true; shift = false; code = Home } --> Complete_bar_first;
   { control = false; meta = true; shift = false; code = End } --> Complete_bar_last;
   { control = false; meta = true; shift = false; code = Tab } --> Complete_bar;
-  { control = false; meta = true; shift = false; code = Enter } --> Edit Zed_edit.Newline
+  { control = false; meta = true; shift = false; code = Enter } --> Edit Zed_edit.Newline;
+  { control = false; meta = false; shift = false; code = Escape } --> Cancel_search
 
 let bind key =
   try
@@ -183,22 +185,37 @@ let bind key =
    | The read-line engine                                            |
    +-----------------------------------------------------------------+ *)
 
+let search_string str sub =
+  let rec equal_at a b =
+    (b = String.length sub) || (String.unsafe_get str a = String.unsafe_get sub b) && equal_at (a + 1) (b + 1)
+  in
+  let rec loop ofs idx =
+    if ofs + String.length sub > String.length str then
+      None
+    else
+      if equal_at ofs 0 then
+        Some idx
+      else
+        loop (Zed_utf8.unsafe_next str ofs) (idx + 1)
+  in
+  loop 0 0
+
 class virtual ['a] engine ?(history=[]) () =
   let edit : unit Zed_edit.t = Zed_edit.create () in
   let context = Zed_edit.context edit (Zed_edit.new_cursor edit) in
   let completion_words, set_completion_words = S.create ([] : (Zed_utf8.t * Zed_utf8.t) list) in
   let completion_index, set_completion_index = S.create 0 in
+  let search_mode, set_search_mode = S.create false in
+  let history, set_history = S.create (history, []) in
+  let message, set_message = S.create None in
 object(self)
   method virtual eval : 'a
   method edit = edit
   method context = context
-  method show_completion = true
-
-  (* The history before the history cursor. *)
-  val mutable history_prev = history
-
-  (* The history after the history cursor. *)
-  val mutable history_next = []
+  method show_box = true
+  method search_mode = search_mode
+  method history = history
+  method message = message
 
   (* The thread that compute completion. *)
   val mutable completion_thread = return ()
@@ -234,10 +251,12 @@ object(self)
              );
              return ()
            end)
-        (E.select [
-           E.stamp (Zed_edit.changes edit) ();
-           E.stamp (S.changes (Zed_cursor.position (Zed_edit.cursor context))) ();
-         ])
+        (E.when_
+           (S.map not search_mode)
+           (E.select [
+              E.stamp (Zed_edit.changes edit) ();
+              E.stamp (S.changes (Zed_cursor.position (Zed_edit.cursor context))) ();
+            ]))
     );
     completion_thread <- (
       lwt start, comp = self#completion in
@@ -268,32 +287,94 @@ object(self)
           let word = List.fold_left (fun acc (word, _) -> common_prefix acc word) completion rest in
           Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after word prefix_length))
 
+  (* The event which search for the string in the history. *)
+  val mutable search_event = E.never
+
+  (* The result of the search. If the search was successful it
+     contains the matched history entry, the position of the substring
+     in this entry and the rest of the history. *)
+  val mutable search_result = None
+
+  initializer
+    search_event <- E.map (fun _ -> search_result <- None; self#search) (E.when_ search_mode (Zed_edit.changes edit))
+
+  method private search =
+    let input = Zed_rope.to_string (Zed_edit.text edit) in
+    let rec loop = function
+      | [] ->
+          search_result <- None;
+          set_message (Some(Lt_text.of_string "Reverse search: not found"))
+      | entry :: rest ->
+          match search_string entry input with
+            | Some pos -> begin
+                match search_result with
+                  | Some(entry', _, _) when entry = entry' ->
+                      loop rest
+                  | _ ->
+                      search_result <- Some(entry, pos, rest);
+                      let txt = Lt_text.of_string entry in
+                      for i = pos to pos + Zed_rope.length (Zed_edit.text edit) - 1 do
+                        let ch, style = txt.(i) in
+                        txt.(i) <- (ch, { style with underline = Some true })
+                      done;
+                      set_message (Some(Array.append (Lt_text.of_string "Reverse search: ") txt))
+              end
+            | None ->
+                loop rest
+    in
+    match search_result with
+      | Some(entry, pos, rest) -> loop rest
+      | None -> loop (fst (S.value history))
+
+  method insert ch =
+    Zed_edit.insert context (Zed_rope.singleton ch)
+
   method send_action action =
     match action with
+      | (Complete | Complete_bar) when S.value search_mode -> begin
+          set_search_mode false;
+          set_message None;
+          match search_result with
+            | Some(entry, pos, rest) ->
+                search_result <- None;
+                Zed_edit.goto context 0;
+                Zed_edit.remove context (Zed_rope.length (Zed_edit.text edit));
+                Zed_edit.insert context (Zed_rope.of_string entry)
+            | None ->
+                ()
+        end
+
       | Edit action ->
           Zed_edit.get_action action context
+
       | Interrupt_or_delete_next_char ->
           if Zed_rope.is_empty (Zed_edit.text edit) then
             raise Interrupt
           else
             Zed_edit.delete_next_char context
-      | Complete ->
+
+      | Complete when not (S.value search_mode) ->
           self#complete
-      | Complete_bar_next ->
+
+      | Complete_bar_next when not (S.value search_mode) ->
           let index = S.value completion_index in
           if index < List.length (S.value completion_words) - 1 then
             set_completion_index (index + 1)
-      | Complete_bar_prev ->
+
+      | Complete_bar_prev when not (S.value search_mode) ->
           let index = S.value completion_index in
           if index > 0 then
             set_completion_index (index - 1)
-      | Complete_bar_first ->
+
+      | Complete_bar_first when not (S.value search_mode) ->
           set_completion_index 0
-      | Complete_bar_last ->
+
+      | Complete_bar_last when not (S.value search_mode) ->
           let len = List.length (S.value completion_words) in
           if len > 0 then
             set_completion_index (len - 1)
-      | Complete_bar ->
+
+      | Complete_bar when not (S.value search_mode) ->
           let words = S.value completion_words in
           if words <> [] then begin
             let prefix_length = Zed_edit.position context - completion_start in
@@ -301,67 +382,87 @@ object(self)
             Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after completion prefix_length));
             Zed_edit.insert context (Zed_rope.of_string suffix)
           end
-      | History_prev -> begin
-          match history_prev with
+
+      | History_prev when not (S.value search_mode) ->begin
+          let prev, next = S.value history in
+          match prev with
             | [] ->
                 ()
             | line :: rest ->
                 let text = Zed_edit.text edit in
-                history_prev <- rest;
-                history_next <- Zed_rope.to_string text :: history_next;
+                set_history (rest, Zed_rope.to_string text :: next);
                 Zed_edit.goto context 0;
                 Zed_edit.remove context (Zed_rope.length text);
                 Zed_edit.insert context (Zed_rope.of_string line)
         end
-      | History_next -> begin
-          match history_next with
+
+      | History_next when not (S.value search_mode) -> begin
+          let prev, next = S.value history in
+          match next with
             | [] ->
                 ()
             | line :: rest ->
                 let text = Zed_edit.text edit in
-                history_prev <- Zed_rope.to_string text :: history_prev;
-                history_next <- rest;
+                set_history (Zed_rope.to_string text :: prev, rest);
                 Zed_edit.goto context 0;
                 Zed_edit.remove context (Zed_rope.length text);
                 Zed_edit.insert context (Zed_rope.of_string line)
         end
-      | Accept
-      | Clear_screen
+
       | Prev_search ->
+          if S.value search_mode then
+            self#search
+          else begin
+            let text = Zed_edit.text edit in
+            Zed_edit.goto context 0;
+            Zed_edit.remove context (Zed_rope.length text);
+            let prev, next = S.value history in
+            set_history (Zed_rope.to_string text :: (List.rev_append next prev), []);
+            search_result <- None;
+            set_search_mode true;
+            self#search
+          end
+
+      | Cancel_search ->
+          if S.value search_mode then begin
+            set_search_mode false;
+            set_message None
+          end
+
+      | _ ->
           ()
 
-  method stylise_input =
-    Lt_text.of_rope (Zed_edit.text edit)
-
   method stylise =
-    let txt = self#stylise_input in
+    let txt = Lt_text.of_rope (Zed_edit.text edit) in
+    let pos = Zed_edit.position context in
     if Zed_edit.get_selection edit then begin
-      let len = Array.length txt in
-      let pos = Zed_edit.position context and mark = Zed_cursor.get_position (Zed_edit.mark edit) in
-      let a = min (min pos mark) len and b = min (max pos mark) len in
+      let mark = Zed_cursor.get_position (Zed_edit.mark edit) in
+      let a = min pos mark and b = max pos mark in
       for i = a to b - 1 do
         let ch, style = txt.(i) in
         txt.(i) <- (ch, { style with underline = Some true })
       done;
-      txt
-    end else
-      txt
+    end;
+    (txt, pos)
 end
 
 class virtual ['a] abstract = object
   method virtual eval : 'a
   method virtual send_action : action -> unit
+  method virtual insert : UChar.t -> unit
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
-  method virtual stylise_input : Lt_text.t
-  method virtual stylise : Lt_text.t
+  method virtual stylise : Lt_text.t * int
+  method virtual history : (Zed_utf8.t list * Zed_utf8.t list) signal
+  method virtual message : Lt_text.t option signal
   method virtual input_prev : Zed_rope.t
   method virtual input_next : Zed_rope.t
   method virtual completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
   method virtual completion_index : int signal
   method virtual completion : (int * (Zed_utf8.t * Zed_utf8.t) list) Lwt.t
   method virtual complete : unit
-  method virtual show_completion : bool
+  method virtual show_box : bool
+  method virtual search_mode : bool signal
 end
 
 (* +-----------------------------------------------------------------+
@@ -374,10 +475,23 @@ class read_line ?history () = object(self)
 end
 
 class read_password () = object(self)
-  inherit [Zed_utf8.t] engine ()
-  method stylise_input = Array.make (Zed_rope.length (Zed_edit.text self#edit)) (UChar.of_char '*', Lt_style.none)
+  inherit [Zed_utf8.t] engine () as super
+
+  method stylise =
+    let text, pos = self#stylise in
+    for i = 0 to Array.length text - 1 do
+      let ch, style = text.(i) in
+      text.(i) <- (UChar.of_char '*', style)
+    done;
+    (text, pos)
+
   method eval = Zed_rope.to_string (Zed_edit.text self#edit)
-  method show_completion = false
+
+  method show_box = false
+
+  method send_action = function
+    | Prev_search -> ()
+    | action -> super#send_action action
 end
 
 class ['a] read_keyword ?history () = object(self)
@@ -399,6 +513,7 @@ end
    | Running in a terminal                                           |
    +-----------------------------------------------------------------+ *)
 
+let hline = (UChar.of_int 0x2500, Lt_style.none)
 let default_prompt = Lt_text.of_string "# "
 
 let rec drop count l =
@@ -500,6 +615,20 @@ let rec get_index_of_last_displayed_word column columns index words =
         else
           index - 1
 
+let text_height columns text =
+  let { line } =
+    Array.fold_left
+      (fun pos (ch, style) ->
+         if ch = newline then
+           { line = pos.line + 1; column = 0 }
+         else if pos.column + 1 = columns then
+           { line = pos.line + 1; column = 0 }
+         else
+           { pos with column = pos.column + 1 })
+      { line = 0; column = 1 } text
+  in
+  line + 1
+
 class virtual ['a] term term =
   let size, set_size = S.create { columns = 80; lines = 25 } in
   let event, set_prompt = E.create () in
@@ -597,22 +726,70 @@ object(self)
           let start = S.value self#completion_start in
           let index = S.value self#completion_index in
           let words = drop start (S.value self#completion_words) in
-          let styled = self#stylise in
-          let position = min (Zed_edit.position self#context) (Array.length styled) in
+          let styled, position = self#stylise in
           let before = Array.sub styled 0 position in
           let after = Array.sub styled position (Array.length styled - position) in
           let before = Array.append (S.value prompt) before in
           let box =
-            if self#show_completion then
-              Array.concat [
-                Lt_text.of_string "\n┌";
-                Lt_text.of_string (make_bar "┬" (columns - 2) words);
-                Lt_text.of_string "┐\n│";
-                make_completion_bar_middle (index - start) (columns - 2) words;
-                Lt_text.of_string "│\n└";
-                Lt_text.of_string (make_bar "┴" (columns - 2) words);
-                Lt_text.of_string "┘";
-              ]
+            if self#show_box && columns > 2 then
+              match S.value self#message with
+                | Some msg ->
+                    let height = text_height (columns - 2) msg in
+                    let box = Array.make ((columns + 1) * (height + 2)) (UChar.of_char ' ', Lt_style.none) in
+
+                    (* Draw the top of the box. *)
+                    box.(0) <- (UChar.of_char '\n', Lt_style.none);
+                    box.(1) <- (UChar.of_int 0x250c, Lt_style.none);
+                    for i = 0 to columns - 3 do
+                      box.(2 + i) <- hline
+                    done;
+                    box.(columns) <- (UChar.of_int 0x2510, Lt_style.none);
+
+                    (* Draw the left and right vertical lines. *)
+                    for i = 1 to height do
+                      let start = (columns + 1) * i in
+                      box.(start) <- (UChar.of_char '\n', Lt_style.none);
+                      box.(start + 1) <- (UChar.of_int 0x2502, Lt_style.none);
+                      box.(start + columns) <- (UChar.of_int 0x2502, Lt_style.none);
+                    done;
+
+                    (* Draw the bottom of the box. *)
+                    let start = (columns + 1) * (height + 1) in
+                    box.(start) <- (UChar.of_char '\n', Lt_style.none);
+                    box.(start + 1) <- (UChar.of_int 0x2514, Lt_style.none);
+                    for i = 0 to columns - 3 do
+                      box.(start + 2 + i) <- hline
+                    done;
+                    box.(start + columns) <- (UChar.of_int 0x2518, Lt_style.none);
+
+                    (* Draw the message. *)
+                    let rec loop line column idx =
+                      if idx < Array.length msg then begin
+                        let (ch, _) as point = msg.(idx) in
+                        if ch = newline then
+                          loop (line + 1) 0 (idx + 1)
+                        else begin
+                          box.((line + 1) * (columns + 1) + column + 2) <- point;
+                          if column = columns - 3 then
+                            loop (line + 1) 0 (idx + 1)
+                          else
+                            loop line (column + 1) (idx + 1)
+                        end
+                      end
+                    in
+                    loop 0 0 0;
+
+                    box
+                | None ->
+                    Array.concat [
+                      Lt_text.of_string "\n┌";
+                      Lt_text.of_string (make_bar "┬" (columns - 2) words);
+                      Lt_text.of_string "┐\n│";
+                      make_completion_bar_middle (index - start) (columns - 2) words;
+                      Lt_text.of_string "│\n└";
+                      Lt_text.of_string (make_bar "┴" (columns - 2) words);
+                      Lt_text.of_string "┘";
+                    ]
             else
               [||]
           in
@@ -659,7 +836,7 @@ object(self)
     lwt () = Lwt_mutex.lock draw_mutex in
     try_lwt
       lwt () = if visible then self#erase else return () in
-      Lt_term.fprintls term (Array.append (S.value prompt) self#stylise)
+      Lt_term.fprintls term (Array.append (S.value prompt) (fst self#stylise))
     finally
       Lwt_mutex.unlock draw_mutex;
       return ()
@@ -701,6 +878,7 @@ object(self)
            E.stamp (S.changes self#completion_words) ();
            E.stamp (S.changes self#completion_index) ();
            E.stamp (S.changes self#completion_start) ();
+           E.stamp (S.changes self#message) ();
          ])
     in
 
@@ -726,7 +904,7 @@ object(self)
               | None ->
                   match key with
                     | { control = false; meta = false; shift = false; code = Char ch } ->
-                        Zed_edit.insert self#context (Zed_rope.singleton ch);
+                        self#insert ch;
                         loop ()
                     | _ ->
                         loop ()
