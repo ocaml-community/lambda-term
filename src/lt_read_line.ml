@@ -553,60 +553,39 @@ let compute_position_unix size pos text =
          { pos with column = pos.column + 1 })
     pos text
 
-let make_completion_bar_middle index columns words =
-  let rec aux ofs idx = function
+let draw_bar box start delimiter columns words =
+  let rec aux idx = function
     | [] ->
-        [S(String.make (columns - ofs) ' ')]
+        for idx = idx to columns - 1 do
+          box.(start + idx) <- hline;
+        done
     | (word, suffix) :: words ->
         let len = Zed_utf8.length word in
-        let ofs' = ofs + len in
-        if ofs' <= columns then
-          if idx = index then
-            B_reverse true :: S word :: E_reverse ::
-              if ofs' + 1 > columns then
-                []
-              else
-                S"│" :: aux (ofs' + 1) (idx + 1) words
-          else
-            S word ::
-              if ofs' + 1 > columns then
-                []
-              else
-                S"│" :: aux (ofs' + 1) (idx + 1) words
-        else
-          [S(Zed_utf8.sub word 0 (columns - ofs))]
-  in
-  eval (aux 0 0 words)
-
-let make_bar delimiter columns words =
-  let buf = Buffer.create (columns * 3) in
-  let rec aux ofs = function
-    | [] ->
-        for i = ofs + 1 to columns do
-          Buffer.add_string buf "─"
-        done;
-        Buffer.contents buf
-    | (word, suffix) :: words ->
-        let len = Zed_utf8.length word in
-        let ofs' = ofs + len in
-        if ofs' <= columns then begin
-          for i = 1 to len do
-            Buffer.add_string buf "─"
+        let idx' = idx + len in
+        if idx' <= columns then begin
+          for idx = idx to idx' - 1 do
+            box.(start + idx) <- hline;
           done;
-          if ofs' + 1 > columns then
-            Buffer.contents buf
-          else begin
-            Buffer.add_string buf delimiter;
-            aux (ofs' + 1) words
+          if idx' + 1 <= columns then begin
+            box.(start + idx') <- (delimiter, Lt_style.none);
+            aux (idx' + 1) words
           end
-        end else begin
-          for i = ofs + 1 to columns do
-            Buffer.add_string buf "─"
-          done;
-          Buffer.contents buf
-        end
+        end else
+          for idx = idx to columns - 1 do
+            box.(start + idx) <- hline;
+          done
   in
   aux 0 words
+
+let draw_word box start word count style =
+  let rec loop idx ofs =
+    if idx < count then begin
+      let ch, ofs = Zed_utf8.extract_next word ofs in
+      box.(start + idx) <- (ch, style);
+      loop (idx + 1) ofs
+    end
+  in
+  loop 0 0
 
 let rec get_index_of_last_displayed_word column columns index words =
   match words with
@@ -727,9 +706,6 @@ object(self)
             end
           in
           let { columns } = S.value size in
-          let start = S.value self#completion_start in
-          let index = S.value self#completion_index in
-          let words = drop start (S.value self#completion_words) in
           let styled, position = self#stylise in
           let before = Array.sub styled 0 position in
           let after = Array.sub styled position (Array.length styled - position) in
@@ -785,15 +761,54 @@ object(self)
 
                     box
                 | None ->
-                    Array.concat [
-                      Lt_text.of_string "\n┌";
-                      Lt_text.of_string (make_bar "┬" (columns - 2) words);
-                      Lt_text.of_string "┐\n│";
-                      make_completion_bar_middle (index - start) (columns - 2) words;
-                      Lt_text.of_string "│\n└";
-                      Lt_text.of_string (make_bar "┴" (columns - 2) words);
-                      Lt_text.of_string "┘";
-                    ]
+                    let comp_start = S.value self#completion_start in
+                    let comp_index = S.value self#completion_index in
+                    let comp_words = drop comp_start (S.value self#completion_words) in
+                    let box = Array.make ((columns + 1) * 3) (UChar.of_char ' ', Lt_style.none) in
+
+                    (* Draw the top of the box. *)
+                    box.(0) <- (UChar.of_char '\n', Lt_style.none);
+                    box.(1) <- (UChar.of_int 0x250c, Lt_style.none);
+                    draw_bar box 2 (UChar.of_int 0x252c) (columns - 2) comp_words;
+                    box.(columns) <- (UChar.of_int 0x2510, Lt_style.none);
+
+                    (* Draw the words. *)
+                    let start = columns + 1 in
+                    box.(start) <- (UChar.of_char '\n', Lt_style.none);
+                    box.(start + 1) <- (UChar.of_int 0x2502, Lt_style.none);
+
+                    let rec loop comp_idx idx = function
+                      | [] ->
+                          ()
+                      | (word, suffix) :: words ->
+                          let len = Zed_utf8.length word in
+                          let idx' = idx + len in
+                          if idx' <= columns - 2 then begin
+                            draw_word
+                              box (start + 2 + idx) word len
+                              (if comp_idx = comp_index then
+                                 { Lt_style.none with reverse = Some true }
+                               else
+                                 Lt_style.none);
+                            if idx' + 1 <= columns - 2 then begin
+                              box.(start + 2 + idx') <- (UChar.of_int 0x2502, Lt_style.none);
+                              loop (comp_idx + 1) (idx' + 1) words
+                            end
+                          end else
+                            draw_word box (start + 2 + idx) word (columns - 2 - idx) Lt_style.none
+                    in
+                    loop comp_start 0 comp_words;
+
+                    box.(start + columns) <- (UChar.of_int 0x2502, Lt_style.none);
+
+                    (* Draw the bottom of the box. *)
+                    let start = (columns + 1) * 2 in
+                    box.(start) <- (UChar.of_char '\n', Lt_style.none);
+                    box.(start + 1) <- (UChar.of_int 0x2514, Lt_style.none);
+                    draw_bar box (start + 2) (UChar.of_int 0x2534) (columns - 2) comp_words;
+                    box.(start + columns) <- (UChar.of_int 0x2518, Lt_style.none);
+
+                    box
             else
               [||]
           in
