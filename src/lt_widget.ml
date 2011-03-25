@@ -136,7 +136,7 @@ let label ?(horz_align=H_align_center) ?(vert_align=V_align_center) text =
      ~vert_align:(S.const vert_align)
      (S.const text))#as_widget
 
-class title ?(horz_align=S.const H_align_center) text =
+class title ?(horz_align=S.const H_align_center) ?(left=Light) ?(middle=Light) ?(right=Light) text =
   let event, set_text = E.create () in
   let text = S.switch text event in
   let event, set_horz_align = E.create () in
@@ -156,11 +156,11 @@ object(self)
   ]
   method need_redraw = need_redraw
 
-  val requested_size = S.map (fun text -> { lines = 1; columns = 4 + Zed_utf8.length text }) text
+  val requested_size = S.map (fun text -> { lines = 1; columns = 6 + Zed_utf8.length text }) text
   method requested_size = requested_size
 
   method draw ctx focused =
-    Lt_draw.draw_hline ctx 0 0 (S.value self#size).columns;
+    Lt_draw.draw_hline ctx 0 0 (S.value self#size).columns left middle right;
     Lt_draw.draw_string_aligned ctx 0 (S.value horz_align) ("[ " ^ S.value text ^ " ]");
     None
 
@@ -168,8 +168,8 @@ object(self)
     self#set_expand_horz (S.const true)
 end
 
-let title ?(horz_align=H_align_center) text =
-  (new title ~horz_align:(S.const horz_align) (S.const text))#as_widget
+let title ?(horz_align=H_align_center) ?left ?middle ?right text =
+  (new title ~horz_align:(S.const horz_align) ?left ?middle ?right (S.const text))#as_widget
 
 (* +-----------------------------------------------------------------+
    | Boxes                                                           |
