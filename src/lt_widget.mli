@@ -116,7 +116,7 @@ end
 
 val vbox : t list -> t
 
-class frame : t signal -> object
+class frame : ?connections : Lt_draw.connection -> t signal -> object
   inherit t
   method child : t signal
   method set_child : t signal -> unit
@@ -124,11 +124,11 @@ end
 
 val frame : t -> t
 
-class hline : t
-class vline : t
+class hline : ?left : Lt_draw.connection -> ?middle : Lt_draw.connection -> ?right : Lt_draw.connection -> unit -> t
+class vline : ?top : Lt_draw.connection -> ?middle : Lt_draw.connection -> ?bottom : Lt_draw.connection -> unit -> t
 
-val hline : unit -> t
-val vline : unit -> t
+val hline : ?left : Lt_draw.connection -> ?middle : Lt_draw.connection -> ?right : Lt_draw.connection -> unit -> t
+val vline : ?top : Lt_draw.connection -> ?middle : Lt_draw.connection -> ?bottom : Lt_draw.connection -> unit -> t
 
 class button : string signal -> object
   inherit t

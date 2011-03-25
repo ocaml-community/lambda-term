@@ -432,7 +432,7 @@ end
 
 let vbox children = (new vbox (S.const children))#as_widget
 
-class frame child =
+class frame ?(connections=Light) child =
   let event, set_child = E.create () in
   let child = S.switch child event in
 object(self)
@@ -462,10 +462,13 @@ object(self)
   method draw ctx focused =
     let size = size ctx in
     if size.lines >= 1 && size.columns >= 1 then
-      draw_frame ctx { r_line = 0;
-                       r_column = 0;
-                       r_lines = size.lines;
-                       r_columns = size.columns };
+      draw_frame
+        ctx
+        { r_line = 0;
+          r_column = 0;
+          r_lines = size.lines;
+          r_columns = size.columns }
+        connections;
     (S.value child)#draw
       (sub ctx { r_line = min 1 size.lines;
                  r_column = min 1 size.columns;
@@ -482,37 +485,37 @@ end
 
 let frame widget = (new frame (S.const widget))#as_widget
 
-class hline = object(self)
+class hline ?(left=Light) ?(middle=Light) ?(right=Light) () = object(self)
   inherit t
 
   method requested_size = S.const { lines = 1; columns = 0 }
 
   method draw ctx focused =
     let size = size ctx in
-    draw_hline ctx 0 0 size.columns;
+    draw_hline ctx 0 0 size.columns left middle right;
     None
 
   initializer
     self#set_expand_horz (S.const true)
 end
 
-let hline () = new hline
+let hline ?left ?middle ?right () = new hline ?left ?middle ?right ()
 
-class vline = object(self)
+class vline ?(top=Light) ?(middle=Light) ?(bottom=Light) () = object(self)
   inherit t
 
   method requested_size = S.const { lines = 0; columns = 1 }
 
   method draw ctx focused =
     let size = size ctx in
-    draw_vline ctx 0 0 size.lines;
+    draw_vline ctx 0 0 size.lines top middle bottom;
     None
 
   initializer
     self#set_expand_vert (S.const true)
 end
 
-let vline () = new vline
+let vline ?top ?middle ?bottom () = new vline ?top ?middle ?bottom ()
 
 (* +-----------------------------------------------------------------+
    | Buttons                                                         |

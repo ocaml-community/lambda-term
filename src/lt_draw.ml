@@ -514,24 +514,37 @@ let draw_piece ctx line column piece =
     (unsafe_get ctx.matrix line column).char <- char_of_piece piece
   end
 
-let hline = { top = Blank; bottom = Blank; left = Light; right = Light }
-let vline = { top = Light; bottom = Light; left = Blank; right = Blank }
-let tl_corner = { top = Blank; bottom = Light; left = Blank; right = Light }
-let tr_corner = { top = Blank; bottom = Light; left = Light; right = Blank }
-let bl_corner = { top = Light; bottom = Blank; left = Blank; right = Light }
-let br_corner = { top = Light; bottom = Blank; left = Light; right = Blank }
+let draw_hline ctx line column len left middle right =
+  match len with
+    | 0 ->
+        ()
+    | 1 ->
+        draw_piece ctx line column { top = Blank; bottom = Blank; left = left; right = right };
+    | _ ->
+        draw_piece ctx line column { top = Blank; bottom = Blank; left = left; right = middle };
+        let piece = { top = Blank; bottom = Blank; left = middle; right = middle } in
+        for i = 1 to len - 2 do
+          draw_piece ctx line (column + i) piece
+        done;
+        draw_piece ctx line (column + len - 1) { top = Blank; bottom = Blank; left = middle; right = right }
 
-let draw_hline ctx line column len =
-  for i = 0 to len - 1 do
-    draw_piece ctx line (column + i) hline
-  done
+let draw_vline ctx line column len top middle bottom =
+  match len with
+    | 0 ->
+        ()
+    | 1 ->
+        draw_piece ctx line column { top = top; bottom = bottom; left = Blank; right = Blank };
+    | _ ->
+        draw_piece ctx line column { top = top; bottom = middle; left = Blank; right = Blank };
+        let piece = { top = middle; bottom = middle; left = Blank; right = Blank } in
+        for i = 1 to len - 2 do
+          draw_piece ctx (line + i) column piece
+        done;
+        draw_piece ctx (line + len - 1) column { top = middle; bottom = bottom; left = Blank; right = Blank }
 
-let draw_vline ctx line column len =
-  for i = 0 to len - 1 do
-    draw_piece ctx (line + i) column vline
-  done
-
-let draw_frame ctx rect =
+let draw_frame ctx rect connection =
+  let hline = { top = Blank; bottom = Blank; left = connection; right = connection } in
+  let vline = { top = connection; bottom = connection; left = Blank; right = Blank } in
   for i = 1 to rect.r_columns - 2 do
     draw_piece ctx rect.r_line (rect.r_column + i) hline;
     draw_piece ctx (rect.r_line + rect.r_lines - 1) (rect.r_column + i) hline
@@ -540,7 +553,7 @@ let draw_frame ctx rect =
     draw_piece ctx (rect.r_line + i) rect.r_column vline;
     draw_piece ctx (rect.r_line + i) (rect.r_column + rect.r_columns - 1) vline
   done;
-  draw_piece ctx rect.r_line rect.r_column tl_corner;
-  draw_piece ctx rect.r_line (rect.r_column + rect.r_columns - 1) tr_corner;
-  draw_piece ctx (rect.r_line + rect.r_lines - 1) (rect.r_column + rect.r_columns - 1) br_corner;
-  draw_piece ctx (rect.r_line + rect.r_lines - 1) rect.r_column bl_corner
+  draw_piece ctx rect.r_line rect.r_column { top = Blank; bottom = connection; left = Blank; right = connection };
+  draw_piece ctx rect.r_line (rect.r_column + rect.r_columns - 1) { top = Blank; bottom = connection; left = connection; right = Blank };
+  draw_piece ctx (rect.r_line + rect.r_lines - 1) (rect.r_column + rect.r_columns - 1) { top = connection; bottom = Blank; left = connection; right = Blank };
+  draw_piece ctx (rect.r_line + rect.r_lines - 1) rect.r_column { top = connection; bottom = Blank; left = Blank; right = connection }

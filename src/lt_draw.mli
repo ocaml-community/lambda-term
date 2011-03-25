@@ -124,11 +124,13 @@ type piece = { top : connection; bottom : connection; left : connection; right :
 val draw_piece : context -> int -> int -> piece -> unit
   (** Draws a piece. It may modify pieces around it. *)
 
-val draw_hline : context -> int -> int -> int -> unit
-  (** [draw_hline ctx line column length] draws an horizontal line. *)
+val draw_hline : context -> int -> int -> int -> connection -> connection -> connection -> unit
+  (** [draw_hline ctx line column length left middle right] draws an
+      horizontal line. *)
 
-val draw_vline : context -> int -> int -> int -> unit
-  (** [draw_hline ctx line column length] draws an vertical line. *)
+val draw_vline : context -> int -> int -> int -> connection -> connection -> connection -> unit
+  (** [draw_hline ctx line column length top middle bottom] draws an
+      vertical line. *)
 
-val draw_frame : context -> rect -> unit
+val draw_frame : context -> rect -> connection -> unit
   (** Draws a rectangle. *)
