@@ -211,11 +211,20 @@ class read_password : unit -> object
     (** Returns the result as a UTF-8 encoded string. *)
 end
 
+(** The result of reading a keyword. *)
+type 'a read_keyword_result =
+  | Rk_value of 'a
+      (** The user typed a correct keyword and this is its associated
+          value. *)
+  | Rk_error of Zed_utf8.t
+      (** The user did not enter a correct keyword and this is what he
+          typed instead. *)
+
 (** Read a keyword. *)
 class ['a] read_keyword : ?history : history -> unit -> object
-  inherit [[ `Value of 'a | `Error of Zed_utf8.t ]] engine
+  inherit ['a read_keyword_result] engine
 
-  method eval : [ `Value of 'a | `Error of Zed_utf8.t ]
+  method eval : 'a read_keyword_result
     (** If the input correspond to a keyword, returns its associated
         value. otherwise returns [`Error input]. *)
 

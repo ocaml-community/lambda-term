@@ -494,14 +494,18 @@ class read_password () = object(self)
     | action -> super#send_action action
 end
 
+type 'a read_keyword_result =
+  | Rk_value of 'a
+  | Rk_error of Zed_utf8.t
+
 class ['a] read_keyword ?history () = object(self)
-  inherit [[ `Value of 'a | `Error of Zed_utf8.t ]] engine ?history ()
+  inherit ['a read_keyword_result] engine ?history ()
 
   method keywords = []
 
   method eval =
     let input = Zed_rope.to_string (Zed_edit.text self#edit) in
-    try `Value(List.assoc input self#keywords) with Not_found -> `Error input
+    try Rk_value(List.assoc input self#keywords) with Not_found -> Rk_error input
 
   method completion =
     let word = Zed_rope.to_string self#input_prev in
