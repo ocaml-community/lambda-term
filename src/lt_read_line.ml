@@ -478,7 +478,7 @@ class read_password () = object(self)
   inherit [Zed_utf8.t] engine () as super
 
   method stylise =
-    let text, pos = self#stylise in
+    let text, pos = super#stylise in
     for i = 0 to Array.length text - 1 do
       let ch, style = text.(i) in
       text.(i) <- (UChar.of_char '*', style)
