@@ -9,6 +9,7 @@
 
 open Lwt_react
 open Lwt
+open Lt_widget
 
 (* Format the time. *)
 let format_time time =
@@ -24,16 +25,16 @@ lwt () =
   ignore (Lwt_engine.on_timer 1.0 true (fun _ -> set_time (Unix.time ())));
 
   (* Create the exit button. *)
-  let button = new Lt_widget.button (S.const "exit") in
+  let button_exit = button "exit" in
 
   (* Create widgets. *)
   let widget =
-    Lt_widget.vbox [
-      (new Lt_widget.label (S.map format_time time))#as_widget;
-      button#as_widget;
+    vbox [
+      changeable (S.map (fun time -> label (format_time time)) time);
+      button_exit;
     ]
   in
 
   (* Run. *)
   lwt term = Lazy.force Lt_term.stdout in
-  Lt_widget.run term widget (E.next button#clicked)
+  run term widget (E.next button_exit#clicked)

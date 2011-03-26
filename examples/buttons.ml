@@ -7,16 +7,17 @@
  * This file is a part of Lambda-Term.
  *)
 
-open Lwt_react
 open Lwt
+open Lwt_react
 open Lt_widget
 
 lwt () =
-  let button_exit = new button (S.const "exit") in
+  (* Create the exit button. *)
+  let button_exit = button "exit" in
   let widget =
     frame
       (vbox [
-         button_exit#as_widget;
+         button_exit;
          hline ();
          hbox [button "button1";
                vline ();

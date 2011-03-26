@@ -29,26 +29,21 @@ object(self)
 
   method handle_event ev =
     super#handle_event ev;
-    let coord = S.value coord and size = S.value self#size in
+    let coord = S.value coord in
     match ev with
-      | Lt_event.Resize size ->
-          set_coord {
-            line = if coord.line >= size.lines && size.lines > 0 then size.lines - 1 else coord.line;
-            column = if coord.column >= size.columns && size.columns > 0 then size.columns - 1 else coord.column;
-          }
       | Lt_event.Key{ code = Up } ->
-          set_coord { coord with line = if coord.line > 0 then coord.line - 1 else coord.line }
+          set_coord { coord with line = coord.line - 1 }
       | Lt_event.Key{ code = Down } ->
-          set_coord { coord with line = if coord.line < size.lines - 1 then coord.line + 1 else coord.line }
+          set_coord { coord with line = coord.line + 1 }
       | Lt_event.Key{ code = Left } ->
-          set_coord { coord with column = if coord.column > 0 then coord.column - 1 else coord.column }
+          set_coord { coord with column = coord.column - 1 }
       | Lt_event.Key{ code = Right } ->
-          set_coord { coord with column = if coord.column < size.columns - 1 then coord.column + 1 else coord.column }
+          set_coord { coord with column = coord.column + 1 }
       | _ ->
           ()
 
-  initializer
-    self#set_can_focus (S.const true)
+  val can_focus = S.const true
+  method can_focus = can_focus
 end
 
 lwt () =

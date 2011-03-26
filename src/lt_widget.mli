@@ -23,8 +23,6 @@ class t : object
   method can_focus : bool signal
     (** Whether the focus can receive the focus or not. *)
 
-  method set_can_focus : bool signal -> unit
-
   method need_redraw : unit event
     (** Event which occurs when the widget need to be redrawn. *)
 
@@ -35,114 +33,116 @@ class t : object
         it is focused and the cursor should be displayed. *)
 
   method handle_event : Lt_event.t -> unit
-    (** Handles the given event. Note that widgets never receive
-        resize events. *)
+    (** Handles the given event. A widget receive events only if it is
+        focusable. *)
 
   method key_pressed : Lt_key.t event
     (** Event occuring when the widget has the focus and a key is
         pressed. *)
 
-  method size : size signal
-    (** The signal holding the current size of the widget. This size
-        is updated when the widget receive a {!Lt_event.Resize}
-        event. *)
+  method clicked : unit event
+    (** Event which occurs when the user press {!Lt_key.Enter} on the
+        widget. *)
 
   method requested_size : size signal
     (** The size wanted by the widget. *)
 
   method expand_horz : bool signal
-    (** Whether to expand the widget horizontally if there is free
-        space. *)
+    (** Whether the widget can expand horizontally. *)
 
   method expand_vert : bool signal
-    (** Whether to expand the widget vertically if there is free
-        space. *)
-
-  method set_expand_horz : bool signal -> unit
-  method set_expand_vert : bool signal -> unit
+    (** Whether the widget can expand vertically. *)
 end
+
+(** {6 Modifiers} *)
+
+class changeable : t signal -> t
+  (** Class of widgets that can change over time. *)
+
+val changeable : t signal -> t
+
+class focusable : t -> t
+  (** Class of widget that may receive the focus. *)
+
+val focusable : t -> t
 
 (** {6 Simple widgets} *)
 
-(** A widget displaying some text. *)
 class label :
-  ?horz_align : horz_alignment signal ->
-  ?vert_align : vert_alignment signal ->
-  string signal ->
-object
-  inherit t
+  ?expand_horz : bool ->
+  ?expand_vert : bool ->
+  ?horz_align : horz_alignment ->
+  ?vert_align : vert_alignment ->
+  string -> t
+  (** A widget displaying a text. *)
 
-  method text : string signal
-    (** The signal holding the displayed text. *)
+val label :
+  ?expand_horz : bool ->
+  ?expand_vert : bool ->
+  ?horz_align : horz_alignment ->
+  ?vert_align : vert_alignment ->
+  string -> t
 
-  method set_text : string signal -> unit
+class title :
+  ?expand_horz : bool ->
+  ?expand_vert : bool ->
+  ?horz_align : horz_alignment ->
+  ?vert_align : vert_alignment ->
+  ?left : Lt_draw.connection ->
+  ?middle : Lt_draw.connection ->
+  ?right : Lt_draw.connection ->
+  string  -> t
+  (** A widget displaying a title, of form "---[ title ]---" *)
 
-  method horz_align : horz_alignment signal
-  method vert_align : vert_alignment signal
+val title :
+  ?expand_horz : bool ->
+  ?expand_vert : bool ->
+  ?horz_align : horz_alignment ->
+  ?vert_align : vert_alignment ->
+  ?left : Lt_draw.connection ->
+  ?middle : Lt_draw.connection ->
+  ?right : Lt_draw.connection ->
+  string  -> t
 
-  method set_horz_align : horz_alignment signal -> unit
-  method set_vert_align : vert_alignment signal -> unit
-end
-
-val label : ?horz_align : horz_alignment -> ?vert_align : vert_alignment -> string -> t
-
-class title : ?horz_align : horz_alignment signal -> ?left : Lt_draw.connection -> ?middle : Lt_draw.connection -> ?right : Lt_draw.connection -> string signal -> object
-  inherit t
-
-  method text : string signal
-    (** The signal holding the title. *)
-
-  method set_text : string signal -> unit
-
-  method horz_align : horz_alignment signal
-  method set_horz_align : horz_alignment signal -> unit
-end
-
-val title : ?horz_align : horz_alignment -> ?left : Lt_draw.connection -> ?middle : Lt_draw.connection -> ?right : Lt_draw.connection -> string -> t
-
-class hbox : t list signal -> object
-  inherit t
-  method children : t list signal
-  method set_children : t list signal -> unit
-end
+class hbox : t list -> t
+  (** A widget displaying a list of widget, listed horizontally. *)
 
 val hbox : t list -> t
 
-class vbox : t list signal -> object
-  inherit t
-  method children : t list signal
-  method set_children : t list signal -> unit
-end
+class vbox : t list -> t
+  (** A widget displaying a list of widget, listed vertically. *)
 
 val vbox : t list -> t
 
-class frame : ?connections : Lt_draw.connection -> t signal -> object
-  inherit t
-  method child : t signal
-  method set_child : t signal -> unit
-end
+class frame : ?connections : Lt_draw.connection -> t -> t
+  (** A widget displayiing another widget in a box. *)
 
-val frame : t -> t
+val frame : ?connections : Lt_draw.connection -> t -> t
 
 class hline : ?left : Lt_draw.connection -> ?middle : Lt_draw.connection -> ?right : Lt_draw.connection -> unit -> t
-class vline : ?top : Lt_draw.connection -> ?middle : Lt_draw.connection -> ?bottom : Lt_draw.connection -> unit -> t
+  (** A horizontal line. *)
 
 val hline : ?left : Lt_draw.connection -> ?middle : Lt_draw.connection -> ?right : Lt_draw.connection -> unit -> t
+
+class vline : ?top : Lt_draw.connection -> ?middle : Lt_draw.connection -> ?bottom : Lt_draw.connection -> unit -> t
+  (** A vertical line. *)
+
 val vline : ?top : Lt_draw.connection -> ?middle : Lt_draw.connection -> ?bottom : Lt_draw.connection -> unit -> t
 
-class button : string signal -> object
-  inherit t
+class button :
+  ?expand_horz : bool ->
+  ?expand_vert : bool ->
+  ?horz_align : horz_alignment ->
+  ?vert_align : vert_alignment ->
+  string -> t
+  (** A button. *)
 
-  method text : string signal
-    (** The text of the button. *)
-
-  method set_text : string signal -> unit
-
-  method clicked : unit event
-    (** Event which occurs when the button is clicked. *)
-end
-
-val button : string -> t
+val button :
+  ?expand_horz : bool ->
+  ?expand_vert : bool ->
+  ?horz_align : horz_alignment ->
+  ?vert_align : vert_alignment ->
+  string -> t
 
 (** {6 Running in a terminal} *)
 
