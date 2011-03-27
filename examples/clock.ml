@@ -24,17 +24,16 @@ lwt () =
   (* Update the time every second. *)
   ignore (Lwt_engine.on_timer 1.0 true (fun _ -> set_time (Unix.time ())));
 
-  (* Create the exit button. *)
-  let button_exit = button "exit" in
+  let waiter, wakener = wait () in
 
-  (* Create widgets. *)
-  let widget =
+  (* Create the UI. *)
+  let ui =
     vbox [
-      changeable (S.map (fun time -> label (format_time time)) time);
-      button_exit;
+      changeable (S.map ~eq:(==) (fun time -> label (format_time time)) time);
+      button ~on_click:(wakeup wakener) "exit";
     ]
   in
 
-  (* Run. *)
+  (* Run in the standard terminal. *)
   lwt term = Lazy.force Lt_term.stdout in
-  run term widget (E.next button_exit#clicked)
+  run term ui waiter

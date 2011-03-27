@@ -14,22 +14,18 @@ lwt () =
   (* Create a thread waiting for escape to be pressed. *)
   let waiter, wakener = wait () in
 
-  (* Create the label. *)
-  let widget =
-    Lt_widget.vbox [
-      Lt_widget.label "Hello, world!";
-      Lt_widget.label "Press escape to exit.";
-    ]
+  (* Create the UI. *)
+  let ui =
+    Lt_widget.event_box
+      ~on_event:(function
+                   | Lt_event.Key{ Lt_key.code = Lt_key.Escape } -> wakeup wakener ()
+                   | _ -> ())
+      (Lt_widget.vbox [
+         Lt_widget.label "Hello, world!";
+         Lt_widget.label "Press escape to exit.";
+       ])
   in
-
-  (* Exit when escape is pressed. *)
-  E.keep
-    (E.map
-       (function
-          | { Lt_key.code = Lt_key.Escape } -> wakeup wakener ()
-          | _ -> ())
-       widget#key_pressed);
 
   (* Run. *)
   lwt term = Lazy.force Lt_term.stdout in
-  Lt_widget.run term widget waiter
+  Lt_widget.run term ui waiter

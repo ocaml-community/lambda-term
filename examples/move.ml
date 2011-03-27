@@ -14,21 +14,17 @@ open Lt_geom
 open Lt_text
 open Lt_key
 
-class widget =
+lwt () =
+  let waiter, wakener = wait () in
   let coord, set_coord = S.create { line = 0; column = 0 } in
-object(self)
-  inherit Lt_widget.t as super
 
-  val need_redraw = E.stamp (S.changes coord) ()
-  method need_redraw = need_redraw
-
-  method draw ctx focused =
+  let draw ctx focused =
     let coord = S.value coord in
     Lt_draw.draw_styled ctx coord.line coord.column (eval [B_fg Lt_style.lblue; S"Move me"; E_fg]);
     None
+  in
 
-  method handle_event ev =
-    super#handle_event ev;
+  let on_event ev =
     let coord = S.value coord in
     match ev with
       | Lt_event.Key{ code = Up } ->
@@ -39,17 +35,13 @@ object(self)
           set_coord { coord with column = coord.column - 1 }
       | Lt_event.Key{ code = Right } ->
           set_coord { coord with column = coord.column + 1 }
+      | Lt_event.Key{ code = Escape } ->
+          wakeup wakener ()
       | _ ->
           ()
+  in
 
-  val can_focus = S.const true
-  method can_focus = can_focus
-end
+  let widget = Lt_widget.make ~can_focus:true ~need_redraw:(E.stamp (S.changes coord) ()) ~draw ~on_event () in
 
-lwt () =
   lwt term = Lazy.force Lt_term.stdout in
-  let widget = new widget in
-  Lt_widget.run
-    term
-    (Lt_widget.frame widget)
-    (E.next (E.fmap (function { code = Escape } -> Some () | _ -> None) widget#key_pressed))
+  Lt_widget.run term (Lt_widget.frame widget) waiter

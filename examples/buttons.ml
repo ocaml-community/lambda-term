@@ -12,12 +12,11 @@ open Lwt_react
 open Lt_widget
 
 lwt () =
-  (* Create the exit button. *)
-  let button_exit = button "exit" in
+  let waiter, wakener = wait () in
   let widget =
     frame
       (vbox [
-         button_exit;
+         button ~on_click:(wakeup wakener) "exit";
          hline ();
          hbox [button "button1";
                vline ();
@@ -39,4 +38,4 @@ lwt () =
        ])
   in
   lwt term = Lazy.force Lt_term.stdout in
-  run term widget (E.next button_exit#clicked)
+  run term widget waiter
