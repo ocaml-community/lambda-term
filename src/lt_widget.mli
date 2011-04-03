@@ -21,7 +21,7 @@ val make :
   ?need_redraw : unit event ->
   ?draw : (Lt_draw.context -> t -> coord option) ->
   ?on_event : (Lt_event.t -> unit) ->
-  ?requested_size : size signal ->
+  ?size_request : size signal ->
   ?expand_horz : bool signal ->
   ?expand_vert : bool signal ->
   unit -> t
@@ -44,7 +44,7 @@ val draw : t -> Lt_draw.context -> t -> coord option
 val send_event : t -> Lt_event.t -> unit
   (** Sends the given event to the given widget. *)
 
-val requested_size : t -> size signal
+val size_request : t -> size signal
   (** The size wanted by the widget. *)
 
 val expand_horz : t -> bool signal

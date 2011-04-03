@@ -26,7 +26,7 @@ type t = {
   need_redraw : unit event;
   draw : Lt_draw.context -> t -> coord option;
   on_event : Lt_event.t -> unit;
-  requested_size : size signal;
+  size_request : size signal;
   expand_horz : bool signal;
   expand_vert : bool signal;
 }
@@ -37,7 +37,7 @@ let make
     ?(need_redraw=E.never)
     ?(draw=fun _ _ -> None)
     ?(on_event=ignore)
-    ?(requested_size=S.const { lines = 0; columns = 0 })
+    ?(size_request=S.const { lines = 0; columns = 0 })
     ?(expand_horz=S.const false)
     ?(expand_vert=S.const false)
     () =
@@ -47,7 +47,7 @@ let make
     need_redraw;
     draw;
     on_event;
-    requested_size;
+    size_request;
     expand_horz;
     expand_vert;
   }
@@ -57,7 +57,7 @@ let can_focus w = w.can_focus
 let need_redraw w = w.need_redraw
 let draw w ctx focused = w.draw ctx focused
 let send_event w e = w.on_event e
-let requested_size w = w.requested_size
+let size_request w = w.size_request
 let expand_horz w = w.expand_horz
 let expand_vert w = w.expand_vert
 
@@ -78,8 +78,8 @@ let changeable s = {
      ]);
   draw = (fun ctx focused -> (S.value s).draw ctx focused);
   on_event = ignore;
-  requested_size =
-    (let s = S.map ~eq:(==) (fun c -> c.requested_size) s in
+  size_request =
+    (let s = S.map ~eq:(==) (fun c -> c.size_request) s in
      S.switch (S.value s) (S.changes s));
   expand_horz =
     (let s = S.map ~eq:(==) (fun c -> c.expand_horz) s in
@@ -119,7 +119,7 @@ let text_size str =
   loop 0 1 0 0
 
 let label ?(expand_horz=true) ?(expand_vert=true) ?(horz_align=H_align_center) ?(vert_align=V_align_center) text =
-  let requested_size = text_size text in
+  let size_request = text_size text in
   make
     ~draw:(fun ctx focused ->
              let { lines } = Lt_draw.size ctx in
@@ -128,20 +128,20 @@ let label ?(expand_horz=true) ?(expand_vert=true) ?(horz_align=H_align_center) ?
                  | V_align_top ->
                      0
                  | V_align_center ->
-                     (lines - requested_size.lines) / 2
+                     (lines - size_request.lines) / 2
                  | V_align_bottom ->
-                     lines - requested_size.lines
+                     lines - size_request.lines
              in
              Lt_draw.draw_string_aligned ctx line horz_align text;
              None)
-    ~requested_size:(S.const requested_size)
+    ~size_request:(S.const size_request)
     ~expand_horz:(S.const expand_horz)
     ~expand_vert:(S.const expand_vert)
     ()
 
 let title ?(expand_horz=true) ?(expand_vert=false) ?(horz_align=H_align_center) ?(vert_align=V_align_center) ?(left=Light) ?(middle=Light) ?(right=Light) text =
   make
-    ~requested_size:(S.const { lines = 1; columns = 6 + Zed_utf8.length text })
+    ~size_request:(S.const { lines = 1; columns = 6 + Zed_utf8.length text })
     ~expand_horz:(S.const expand_horz)
     ~expand_vert:(S.const expand_vert)
     ~draw:(fun ctx focused ->
@@ -173,7 +173,7 @@ let choose_cursor c1 c2 =
 let hbox children =
   let draw ctx focused =
     let size = Lt_draw.size ctx in
-    let total_requested_columns = List.fold_left (fun acc child -> acc + (S.value child.requested_size).columns) 0 children in
+    let total_requested_columns = List.fold_left (fun acc child -> acc + (S.value child.size_request).columns) 0 children in
     let children_with_widths =
       if total_requested_columns <= size.columns then
         (* There is enough space for everybody, we split free space
@@ -189,7 +189,7 @@ let hbox children =
               let width = size.columns - truncate columnf in
               [(child, width)]
           | child :: rest ->
-              let req_columns = (S.value child.requested_size).columns in
+              let req_columns = (S.value child.size_request).columns in
               if S.value child.expand_horz then
                 let column = truncate columnf in
                 let width = req_columns + truncate (columnf +. widthf) - column in
@@ -210,7 +210,7 @@ let hbox children =
                 let width = size.columns - column in
                 [(child, width)]
             | child :: rest ->
-                let width = (S.value child.requested_size).columns * size.columns / total_requested_columns in
+                let width = (S.value child.size_request).columns * size.columns / total_requested_columns in
                 (child, width) :: loop (column + width) rest
           in
           loop 0 children
@@ -237,10 +237,10 @@ let hbox children =
   make
     ~children:(S.const children)
     ~need_redraw:(E.select (List.rev_map (fun c -> c.need_redraw) children))
-    ~requested_size:(S.merge
+    ~size_request:(S.merge
                        (fun acc size -> { lines = max acc.lines size.lines; columns = acc.columns + size.columns })
                        { lines = 0; columns = 0 }
-                       (List.rev_map (fun c -> c.requested_size) children))
+                       (List.rev_map (fun c -> c.size_request) children))
     ~expand_horz:(S.merge (||) false (List.rev_map (fun c -> c.expand_horz) children))
     ~expand_vert:(S.merge (&&) true (List.rev_map (fun c -> c.expand_vert) children))
     ~draw
@@ -249,7 +249,7 @@ let hbox children =
 let vbox children =
   let draw ctx focused =
     let size = Lt_draw.size ctx in
-    let total_requested_lines = List.fold_left (fun acc child -> acc + (S.value child.requested_size).lines) 0 children in
+    let total_requested_lines = List.fold_left (fun acc child -> acc + (S.value child.size_request).lines) 0 children in
     let children_with_heights =
       if total_requested_lines <= size.lines then
         (* There is enough space for everybody, we split free space
@@ -265,7 +265,7 @@ let vbox children =
               let height = size.lines - truncate linef in
               [(child, height)]
           | child :: rest ->
-              let req_lines = (S.value child.requested_size).lines in
+              let req_lines = (S.value child.size_request).lines in
               if S.value child.expand_vert then
                 let line = truncate linef in
                 let height = req_lines + truncate (linef +. heightf) - line in
@@ -286,7 +286,7 @@ let vbox children =
                 let height = size.lines - line in
                 [(child, height)]
             | child :: rest ->
-                let height = (S.value child.requested_size).lines * size.lines / total_requested_lines in
+                let height = (S.value child.size_request).lines * size.lines / total_requested_lines in
                 (child, height) :: loop (line + height) rest
           in
           loop 0 children
@@ -313,10 +313,10 @@ let vbox children =
   make
     ~children:(S.const children)
     ~need_redraw:(E.select (List.rev_map (fun c -> c.need_redraw) children))
-    ~requested_size:(S.merge
+    ~size_request:(S.merge
                        (fun acc size -> { lines = acc.lines  + size.lines; columns = max acc.columns size.columns })
                        { lines = 0; columns = 0 }
-                       (List.rev_map (fun c -> c.requested_size) children))
+                       (List.rev_map (fun c -> c.size_request) children))
     ~expand_horz:(S.merge (&&) true (List.rev_map (fun c -> c.expand_horz) children))
     ~expand_vert:(S.merge (||) false (List.rev_map (fun c -> c.expand_vert) children))
     ~draw
@@ -344,14 +344,14 @@ let frame ?(connections=Light) child =
     ~children:(S.const [child])
     ~need_redraw:child.need_redraw
     ~draw
-    ~requested_size:(S.map (fun size -> { lines = size.lines + 2; columns = size.columns + 2 }) child.requested_size)
+    ~size_request:(S.map (fun size -> { lines = size.lines + 2; columns = size.columns + 2 }) child.size_request)
     ~expand_horz:child.expand_horz
     ~expand_vert:child.expand_vert
     ()
 
 let hline ?(left=Light) ?(middle=Light) ?(right=Light) () =
   make
-    ~requested_size:(S.const { lines = 1; columns = 0 })
+    ~size_request:(S.const { lines = 1; columns = 0 })
     ~draw:(fun ctx focused ->
              draw_hline ctx 0 0 (size ctx).columns left middle right;
              None)
@@ -360,7 +360,7 @@ let hline ?(left=Light) ?(middle=Light) ?(right=Light) () =
 
 let vline ?(top=Light) ?(middle=Light) ?(bottom=Light) () =
   make
-    ~requested_size:(S.const { lines = 0; columns = 1 })
+    ~size_request:(S.const { lines = 0; columns = 1 })
     ~draw:(fun ctx focused ->
              draw_vline ctx 0 0 (size ctx).lines top middle bottom;
              None)
@@ -400,7 +400,7 @@ let button ?(expand_horz=true) ?(expand_vert=true) ?(horz_align=H_align_center) 
     make
       ~expand_horz:(S.const expand_horz)
       ~expand_vert:(S.const expand_vert)
-      ~requested_size:(S.const { lines = 1; columns = 4 + Zed_utf8.length text })
+      ~size_request:(S.const { lines = 1; columns = 4 + Zed_utf8.length text })
       ~can_focus:true
       ~draw
       ~on_event
