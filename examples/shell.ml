@@ -98,14 +98,17 @@ let get_paths () =
 let binaries = lazy(
   Lwt_list.fold_left_s
     (fun set dir ->
-       Lwt_stream.fold
-         (fun file set ->
-            if file <> "." && file <> ".." then
-              String_set.add file set
-            else
-              set)
-         (Lwt_unix.files_of_directory dir)
-         set)
+       try_lwt
+         Lwt_stream.fold
+           (fun file set ->
+              if file <> "." && file <> ".." then
+                String_set.add file set
+              else
+                set)
+           (Lwt_unix.files_of_directory dir)
+           set
+       with Unix.Unix_error _ ->
+         return set)
     String_set.empty
     (get_paths ())
   >|= String_set.elements
