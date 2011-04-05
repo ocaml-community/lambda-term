@@ -37,4 +37,11 @@ let () =
   { control = true; meta = false; shift = false; code = Char(UChar.of_char 'w') } --> Kill;
   { control = true; meta = false; shift = false; code = Char(UChar.of_char 'y') } --> Yank;
   { control = false; meta = false; shift = false; code = Backspace } --> Delete_prev_char;
-  { control = false; meta = true; shift = false; code = Char(UChar.of_char 'w') } --> Copy
+  { control = false; meta = true; shift = false; code = Char(UChar.of_char 'w') } --> Copy;
+  { control = false; meta = true; shift = false; code = Char(UChar.of_char 'c') } --> Capitalize_word;
+  { control = false; meta = true; shift = false; code = Char(UChar.of_char 'l') } --> Lowercase_word;
+  { control = false; meta = true; shift = false; code = Char(UChar.of_char 'u') } --> Uppercase_word;
+  { control = false; meta = true; shift = false; code = Right } --> Next_word;
+  { control = false; meta = true; shift = false; code = Left } --> Prev_word;
+  { control = true; meta = false; shift = false; code = Right } --> Next_word;
+  { control = true; meta = false; shift = false; code = Left } --> Prev_word
