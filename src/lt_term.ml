@@ -281,7 +281,7 @@ let goto term coord =
     end else begin
       lwt () = Lwt_io.fprint term.oc "\027[H" in
       lwt () = if coord.line > 0 then Lwt_io.fprintf term.oc "\027[%dB" coord.line else return () in
-      lwt () = if coord.line > 0 then Lwt_io.fprintf term.oc "\027[%dC" coord.column else return () in
+      lwt () = if coord.column > 0 then Lwt_io.fprintf term.oc "\027[%dC" coord.column else return () in
       return ()
     end
   else
