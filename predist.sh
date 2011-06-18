@@ -3,8 +3,8 @@
 # Generate CHANGES.darcs
 [ -d "$DARCS_REPO" ] && darcs changes --repodir "$DARCS_REPO" > CHANGES.darcs
 
-# Make the configure script executable
-chmod +x configure
+# Add oasis stuff
+oasis setup
 
 # Cleanup
-rm -f predist.sh boring
+rm -f predist.sh boring dist.sh

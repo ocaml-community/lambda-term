@@ -1,4 +1,5 @@
 (^|/)_build($|/)
 ^lambda-term-.*\.tar\.gz$
+^setup\.ml$
 ^setup\.data$
 ^setup\.log$

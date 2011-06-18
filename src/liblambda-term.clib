@@ -1,7 +1,0 @@
-# OASIS_START
-# DO NOT EDIT (digest: 24aaab4a4cbb80219eb080d93196ad53)
-lt_term_stubs.o
-lt_unix_stubs.o
-lt_windows_stubs.o
-lt_iconv_stubs.o
-# OASIS_STOP
