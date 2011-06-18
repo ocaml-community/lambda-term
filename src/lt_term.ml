@@ -74,6 +74,7 @@ let default_model =
 let colors_of_term = function
   | "xterm" -> 256
   | "rxvt-256color" -> 256
+  | "rxvt-unicode-256color" -> 256
   | "rxvt-unicode" -> 88
   | "rxvt" -> 88
   | _ -> 16
