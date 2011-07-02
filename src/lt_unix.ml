@@ -70,24 +70,21 @@ let parse_char cd st first_byte =
 
 exception Not_a_sequence
 
-let parse_escape st =
+let parse_escape escape_time st =
   let buf = Buffer.create 32 in
   (* Read one character and add it to [buf]: *)
   let get () =
-    match Lwt.state (Lwt_stream.get st) with
-      | Sleep ->
+    match_lwt pick [Lwt_stream.get st; Lwt_unix.sleep escape_time >> return None] with
+      | None ->
           (* If the rest is not immediatly available, conclude that
-             this is not an escape sequence but just the escape key: *)
+             this is not an escape sequence but just the escape
+             key: *)
           raise_lwt Not_a_sequence
-      | Fail exn ->
-          raise_lwt exn
-      | Return None ->
-          raise_lwt Not_a_sequence
-      | Return(Some('\x00' .. '\x1f' | '\x80' .. '\xff')) ->
+      | Some('\x00' .. '\x1f' | '\x80' .. '\xff') ->
           (* Control characters and non-ascii characters are not part
              of escape sequences. *)
           raise_lwt Not_a_sequence
-      | Return(Some ch) ->
+      | Some ch ->
           Buffer.add_char buf ch;
           return ch
   in
@@ -554,14 +551,14 @@ let find_sequence seq =
   in
   loop 0 (Array.length sequences)
 
-let rec parse_event cd stream =
+let rec parse_event ?(escape_time = 0.1) cd stream =
   lwt byte = Lwt_stream.next stream in
   match byte with
     | '\x1b' -> begin
         (* Escape sequences *)
         try_lwt
           (* Try to parse an escape seqsuence *)
-          Lwt_stream.parse stream parse_escape >>= function
+          Lwt_stream.parse stream (parse_escape escape_time) >>= function
             | "[M" -> begin
                 (* Mouse report *)
                 let open Lt_mouse in
@@ -600,15 +597,24 @@ let rec parse_event cd stream =
                       return (Lt_event.Sequence ("\x1b" ^ seq))
         with Not_a_sequence ->
           (* If it is not, test if it is META+key. *)
-          match Lwt.state (Lwt_stream.peek stream) with
-            | Sleep | Fail _ | Return None ->
+          match_lwt pick [Lwt_stream.peek stream; Lwt_unix.sleep escape_time >> return None] with
+            | None ->
                 return (Lt_event.Key { control = false; meta = false; shift = false; code = Escape })
-            | Return(Some byte) ->
+            | Some byte ->
                 match byte with
                   | '\x1b' -> begin
                       (* Escape sequences *)
                       try_lwt
-                        lwt seq = Lwt_stream.parse stream (fun stream -> Lwt_stream.junk stream >> parse_escape stream) in
+                        lwt seq =
+                          Lwt_stream.parse stream
+                            (fun stream ->
+                               lwt () = Lwt_stream.junk stream in
+                               match_lwt pick [Lwt_stream.peek stream; Lwt_unix.sleep escape_time >> return None] with
+                                 | None ->
+                                     raise_lwt Not_a_sequence
+                                 | Some _ ->
+                                     parse_escape escape_time stream)
+                        in
                         match find_sequence seq with
                           | Some key ->
                               return (Lt_event.Key { key with meta = true })

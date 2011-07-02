@@ -59,6 +59,9 @@ type t = {
   incoming_is_a_tty : bool;
   outgoing_is_a_tty : bool;
   (* Whether input/output are tty devices. *)
+
+  mutable escape_time : float;
+  (* Time to wait before returning the escape key. *)
 }
 
 (* +-----------------------------------------------------------------+
@@ -115,6 +118,7 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
     size_changed_cond = Lwt_condition.create ();
     incoming_is_a_tty;
     outgoing_is_a_tty;
+    escape_time = 0.1;
   } in
   if not windows then begin
     match Lt_unix.sigwinch with
@@ -135,6 +139,8 @@ let windows t = t.windows
 let is_a_tty t = t.incoming_is_a_tty && t.outgoing_is_a_tty
 let incoming_is_a_tty t = t.incoming_is_a_tty
 let outgoing_is_a_tty t = t.outgoing_is_a_tty
+let escape_time t = t.escape_time
+let set_escape_time t time = t.escape_time <- time
 
 (* +-----------------------------------------------------------------+
    | Sizes                                                           |
@@ -473,7 +479,7 @@ let read_event term =
     lwt size = get_size term in
     return (Lt_event.Resize size)
   end else
-    pick [Lt_unix.parse_event term.incoming_cd term.input_stream >|= (fun ev -> `Event ev);
+    pick [Lt_unix.parse_event ~escape_time:term.escape_time term.incoming_cd term.input_stream >|= (fun ev -> `Event ev);
           Lwt_condition.wait term.size_changed_cond] >>= function
       | `Event ev ->
           return ev

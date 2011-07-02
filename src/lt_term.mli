@@ -68,6 +68,13 @@ val outgoing_is_a_tty : t -> bool
   (** [incoming_is_a_tty term] whether the output of [term] is a tty
       device. *)
 
+val escape_time : t -> float
+  (** Time waited before returning the escape key. This is not used on
+      windows. *)
+
+val set_escape_time : t -> float -> unit
+  (** Set the time waited before returning the escape key. *)
+
 exception Not_a_tty
   (** Exception raised when trying to use a function that can only be
       used on terminals. *)
