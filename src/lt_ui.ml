@@ -27,7 +27,7 @@ type t = {
   term : Lt_term.t;
   (* The terminal used for the UI. *)
 
-  draw : Lt_draw.matrix -> Lt_geom.size -> unit;
+  draw : t -> Lt_draw.matrix -> unit;
   (* The draw function. *)
 
   mode : Lt_term.mode;
@@ -57,6 +57,9 @@ type t = {
 
   mutable drawer : unit Lwt.t;
   (* The thread drawing the terminal. *)
+
+  mutable drawing : bool;
+  (* Are we drawing ? *)
 
   draw_error_push : exn option -> unit;
   draw_error_stream : exn Lwt_stream.t;
@@ -88,6 +91,7 @@ let create term ?(save_state = true) draw =
     cursor_position = { line = 0; column = 0 };
     draw_queued = false;
     drawer = return ();
+    drawing = false;
     draw_error_push = push;
     draw_error_stream = stream;
   }
@@ -126,7 +130,9 @@ let draw ui =
           if ui.matrix_a = [||] then ui.matrix_a <- Lt_draw.make_matrix ui.size;
 
           (* Draw the screen. *)
-          ui.draw ui.matrix_a ui.size;
+          ui.drawing <- true;
+          (try ui.draw ui ui.matrix_a with exn -> ui.drawing <- false; raise exn);
+          ui.drawing <- false;
 
           (* Rendering. *)
           lwt () = Lt_term.hide_cursor ui.term in
@@ -168,7 +174,7 @@ let set_cursor_visible ui state =
   check ui;
   if state <> ui.cursor_visible then begin
     ui.cursor_visible <- state;
-    if ui.state = Loop then draw ui
+    if ui.state = Loop && not ui.drawing then draw ui
   end
 
 let cursor_position ui =
@@ -179,7 +185,7 @@ let set_cursor_position ui coord =
   check ui;
   if coord <> ui.cursor_position then begin
     ui.cursor_position <- coord;
-    if ui.state = Loop then draw ui
+    if ui.state = Loop && not ui.drawing then draw ui
   end
 
 (* +-----------------------------------------------------------------+

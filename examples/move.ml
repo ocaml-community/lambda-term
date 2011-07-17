@@ -36,7 +36,8 @@ let rec loop ui coord =
     | ev ->
         loop ui coord
 
-let draw matrix size coord =
+let draw ui matrix coord =
+  let size = Lt_ui.size ui in
   let ctx = Lt_draw.context matrix size in
   Lt_draw.clear ctx;
   Lt_draw.draw_frame ctx { r_line = 0; r_column = 0; r_lines = size.lines; r_columns = size.columns } Lt_draw.Light;

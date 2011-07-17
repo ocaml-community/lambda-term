@@ -460,19 +460,7 @@ type 'a event =
   | Event of Lt_event.t
       (* A event from the terminal. *)
 
-let run term ?(save_state=true) widget waiter =
-  let widget = (widget :> t) in
-
-  (* The two matrices used for the rendering. *)
-  let matrix_a = ref [||] and matrix_b = ref [||] in
-
-  (* Whether a draw operation has already been requested. *)
-  let draw_queued = ref false in
-
-  (* The current size of the terminal. *)
-  lwt size = Lt_term.get_size term in
-  let size = ref size in
-
+let run term ?save_state widget waiter =
   (* The currently focused widget. *)
   let focused =
     ref(match find_focusable widget with
@@ -480,65 +468,24 @@ let run term ?(save_state=true) widget waiter =
           | None -> widget)
   in
 
-  (* Draw the screen. *)
-  let draw () =
-    if !draw_queued then
-      (* If a draw operation is already queued, do nothing. *)
-      return ()
-    else begin
-      draw_queued := true;
-
-      (* Wait a bit in order not to redraw too often. *)
-      lwt () = pause () in
-      draw_queued := false;
-
-      (* Allocate the first matrix if needed. *)
-      if !matrix_a = [||] then matrix_a := Lt_draw.make_matrix !size;
-
-      (* Create the context for drawing. *)
-      let ctx = Lt_draw.context !matrix_a !size in
-
-      (* Clear the context. *)
-      clear ctx;
-
-      (* Draw the widget. *)
-      let cursor_position = widget.draw ctx !focused in
-
-      (* Rendering. *)
-      lwt () = Lt_term.hide_cursor term in
-      lwt () = Lt_term.render_update term !matrix_b !matrix_a in
-      lwt () =
-        match cursor_position with
-          | Some coord ->
-              lwt () = Lt_term.goto term coord in
-              Lt_term.show_cursor term
-          | None ->
-              return ()
-      in
-      lwt () = Lt_term.flush term in
-
-      (* Swap the two matrices. *)
-      let a = !matrix_a and b = !matrix_b in
-      matrix_a := b;
-      matrix_b := a;
-
-      return ()
-    end
+  let draw ui matrix =
+    let ctx = Lt_draw.context matrix (Lt_ui.size ui) in
+    Lt_draw.clear ctx;
+    match widget.draw ctx !focused with
+      | Some coord ->
+          Lt_ui.set_cursor_visible ui true;
+          Lt_ui.set_cursor_position ui coord
+      | None ->
+          Lt_ui.set_cursor_visible ui false
   in
+
+  lwt ui = Lt_ui.create term ?save_state draw in
 
   (* Loop handling events. *)
   let waiter = waiter >|= fun x -> Value x in
   let rec loop () =
-    let thread = Lt_term.read_event term >|= fun x -> Event x in
+    let thread = Lt_ui.loop ui >|= fun x -> Event x in
     choose [thread; waiter] >>= function
-      | Event(Lt_event.Resize new_size) ->
-          (* New size, discard current matrices. *)
-          matrix_a := [||];
-          matrix_b := [||];
-          size := new_size;
-          (* Redraw with the new size. *)
-          lwt () = draw () in
-          loop ()
       | Event(Lt_event.Key { control = false; meta = false; shift = false; code = Tab }) -> begin
           (* Cycle focus. *)
           focused :=
@@ -551,7 +498,7 @@ let run term ?(save_state=true) widget waiter =
                    match find_focusable widget with
                      | Some widget -> widget
                      | None -> widget);
-          lwt () = draw () in
+          Lt_ui.draw ui;
           loop ()
         end
       | Event ev ->
@@ -562,32 +509,13 @@ let run term ?(save_state=true) widget waiter =
           return value
   in
 
-  (* Save the state if requested. *)
-  lwt () =
-    if save_state then
-      Lt_term.save_state term
-    else
-      return ()
-  in
-
-  (* Put the terminal in raw mode. *)
-  lwt mode = Lt_term.enter_raw_mode term in
-
   (* Redraw the screen when the widget needs it. *)
-  let ev_redraw = E.map_s draw widget.need_redraw in
+  let ev_redraw = E.map (fun () -> Lt_ui.draw ui) widget.need_redraw in
 
   try_lwt
-    (* Initial drawing. *)
-    lwt () = draw () in
-    (* Loop forever. *)
     loop ()
   finally
     (* Disable redrawing. *)
     E.stop ev_redraw;
-    (* Restore the terminal mode. *)
-    lwt () = Lt_term.leave_raw_mode term mode in
-    (* Restore the state of the terminal if previously saved. *)
-    if save_state then
-      Lt_term.load_state term
-    else
-      return ()
+    (* Stop the UI. *)
+    Lt_ui.quit ui

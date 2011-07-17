@@ -12,7 +12,7 @@
 type t
   (** Type of a user interface. *)
 
-val create : Lt_term.t -> ?save_state : bool -> (Lt_draw.matrix -> Lt_geom.size -> unit) -> t Lwt.t
+val create : Lt_term.t -> ?save_state : bool -> (t -> Lt_draw.matrix -> unit) -> t Lwt.t
   (** [create term ?save_state draw] creates a new user
       interface. [draw] is used to draw the user interface. If
       [save_state] is [true] (the default) then the state of the
