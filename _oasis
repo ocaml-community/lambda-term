@@ -40,7 +40,8 @@ Library "lambda-term"
     Lt_widget,
     Lt_edit,
     Lt_read_line,
-    Lt_text
+    Lt_text,
+    Lt_ui
   CSources:
     lt_term_stubs.c,
     lt_unix_stubs.c,
