@@ -11,29 +11,28 @@ open Lwt_react
 open Lwt
 open Lt_widget
 
-(* Format the time. *)
-let format_time time =
-  let localtime = Unix.localtime time in
+let get_time () =
+  let localtime = Unix.localtime (Unix.time ()) in
   Printf.sprintf "%02u:%02u:%02u"
     localtime.Unix.tm_hour
     localtime.Unix.tm_min
     localtime.Unix.tm_sec
 
 lwt () =
-  let time, set_time = S.create (Unix.time ()) in
-  (* Update the time every second. *)
-  ignore (Lwt_engine.on_timer 1.0 true (fun _ -> set_time (Unix.time ())));
-
   let waiter, wakener = wait () in
 
-  (* Create the UI. *)
-  let ui =
-    vbox [
-      changeable (S.map ~eq:(==) (fun time -> label (format_time time)) time);
-      button ~on_click:(wakeup wakener) "exit";
-    ]
-  in
+  let vbox = new vbox in
+  let clock = new label (get_time ()) in
+  let button = new button "exit" in
+  vbox#add clock;
+  vbox#add button;
+
+  (* Update the time every second. *)
+  ignore (Lwt_engine.on_timer 1.0 true (fun _ -> clock#set_text (get_time ())));
+
+  (* Quit when the exit button is clicked. *)
+  button#on_click (wakeup wakener);
 
   (* Run in the standard terminal. *)
   lwt term = Lazy.force Lt_term.stdout in
-  run term ui waiter
+  run term vbox waiter
