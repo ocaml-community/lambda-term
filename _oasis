@@ -122,6 +122,13 @@ Executable "read-password"
   MainIs: read_password.ml
   BuildDepends: lambda-term
 
+Executable "read-yes-no"
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: read_yes_no.ml
+  BuildDepends: lambda-term
+
 # +-------------------------------------------------------------------+
 # | Doc                                                               |
 # +-------------------------------------------------------------------+
