@@ -75,11 +75,28 @@ let default_model =
     "dumb"
 
 let colors_of_term = function
-  | "xterm" -> 256
+  | "Eterm-256color" -> 256
+  | "Eterm-88color" -> 88
+  | "gnome-256color" -> 256
+  | "iTerm.app" -> 256
+  | "konsole-256color" -> 256
+  | "mlterm-256color" -> 256
+  | "mrxvt-256color" -> 256
+  | "putty-256color" -> 256
   | "rxvt-256color" -> 256
+  | "rxvt-88color" -> 88
   | "rxvt-unicode-256color" -> 256
   | "rxvt-unicode" -> 88
-  | "rxvt" -> 88
+  | "screen-256color" -> 256
+  | "screen-256color-bce" -> 256
+  | "screen-256color-bce-s" -> 256
+  | "screen-256color-s" -> 256
+  | "st-256color" -> 256
+  | "vte-256color" -> 256
+  | "xterm-256color" -> 256
+  | "xterm+256color" -> 256
+  | "xterm-88color" -> 88
+  | "xterm+88color" -> 88
   | _ -> 16
 
 let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding ?outgoing_encoding incoming_fd ic outgoing_fd oc =
