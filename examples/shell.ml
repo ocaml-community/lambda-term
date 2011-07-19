@@ -45,7 +45,7 @@ let make_prompt size exit_code time =
   (* Shorten the path if it is too large for the size of the
      terminal. *)
   let path_len = Zed_utf8.length path in
-  let size_for_path = size.columns - 24 - Zed_utf8.length code in
+  let size_for_path = size.cols - 24 - Zed_utf8.length code in
   let path =
     if path_len > size_for_path then
       if size_for_path >= 2 then
@@ -66,7 +66,7 @@ let make_prompt size exit_code time =
     B_fg lyellow; S path; E_fg;
     S" >─";
     S(Zed_utf8.make
-        (size.columns - 24 - Zed_utf8.length code - Zed_utf8.length path)
+        (size.cols - 24 - Zed_utf8.length code - Zed_utf8.length path)
         (UChar.of_int 0x2500));
     S"[ ";
     B_fg(if exit_code = 0 then lwhite else lred); S code; E_fg;

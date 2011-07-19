@@ -88,7 +88,7 @@ let create term ?(save_state = true) draw =
     matrix_a = [||];
     matrix_b = [||];
     cursor_visible = false;
-    cursor_position = { line = 0; column = 0 };
+    cursor_position = { row = 0; col = 0 };
     draw_queued = false;
     drawer = return ();
     drawing = false;

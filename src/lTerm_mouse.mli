@@ -31,10 +31,10 @@ type t = {
   (** Is the shift key down ? *)
   button : button;
   (** Which button have been pressed ? *)
-  line : int;
-  (** The line at which the mouse was when the button has been
+  row : int;
+  (** The row at which the mouse was when the button has been
       pressed. *)
-  column : int;
+  col : int;
   (** The column at which the mouse was when the button has been
       pressed. *)
 }
@@ -42,8 +42,8 @@ type t = {
 val control : t -> bool
 val meta : t -> bool
 val button : t -> button
-val line : t -> int
-val column : t -> int
+val row : t -> int
+val col : t -> int
 
 val to_string : t -> string
   (** Returns the string representation of the given mouse event. *)

@@ -145,10 +145,10 @@ external write_console_output : Unix.file_descr -> char_info array array -> LTer
 
 let write_console_output fd chars size coord rect =
   Lwt_unix.check_descriptor fd;
-  if Array.length chars <> size.LTerm_geom.lines then invalid_arg "LTerm_windows.write_console_output";
+  if Array.length chars <> size.LTerm_geom.rows then invalid_arg "LTerm_windows.write_console_output";
   Array.iter
     (fun line ->
-       if Array.length line <> size.LTerm_geom.columns then invalid_arg "LTerm_windows.write_console_output")
+       if Array.length line <> size.LTerm_geom.cols then invalid_arg "LTerm_windows.write_console_output")
     chars;
   write_console_output (Lwt_unix.unix_file_descr fd) chars size coord rect
 

@@ -571,8 +571,8 @@ let rec parse_event ?(escape_time = 0.1) cd stream =
                             control = mask land 0b00010000 <> 0;
                             meta = mask land 0b00001000 <> 0;
                             shift = false;
-                            line = y - 33;
-                            column = x - 33;
+                            row = y - 33;
+                            col = x - 33;
                             button =
                               (match mask land 0b11000111 with
                                  | 0b00000000 -> Button1

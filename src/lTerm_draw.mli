@@ -83,24 +83,24 @@ val fill : context -> UChar.t -> unit
       affect styles. *)
 
 val point : context -> int -> int -> point
-  (** [point ctx line column] returns the point at given position in
+  (** [point ctx row column] returns the point at given position in
       [ctx]. It raises {!Out_of_bounds} if the coordinates are outside
       the given context. *)
 
 val draw_char : context -> int -> int -> UChar.t -> unit
-  (** [draw_char ctx line column ch] sets the character at given
+  (** [draw_char ctx row column ch] sets the character at given
       coordinates to [ch]. This does not affect styles. It does
       nothing if the given coordinates are outside the bounds of the
       context. *)
 
 val draw_string : context -> int -> int -> string -> unit
-  (** [draw_string ctx line column str] draws the given string at
-      given coordinates. This does not affect styles. [str] may
-      contains newlines. *)
+  (** [draw_string ctx row column str] draws the given string at given
+      coordinates. This does not affect styles. [str] may contains
+      newlines. *)
 
 val draw_styled : context -> int -> int -> LTerm_text.t -> unit
-  (** [draw_styled ctx line column text] draws the given styled text
-      at given coordinates. *)
+  (** [draw_styled ctx row column text] draws the given styled text at
+      given coordinates. *)
 
 val draw_string_aligned : context -> int -> horz_alignment -> string -> unit
   (** Draws a string with the given alignment. *)
@@ -125,11 +125,11 @@ val draw_piece : context -> int -> int -> piece -> unit
   (** Draws a piece. It may modify pieces around it. *)
 
 val draw_hline : context -> int -> int -> int -> connection -> connection -> connection -> unit
-  (** [draw_hline ctx line column length left middle right] draws an
+  (** [draw_hline ctx row column length left middle right] draws an
       horizontal line. *)
 
 val draw_vline : context -> int -> int -> int -> connection -> connection -> connection -> unit
-  (** [draw_hline ctx line column length top middle bottom] draws an
+  (** [draw_hline ctx row column length top middle bottom] draws an
       vertical line. *)
 
 val draw_frame : context -> rect -> connection -> unit

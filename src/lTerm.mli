@@ -147,9 +147,8 @@ val goto : t -> LTerm_geom.coord -> unit Lwt.t
       not a tty. *)
 
 val move : t -> int -> int -> unit Lwt.t
-  (** [move term lines columns] moves the cursor by the given number
-      of lines and columns. Both [lines] and [columns] may be
-      negavite.
+  (** [move term rows columns] moves the cursor by the given number of
+      lines and columns. Both [rows] and [columns] may be negavite.
 
       It raises {!Not_a_tty} if the output of the given terminal is
       not a tty. *)

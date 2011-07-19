@@ -298,31 +298,31 @@ let goto term coord =
     if term.windows then begin
       let window = (LTerm_windows.get_console_screen_buffer_info term.outgoing_fd).LTerm_windows.window in
       LTerm_windows.set_console_cursor_position term.outgoing_fd {
-        line = window.r_line + coord.line;
-        column = window.r_column + coord.column;
+        row = window.row1 + coord.row;
+        col = window.col1 + coord.col;
       };
       return ()
     end else begin
       lwt () = Lwt_io.fprint term.oc "\027[H" in
-      lwt () = if coord.line > 0 then Lwt_io.fprintf term.oc "\027[%dB" coord.line else return () in
-      lwt () = if coord.column > 0 then Lwt_io.fprintf term.oc "\027[%dC" coord.column else return () in
+      lwt () = if coord.row > 0 then Lwt_io.fprintf term.oc "\027[%dB" coord.row else return () in
+      lwt () = if coord.col > 0 then Lwt_io.fprintf term.oc "\027[%dC" coord.col else return () in
       return ()
     end
   else
     raise_lwt Not_a_tty
 
-let move term lines columns =
+let move term rows cols =
   if term.outgoing_is_a_tty then
     if term.windows then begin
       let pos = (LTerm_windows.get_console_screen_buffer_info term.outgoing_fd).LTerm_windows.cursor_position in
       LTerm_windows.set_console_cursor_position term.outgoing_fd {
-        line = pos.line + lines;
-        column = pos.column + columns;
+        row = pos.row + rows;
+        col = pos.col + cols;
       };
       return ()
     end else
       lwt () =
-        match lines with
+        match rows with
           | n when n < 0 ->
               Lwt_io.fprintf term.oc "\027[%dA" (-n)
           | n when n > 0 ->
@@ -330,7 +330,7 @@ let move term lines columns =
           | _ ->
               return ()
       and () =
-        match columns with
+        match cols with
           | n when n < 0 ->
               Lwt_io.fprintf term.oc "\027[%dD" (-n)
           | n when n > 0 ->
@@ -354,8 +354,8 @@ let clear_screen term =
         LTerm_windows.fill_console_output_character
           term.outgoing_fd
           (UChar.of_char ' ')
-          (info.LTerm_windows.size.columns * info.LTerm_windows.size.lines)
-          { line = 0; column = 0 }
+          (info.LTerm_windows.size.cols * info.LTerm_windows.size.rows)
+          { row = 0; col = 0 }
       in
       return ()
     end else
@@ -371,8 +371,8 @@ let clear_screen_next term =
         LTerm_windows.fill_console_output_character
           term.outgoing_fd
           (UChar.of_char ' ')
-          (info.LTerm_windows.size.columns * (info.LTerm_windows.size.lines - info.LTerm_windows.cursor_position.line)
-           + info.LTerm_windows.size.columns - info.LTerm_windows.cursor_position.column)
+          (info.LTerm_windows.size.cols * (info.LTerm_windows.size.rows - info.LTerm_windows.cursor_position.row)
+           + info.LTerm_windows.size.cols - info.LTerm_windows.cursor_position.col)
           info.LTerm_windows.cursor_position
       in
       return ()
@@ -389,9 +389,9 @@ let clear_screen_prev term =
         LTerm_windows.fill_console_output_character
           term.outgoing_fd
           (UChar.of_char ' ')
-          (info.LTerm_windows.size.columns * info.LTerm_windows.cursor_position.line
-           + info.LTerm_windows.cursor_position.column)
-          { line = 0; column = 0 }
+          (info.LTerm_windows.size.cols * info.LTerm_windows.cursor_position.row
+           + info.LTerm_windows.cursor_position.col)
+          { row = 0; col = 0 }
       in
       return ()
     end else
@@ -407,8 +407,8 @@ let clear_line term =
         LTerm_windows.fill_console_output_character
           term.outgoing_fd
           (UChar.of_char ' ')
-          info.LTerm_windows.size.columns
-          { line = info.LTerm_windows.cursor_position.line; column = 0 }
+          info.LTerm_windows.size.cols
+          { row = info.LTerm_windows.cursor_position.row; col = 0 }
       in
       return ()
     end else
@@ -424,7 +424,7 @@ let clear_line_next term =
         LTerm_windows.fill_console_output_character
           term.outgoing_fd
           (UChar.of_char ' ')
-          (info.LTerm_windows.size.columns - info.LTerm_windows.cursor_position.column)
+          (info.LTerm_windows.size.cols - info.LTerm_windows.cursor_position.col)
           info.LTerm_windows.cursor_position
       in
       return ()
@@ -441,8 +441,8 @@ let clear_line_prev term =
         LTerm_windows.fill_console_output_character
           term.outgoing_fd
           (UChar.of_char ' ')
-          info.LTerm_windows.cursor_position.column
-          { line = info.LTerm_windows.cursor_position.line; column = 0 }
+          info.LTerm_windows.cursor_position.col
+          { row = info.LTerm_windows.cursor_position.row; col = 0 }
       in
       return ()
     end else
@@ -488,8 +488,8 @@ let read_event term =
           let window = (LTerm_windows.get_console_screen_buffer_info term.outgoing_fd).LTerm_windows.window in
           return (LTerm_event.Mouse {
                     mouse with
-                      LTerm_mouse.line = mouse.LTerm_mouse.line - window.r_line;
-                      LTerm_mouse.column = mouse.LTerm_mouse.column - window.r_column;
+                      LTerm_mouse.row = mouse.LTerm_mouse.row - window.row1;
+                      LTerm_mouse.col = mouse.LTerm_mouse.col - window.col1;
                   })
   else if term.size_changed then begin
     term.size_changed <- false;
@@ -786,8 +786,8 @@ let render_windows term matrix =
     LTerm_windows.write_console_output
       term.outgoing_fd
       matrix
-      { lines = Array.length matrix; columns = if matrix = [||] then 0 else Array.length matrix.(0) }
-      { line = 0; column = 0 }
+      { rows = Array.length matrix; cols = if matrix = [||] then 0 else Array.length matrix.(0) }
+      { row = 0; col = 0 }
       (LTerm_windows.get_console_screen_buffer_info term.outgoing_fd).LTerm_windows.window
   );
   return ()

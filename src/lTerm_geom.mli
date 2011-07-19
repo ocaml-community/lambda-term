@@ -11,40 +11,40 @@
 
 (** Type of sizes. *)
 type size = {
-  lines : int;
-  columns : int;
+  rows : int;
+  cols : int;
 }
 
-val lines : size -> int
-val columns : size -> int
+val rows : size -> int
+val cols : size -> int
 
 val string_of_size : size -> string
   (** Returns the string representation of the given size. *)
 
 (** Type of coordinates. *)
 type coord = {
-  line : int;
-  column : int;
+  row : int;
+  col : int;
 }
 
-val line : coord -> int
-val column : coord -> int
+val row : coord -> int
+val col : coord -> int
 
 val string_of_coord : coord -> string
   (** Returns the string representation of the given coordinates. *)
 
 (** Type of rectangles. *)
 type rect = {
-  r_line : int;
-  r_column : int;
-  r_lines : int;
-  r_columns : int;
+  row1 : int;
+  col1 : int;
+  row2 : int;
+  col2 : int;
 }
 
-val r_line : rect -> int
-val r_column : rect -> int
-val r_lines : rect -> int
-val r_columns : rect -> int
+val row1 : rect -> int
+val col1 : rect -> int
+val row2 : rect -> int
+val row2 : rect -> int
 
 val size_of_rect : rect -> size
   (** Returns the size of a rectangle. *)

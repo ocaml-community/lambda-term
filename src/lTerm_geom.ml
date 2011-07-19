@@ -8,45 +8,45 @@
  *)
 
 type size = {
-  lines : int;
-  columns : int;
+  rows : int;
+  cols : int;
 }
 
-let lines size = size.lines
-let columns size = size.columns
+let rows size = size.rows
+let cols size = size.cols
 
 let string_of_size size =
-  Printf.sprintf "{ lines = %d; columns = %d }" size.lines size.columns
+  Printf.sprintf "{ rows = %d; cols = %d }" size.rows size.cols
 
 type coord = {
-  line : int;
-  column : int;
+  row : int;
+  col : int;
 }
 
-let line size = size.line
-let column size = size.column
+let row size = size.row
+let col size = size.col
 
 let string_of_coord coord =
-  Printf.sprintf "{ line = %d; column = %d }" coord.line coord.column
+  Printf.sprintf "{ row = %d; col = %d }" coord.row coord.col
 
 type rect = {
-  r_line : int;
-  r_column : int;
-  r_lines : int;
-  r_columns : int;
+  row1 : int;
+  col1 : int;
+  row2 : int;
+  col2 : int;
 }
 
-let r_line rect = rect.r_line
-let r_column rect = rect.r_column
-let r_lines rect = rect.r_lines
-let r_columns rect = rect.r_columns
+let row1 rect = rect.row1
+let col1 rect = rect.col1
+let row2 rect = rect.row2
+let col2 rect = rect.col2
 
-let size_of_rect rect = { lines = rect.r_lines; columns = rect.r_columns }
+let size_of_rect rect = { rows = rect.row2 - rect.row1; cols = rect.col2 - rect.col1 }
 
 let string_of_rect rect =
   Printf.sprintf
-    "{ r_line = %d; r_column = %d; r_lines = %d; r_columns = %d }"
-    rect.r_line rect.r_column rect.r_lines rect.r_columns
+    "{ row1 = %d; col1 = %d; row2 = %d; col2 = %d }"
+    rect.row1 rect.col1 rect.row2 rect.col2
 
 type horz_alignment =
   | H_align_left

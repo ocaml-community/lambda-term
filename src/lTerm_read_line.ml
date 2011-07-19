@@ -532,11 +532,11 @@ let compute_position_windows size pos text =
   Array.fold_left
     (fun pos (ch, style) ->
        if ch = newline then
-         { line = pos.line + 1; column = 0 }
-       else if pos.column + 1 = size.columns then
-         { line = pos.line + 1; column = 0 }
+         { row = pos.row + 1; col = 0 }
+       else if pos.col + 1 = size.cols then
+         { row = pos.row + 1; col = 0 }
        else
-         { pos with column = pos.column + 1 })
+         { pos with col = pos.col + 1 })
     pos text
 
 (* Same thing but for Unix. On Unix the cursor can be at the end of
@@ -545,11 +545,11 @@ let compute_position_unix size pos text =
   Array.fold_left
     (fun pos (ch, style) ->
        if ch = newline then
-         { line = pos.line + 1; column = 0 }
-       else if pos.column = size.columns then
-         { line = pos.line + 1; column = 1 }
+         { row = pos.row + 1; col = 0 }
+       else if pos.col = size.cols then
+         { row = pos.row + 1; col = 1 }
        else
-         { pos with column = pos.column + 1 })
+         { pos with col = pos.col + 1 })
     pos text
 
 let draw_bar box start delimiter columns words =
@@ -597,22 +597,22 @@ let rec get_index_of_last_displayed_word column columns index words =
         else
           index - 1
 
-let text_height columns text =
-  let { line } =
+let text_height cols text =
+  let { row } =
     Array.fold_left
       (fun pos (ch, style) ->
          if ch = newline then
-           { line = pos.line + 1; column = 0 }
-         else if pos.column + 1 = columns then
-           { line = pos.line + 1; column = 0 }
+           { row = pos.row + 1; col = 0 }
+         else if pos.col + 1 = cols then
+           { row = pos.row + 1; col = 0 }
          else
-           { pos with column = pos.column + 1 })
-      { line = 0; column = 1 } text
+           { pos with col = pos.col + 1 })
+      { row = 0; col = 1 } text
   in
-  line + 1
+  row + 1
 
 class virtual ['a] term term =
-  let size, set_size = S.create { columns = 80; lines = 25 } in
+  let size, set_size = S.create { cols = 80; rows = 25 } in
   let event, set_prompt = E.create () in
   let prompt = S.switch (S.const default_prompt) event in
 object(self)
@@ -632,10 +632,10 @@ object(self)
     (* Whether a draw operation has been queued, in which case it is
        not necessary to redraw. *)
 
-  val mutable cursor = { line = 0; column = 0 }
+  val mutable cursor = { row = 0; col = 0 }
     (* The position of the cursor. *)
 
-  val mutable end_of_display = { line = 0; column = 0 }
+  val mutable end_of_display = { row = 0; col = 0 }
     (* The position of the end of displayed material. *)
 
   val mutable completion_start = S.const 0
@@ -658,7 +658,7 @@ object(self)
         0
         (S.changes
            (S.l3
-              (fun words index size -> (words, index, size.columns))
+              (fun words index size -> (words, index, size.cols))
               self#completion_words
               self#completion_index
               size))
@@ -670,7 +670,7 @@ object(self)
 
   method private erase =
     (* Move back to the beginning of printed material. *)
-    lwt () = LTerm.move term (-cursor.line) (-cursor.column) in
+    lwt () = LTerm.move term (-cursor.row) (-cursor.col) in
     (* Erase everything, line by line. *)
     let rec erase count =
       if count = 0 then
@@ -680,9 +680,9 @@ object(self)
         lwt () = LTerm.move term 1 0 in
         erase (count - 1)
     in
-    lwt () = erase end_of_display.line in
+    lwt () = erase end_of_display.row in
     (* Move back again to the beginning. *)
-    LTerm.move term (-end_of_display.line) 0
+    LTerm.move term (-end_of_display.row) 0
 
   method private queue_draw_update =
     if draw_queued then
@@ -705,55 +705,55 @@ object(self)
           return ()
         end
       in
-      let { columns } = S.value size in
+      let { cols } = S.value size in
       let styled, position = self#stylise in
       let before = Array.sub styled 0 position in
       let after = Array.sub styled position (Array.length styled - position) in
       let before = Array.append (S.value prompt) before in
       let box =
-        if self#show_box && columns > 2 then
+        if self#show_box && cols > 2 then
           match S.value self#message with
             | Some msg ->
-                let height = text_height (columns - 2) msg in
-                let box = Array.make ((columns + 1) * (height + 2)) (UChar.of_char ' ', LTerm_style.none) in
+                let height = text_height (cols - 2) msg in
+                let box = Array.make ((cols + 1) * (height + 2)) (UChar.of_char ' ', LTerm_style.none) in
 
                 (* Draw the top of the box. *)
                 box.(0) <- (UChar.of_char '\n', LTerm_style.none);
                 box.(1) <- (UChar.of_int 0x250c, LTerm_style.none);
-                for i = 0 to columns - 3 do
+                for i = 0 to cols - 3 do
                   box.(2 + i) <- hline
                 done;
-                box.(columns) <- (UChar.of_int 0x2510, LTerm_style.none);
+                box.(cols) <- (UChar.of_int 0x2510, LTerm_style.none);
 
                 (* Draw the left and right vertical lines. *)
                 for i = 1 to height do
-                  let start = (columns + 1) * i in
+                  let start = (cols + 1) * i in
                   box.(start) <- (UChar.of_char '\n', LTerm_style.none);
                   box.(start + 1) <- (UChar.of_int 0x2502, LTerm_style.none);
-                  box.(start + columns) <- (UChar.of_int 0x2502, LTerm_style.none);
+                  box.(start + cols) <- (UChar.of_int 0x2502, LTerm_style.none);
                 done;
 
                 (* Draw the bottom of the box. *)
-                let start = (columns + 1) * (height + 1) in
+                let start = (cols + 1) * (height + 1) in
                 box.(start) <- (UChar.of_char '\n', LTerm_style.none);
                 box.(start + 1) <- (UChar.of_int 0x2514, LTerm_style.none);
-                for i = 0 to columns - 3 do
+                for i = 0 to cols - 3 do
                   box.(start + 2 + i) <- hline
                 done;
-                box.(start + columns) <- (UChar.of_int 0x2518, LTerm_style.none);
+                box.(start + cols) <- (UChar.of_int 0x2518, LTerm_style.none);
 
                 (* Draw the message. *)
-                let rec loop line column idx =
+                let rec loop row column idx =
                   if idx < Array.length msg then begin
                     let (ch, _) as point = msg.(idx) in
                     if ch = newline then
-                      loop (line + 1) 0 (idx + 1)
+                      loop (row + 1) 0 (idx + 1)
                     else begin
-                      box.((line + 1) * (columns + 1) + column + 2) <- point;
-                      if column = columns - 3 then
-                        loop (line + 1) 0 (idx + 1)
+                      box.((row + 1) * (cols + 1) + column + 2) <- point;
+                      if column = cols - 3 then
+                        loop (row + 1) 0 (idx + 1)
                       else
-                        loop line (column + 1) (idx + 1)
+                        loop row (column + 1) (idx + 1)
                     end
                   end
                 in
@@ -764,16 +764,16 @@ object(self)
                 let comp_start = S.value self#completion_start in
                 let comp_index = S.value self#completion_index in
                 let comp_words = drop comp_start (S.value self#completion_words) in
-                let box = Array.make ((columns + 1) * 3) (UChar.of_char ' ', LTerm_style.none) in
+                let box = Array.make ((cols + 1) * 3) (UChar.of_char ' ', LTerm_style.none) in
 
                 (* Draw the top of the box. *)
                 box.(0) <- (UChar.of_char '\n', LTerm_style.none);
                 box.(1) <- (UChar.of_int 0x250c, LTerm_style.none);
-                draw_bar box 2 (UChar.of_int 0x252c) (columns - 2) comp_words;
-                box.(columns) <- (UChar.of_int 0x2510, LTerm_style.none);
+                draw_bar box 2 (UChar.of_int 0x252c) (cols - 2) comp_words;
+                box.(cols) <- (UChar.of_int 0x2510, LTerm_style.none);
 
                 (* Draw the words. *)
-                let start = columns + 1 in
+                let start = cols + 1 in
                 box.(start) <- (UChar.of_char '\n', LTerm_style.none);
                 box.(start + 1) <- (UChar.of_int 0x2502, LTerm_style.none);
 
@@ -783,30 +783,30 @@ object(self)
                   | (word, suffix) :: words ->
                       let len = Zed_utf8.length word in
                       let idx' = idx + len in
-                      if idx' <= columns - 2 then begin
+                      if idx' <= cols - 2 then begin
                         draw_word
                           box (start + 2 + idx) word len
                           (if comp_idx = comp_index then
                              { LTerm_style.none with reverse = Some true }
                            else
                              LTerm_style.none);
-                        if idx' + 1 <= columns - 2 then begin
+                        if idx' + 1 <= cols - 2 then begin
                           box.(start + 2 + idx') <- (UChar.of_int 0x2502, LTerm_style.none);
                           loop (comp_idx + 1) (idx' + 1) words
                         end
                       end else
-                        draw_word box (start + 2 + idx) word (columns - 2 - idx) LTerm_style.none
+                        draw_word box (start + 2 + idx) word (cols - 2 - idx) LTerm_style.none
                 in
                 loop comp_start 0 comp_words;
 
-                box.(start + columns) <- (UChar.of_int 0x2502, LTerm_style.none);
+                box.(start + cols) <- (UChar.of_int 0x2502, LTerm_style.none);
 
                 (* Draw the bottom of the box. *)
-                let start = (columns + 1) * 2 in
+                let start = (cols + 1) * 2 in
                 box.(start) <- (UChar.of_char '\n', LTerm_style.none);
                 box.(start + 1) <- (UChar.of_int 0x2514, LTerm_style.none);
-                draw_bar box (start + 2) (UChar.of_int 0x2534) (columns - 2) comp_words;
-                box.(start + columns) <- (UChar.of_int 0x2518, LTerm_style.none);
+                draw_bar box (start + 2) (UChar.of_int 0x2534) (cols - 2) comp_words;
+                box.(start + cols) <- (UChar.of_int 0x2518, LTerm_style.none);
 
                 box
         else
@@ -815,20 +815,20 @@ object(self)
       let size = S.value size in
       if LTerm.windows term then begin
         let after = Array.append after box in
-        cursor <- compute_position_windows size { column = 0; line = 0 } before;
+        cursor <- compute_position_windows size { col = 0; row = 0 } before;
         end_of_display <- compute_position_windows size cursor after;
         lwt () = LTerm.fprints term (Array.append before after) in
-        lwt () = LTerm.move term (cursor.line - end_of_display.line) (cursor.column - end_of_display.column) in
+        lwt () = LTerm.move term (cursor.row - end_of_display.row) (cursor.col - end_of_display.col) in
         LTerm.flush term
       end else begin
-        cursor <- compute_position_unix size { column = 0; line = 0 } before;
+        cursor <- compute_position_unix size { col = 0; row = 0 } before;
         end_of_display <- compute_position_unix size cursor (Array.append after box);
         let after =
-          if cursor.column = size.columns && after = [||] then begin
+          if cursor.col = size.cols && after = [||] then begin
             (* If the cursor is at the end of line and there is
                nothing after, insert a newline character. *)
             let after = Array.concat [after; LTerm_text.of_string "\n"; box] in
-            cursor <- compute_position_unix size { column = 0; line = 0 } before;
+            cursor <- compute_position_unix size { col = 0; row = 0 } before;
             end_of_display <- compute_position_unix size cursor after;
             after
           end else
@@ -836,13 +836,13 @@ object(self)
         in
         (* If the cursor is at the end of line, move it to the
            beginning of the next line. *)
-        if cursor.column = size.columns then
-          cursor <- { column = 0; line = cursor.line + 1 };
+        if cursor.col = size.cols then
+          cursor <- { col = 0; row = cursor.row + 1 };
         (* Fix the position of the end of display. *)
-        if end_of_display.column = size.columns then
-          end_of_display <- { end_of_display with column = size.columns - 1 };
+        if end_of_display.col = size.cols then
+          end_of_display <- { end_of_display with col = size.cols - 1 };
         lwt () = LTerm.fprints term (Array.append before after) in
-        lwt () = LTerm.move term (cursor.line - end_of_display.line) (cursor.column - end_of_display.column) in
+        lwt () = LTerm.move term (cursor.row - end_of_display.row) (cursor.col - end_of_display.col) in
         LTerm.flush term
       end
     end else
@@ -905,7 +905,7 @@ object(self)
                   return self#eval
               | Some Clear_screen ->
                   lwt () = LTerm.clear_screen term in
-                  lwt () = LTerm.goto term { line = 0; column = 0 } in
+                  lwt () = LTerm.goto term { row = 0; col = 0 } in
                   displayed <- false;
                   lwt () = self#queue_draw_update in
                   loop ()
