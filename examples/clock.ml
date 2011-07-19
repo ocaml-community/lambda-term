@@ -9,7 +9,7 @@
 
 open Lwt_react
 open Lwt
-open Lt_widget
+open LTerm_widget
 
 let get_time () =
   let localtime = Unix.localtime (Unix.time ()) in
@@ -34,5 +34,5 @@ lwt () =
   button#on_click (wakeup wakener);
 
   (* Run in the standard terminal. *)
-  lwt term = Lazy.force Lt_term.stdout in
+  lwt term = Lazy.force LTerm.stdout in
   run term vbox waiter

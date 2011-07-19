@@ -8,11 +8,11 @@
  *)
 
 open Lwt
-open Lt_style
-open Lt_text
+open LTerm_style
+open LTerm_text
 
 lwt () =
   for_lwt i = 0 to 255 do
-    Lt_term.printls (eval [S(Printf.sprintf "color %d: " i);
-                           B_fg(index i); S"example"; E_fg])
+    LTerm.printls (eval [S(Printf.sprintf "color %d: " i);
+                         B_fg(index i); S"example"; E_fg])
   done

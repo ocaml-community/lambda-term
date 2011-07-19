@@ -9,7 +9,7 @@
 
 open Lwt
 open Lwt_react
-open Lt_widget
+open LTerm_widget
 
 lwt () =
   let waiter, wakener = wait () in
@@ -33,5 +33,5 @@ lwt () =
   let frame = new frame () in
   frame#set vbox;
 
-  lwt term = Lazy.force Lt_term.stdout in
+  lwt term = Lazy.force LTerm.stdout in
   run term frame waiter

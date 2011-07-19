@@ -26,27 +26,27 @@ Library "lambda-term"
   Path: src
   Install: true
   Modules:
-    Lt_term,
-    Lt_key,
-    Lt_event,
-    Lt_unix,
-    Lt_windows,
-    Lt_iconv,
-    Lt_style,
-    Lt_geom,
-    Lt_draw,
-    Lt_mouse,
-    Lt_color_mappings,
-    Lt_widget,
-    Lt_edit,
-    Lt_read_line,
-    Lt_text,
-    Lt_ui
+    LTerm,
+    LTerm_key,
+    LTerm_event,
+    LTerm_unix,
+    LTerm_windows,
+    LTerm_iconv,
+    LTerm_style,
+    LTerm_geom,
+    LTerm_draw,
+    LTerm_mouse,
+    LTerm_color_mappings,
+    LTerm_widget,
+    LTerm_edit,
+    LTerm_read_line,
+    LTerm_text,
+    LTerm_ui
   CSources:
-    lt_term_stubs.c,
-    lt_unix_stubs.c,
-    lt_windows_stubs.c,
-    lt_iconv_stubs.c
+    lTerm_term_stubs.c,
+    lTerm_unix_stubs.c,
+    lTerm_windows_stubs.c,
+    lTerm_iconv_stubs.c
 
 # +-------------------------------------------------------------------+
 # | Examples                                                          |

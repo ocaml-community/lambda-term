@@ -25,9 +25,9 @@ let () =
 
              rule "generation of color mappings"
                ~dep:"src/gen_color_mappings.byte"
-               ~prod:"src/lt_color_mappings.ml"
+               ~prod:"src/lTerm_color_mappings.ml"
                (fun _ _ ->
-                  Cmd(S[P"src/gen_color_mappings.byte"; A"src/lt_color_mappings.ml"]));
+                  Cmd(S[P"src/gen_color_mappings.byte"; A"src/lTerm_color_mappings.ml"]));
 
              let env = BaseEnvLight.load () in
 

@@ -9,51 +9,51 @@
 
 open Lwt
 open Lwt_react
-open Lt_geom
-open Lt_text
-open Lt_key
+open LTerm_geom
+open LTerm_text
+open LTerm_key
 
 let rec loop ui coord =
-  Lt_ui.loop ui >>= function
-    | Lt_event.Key{ code = Up } ->
+  LTerm_ui.loop ui >>= function
+    | LTerm_event.Key{ code = Up } ->
         coord := { !coord with line = !coord.line - 1 };
-        Lt_ui.draw ui;
+        LTerm_ui.draw ui;
         loop ui coord
-    | Lt_event.Key{ code = Down } ->
+    | LTerm_event.Key{ code = Down } ->
         coord := { !coord with line = !coord.line + 1 };
-        Lt_ui.draw ui;
+        LTerm_ui.draw ui;
         loop ui coord
-    | Lt_event.Key{ code = Left } ->
+    | LTerm_event.Key{ code = Left } ->
         coord := { !coord with column = !coord.column - 1 };
-        Lt_ui.draw ui;
+        LTerm_ui.draw ui;
         loop ui coord
-    | Lt_event.Key{ code = Right } ->
+    | LTerm_event.Key{ code = Right } ->
         coord := { !coord with column = !coord.column + 1 };
-        Lt_ui.draw ui;
+        LTerm_ui.draw ui;
         loop ui coord
-    | Lt_event.Key{ code = Escape } ->
+    | LTerm_event.Key{ code = Escape } ->
         return ()
     | ev ->
         loop ui coord
 
 let draw ui matrix coord =
-  let size = Lt_ui.size ui in
-  let ctx = Lt_draw.context matrix size in
-  Lt_draw.clear ctx;
-  Lt_draw.draw_frame ctx { r_line = 0; r_column = 0; r_lines = size.lines; r_columns = size.columns } Lt_draw.Light;
+  let size = LTerm_ui.size ui in
+  let ctx = LTerm_draw.context matrix size in
+  LTerm_draw.clear ctx;
+  LTerm_draw.draw_frame ctx { r_line = 0; r_column = 0; r_lines = size.lines; r_columns = size.columns } LTerm_draw.Light;
   if size.lines > 2 && size.columns > 2 then begin
-    let ctx = Lt_draw.sub ctx { r_line = 1; r_column = 1; r_lines = size.lines - 2; r_columns = size.columns - 2 } in
-    Lt_draw.draw_styled ctx coord.line coord.column (eval [B_fg Lt_style.lblue; S"Move me"; E_fg])
+    let ctx = LTerm_draw.sub ctx { r_line = 1; r_column = 1; r_lines = size.lines - 2; r_columns = size.columns - 2 } in
+    LTerm_draw.draw_styled ctx coord.line coord.column (eval [B_fg LTerm_style.lblue; S"Move me"; E_fg])
   end
 
 lwt () =
-  lwt term = Lazy.force Lt_term.stdout in
+  lwt term = Lazy.force LTerm.stdout in
 
   (* Coordinates of the message. *)
   let coord = ref { line = 0; column = 0 } in
 
-  lwt ui = Lt_ui.create term (fun matrix size -> draw matrix size !coord) in
+  lwt ui = LTerm_ui.create term (fun matrix size -> draw matrix size !coord) in
   try_lwt
     loop ui coord
   finally
-    Lt_ui.quit ui
+    LTerm_ui.quit ui

@@ -12,9 +12,9 @@
 open CamomileLibraryDyn.Camomile
 open React
 open Lwt
-open Lt_style
-open Lt_text
-open Lt_geom
+open LTerm_style
+open LTerm_text
+open LTerm_geom
 
 (* +-----------------------------------------------------------------+
    | Prompt creation                                                 |
@@ -126,8 +126,8 @@ let time =
   time
 
 class read_line ~term ~history ~exit_code = object(self)
-  inherit Lt_read_line.read_line ~history ()
-  inherit [Zed_utf8.t] Lt_read_line.term term
+  inherit LTerm_read_line.read_line ~history ()
+  inherit [Zed_utf8.t] LTerm_read_line.term term
 
   method completion =
     let prefix  = Zed_rope.to_string self#input_prev in
@@ -148,7 +148,7 @@ let rec loop term history exit_code =
   lwt status = Lwt_process.exec (Lwt_process.shell command) in
   loop
     term
-    (Lt_read_line.add_entry command history)
+    (LTerm_read_line.add_entry command history)
     (match status with
        | Unix.WEXITED code -> code
        | Unix.WSIGNALED code -> code
@@ -160,7 +160,7 @@ let rec loop term history exit_code =
 
 lwt () =
   try_lwt
-    lwt term = Lazy.force Lt_term.stdout in
+    lwt term = Lazy.force LTerm.stdout in
     loop term [] 0
-  with Lt_read_line.Interrupt ->
+  with LTerm_read_line.Interrupt ->
     return ()

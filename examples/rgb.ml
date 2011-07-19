@@ -8,17 +8,17 @@
  *)
 
 open Lwt
-open Lt_style
-open Lt_text
+open LTerm_style
+open LTerm_text
 
 lwt () =
   if Array.length Sys.argv <> 4 then begin
-    lwt () = Lt_term.eprintlf "usage: %s <red> <blue> <green>" (Filename.basename Sys.executable_name) in
+    lwt () = LTerm.eprintlf "usage: %s <red> <blue> <green>" (Filename.basename Sys.executable_name) in
     exit 2
   end else begin
     let r = int_of_string Sys.argv.(1)
     and g = int_of_string Sys.argv.(2)
     and b = int_of_string Sys.argv.(3) in
-    Lt_term.printls (eval [S(Printf.sprintf "color with component (%d, %d, %d): " r g b);
+    LTerm.printls (eval [S(Printf.sprintf "color with component (%d, %d, %d): " r g b);
                            B_fg(rgb r g b); S"example"; E_fg])
   end

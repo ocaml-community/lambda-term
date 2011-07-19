@@ -15,13 +15,13 @@ lwt () =
   let waiter, wakener = wait () in
 
   (* Create the UI. *)
-  let vbox = new Lt_widget.vbox in
-  vbox#add (new Lt_widget.label "Hello, world!");
-  vbox#add (new Lt_widget.label "Press escape to exit.");
+  let vbox = new LTerm_widget.vbox in
+  vbox#add (new LTerm_widget.label "Hello, world!");
+  vbox#add (new LTerm_widget.label "Press escape to exit.");
   vbox#on_event (function
-                   | Lt_event.Key { Lt_key.code = Lt_key.Escape } -> wakeup wakener (); true
+                   | LTerm_event.Key { LTerm_key.code = LTerm_key.Escape } -> wakeup wakener (); true
                    | _ -> false);
 
   (* Run. *)
-  lwt term = Lazy.force Lt_term.stdout in
-  Lt_widget.run term vbox waiter
+  lwt term = Lazy.force LTerm.stdout in
+  LTerm_widget.run term vbox waiter
