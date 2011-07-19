@@ -58,11 +58,11 @@ class t : object
         position of the cursor inside the widget if it is focused and
         the cursor should be displayed. *)
 
-  method size : size
-    (** The size occuped by the widget. *)
+  method allocation : rect
+    (** The zone occuped by the widget. *)
 
-  method set_size : size -> unit
-    (** Sets the size of the widget. *)
+  method set_allocation : rect -> unit
+    (** Sets the zone occuped by the widget. *)
 
   method send_event : Lt_event.t -> unit
     (** Send an event to the widget. If the widget cannot process the
@@ -77,7 +77,7 @@ class t : object
     (** The size wanted by the widget. *)
 end
 
-(** {6 Simple widgets} *)
+(** {6 Labels} *)
 
 (** A widget displaying a text. *)
 class label : string -> object
@@ -87,21 +87,6 @@ class label : string -> object
     (** The text of  the label. *)
 
   method set_text : string -> unit
-end
-
-(** A widget displaying a title, of form "---[ title ]---". *)
-class title : ?connections : Lt_draw.connection * Lt_draw.connection * Lt_draw.connection -> string -> object
-  inherit t
-
-  method text : string
-    (** The text of  the label. *)
-
-  method set_text : string -> unit
-
-  method connections : Lt_draw.connection * Lt_draw.connection * Lt_draw.connection
-    (** The start, middle and end connection of the title. *)
-
-  method set_connections : Lt_draw.connection * Lt_draw.connection * Lt_draw.connection -> unit
 end
 
 (** {6 Containers} *)

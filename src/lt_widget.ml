@@ -80,8 +80,8 @@ class t : object
   method can_focus : bool
   method queue_draw : unit
   method draw : Lt_draw.context -> t -> coord option
-  method size : size
-  method set_size : size -> unit
+  method allocation : rect
+  method set_allocation : rect -> unit
   method send_event : Lt_event.t -> unit
   method on_event : ?switch : switch -> (Lt_event.t -> bool) -> unit
   method size_request : size
@@ -116,9 +116,9 @@ end = object(self)
 
   method draw (ctx : Lt_draw.context) (focused : t) : coord option = None
 
-  val mutable size = { lines = 0; columns = 0 }
-  method size = size
-  method set_size sz = size <- sz
+  val mutable allocation = { r_line = 0; r_column = 0; r_lines = 0; r_columns = 0 }
+  method allocation = allocation
+  method set_allocation rect = allocation <- rect
 
   val event_filters = Lwt_sequence.create ()
 
@@ -175,32 +175,6 @@ class label initial_text = object(self)
     None
 end
 
-class title ?(connections = (Light, Light, Light)) initial_text =
-  let initial_connections = connections in
-object(self)
-  inherit t
-  val mutable text = initial_text
-  val mutable size_request = { lines = 1; columns = 6 + Zed_utf8.length initial_text }
-  method text = text
-  method set_text t =
-    text <- t;
-    size_request <- { lines = 1; columns = 6 + Zed_utf8.length initial_text };
-    self#queue_draw
-  val mutable connections = initial_connections
-  method connections = connections
-  method set_connections c =
-    connections <- c;
-    self#queue_draw
-  method size_request = size_request
-  method draw ctx focused =
-    let { lines; columns } = Lt_draw.size ctx in
-    let line = (lines - size_request.lines) / 2 in
-    let a, b, c = connections in
-    Lt_draw.draw_hline ctx line 0 columns a b c;
-    Lt_draw.draw_string_aligned ctx line H_align_center ("[ " ^ text ^ " ]");
-    None
-end
-
 (* +-----------------------------------------------------------------+
    | Boxes                                                           |
    +-----------------------------------------------------------------+ *)
@@ -246,15 +220,15 @@ class virtual abox = object(self)
   val mutable size_request = { lines = 0; columns = 0 }
   method size_request = size_request
 
-  method private virtual compute_sizes : unit
+  method private virtual compute_allocations : unit
     (* Compute sizes of children. *)
 
   method private virtual compute_size_request : unit
     (* Compute the size request. *)
 
-  method set_size size =
-    super#set_size size;
-    self#compute_sizes
+  method set_allocation rect =
+    super#set_allocation rect;
+    self#compute_allocations
 
   method add : 'a. ?position : int -> ?expand : bool -> (#t as 'a) -> unit = fun ?position ?(expand = true) widget ->
     let child = {
@@ -269,13 +243,13 @@ class virtual abox = object(self)
            children <- children @ [child]);
     widget#set_parent (Some (self :> t));
     self#compute_size_request;
-    self#compute_sizes;
+    self#compute_allocations;
     self#queue_draw
 
   method remove : 'a. (#t as 'a) -> unit = fun widget ->
     children <- List.filter (fun child -> if child.widget = (widget :> t) then (child.widget#set_parent None; false) else true) children;
     self#compute_size_request;
-    self#compute_sizes;
+    self#compute_allocations;
     self#queue_draw
 end
 
@@ -292,21 +266,21 @@ class hbox = object(self)
         children
     )
 
-  method private compute_sizes =
-    let size = self#size in
+  method private compute_allocations =
+    let rect = self#allocation in
     let total_requested_columns = List.fold_left (fun acc child -> acc + child.widget#size_request.columns) 0 children in
-    if total_requested_columns <= size.columns then begin
+    if total_requested_columns <= rect.r_columns then begin
       (* There is enough space for everybody, we split free space
          between children that can expand. *)
       (* Count the number of children that can expand. *)
       let count_can_expand = List.fold_left (fun acc child -> if child.expand then acc + 1 else acc) 0 children in
       (* Divide free space between these children. *)
-      let widthf = if count_can_expand = 0 then 0. else float (size.columns - total_requested_columns) /. float count_can_expand in
+      let widthf = if count_can_expand = 0 then 0. else float (rect.r_columns - total_requested_columns) /. float count_can_expand in
       let rec loop columnf = function
         | [] ->
             ()
         | [child] ->
-            let width = size.columns - truncate columnf in
+            let width = rect.r_columns - truncate columnf in
             child.length <- width
         | child :: rest ->
             let req_columns = child.widget#size_request.columns in
@@ -330,19 +304,30 @@ class hbox = object(self)
           | [] ->
               ()
           | [child] ->
-              let width = size.columns - column in
+              let width = rect.r_columns - column in
               child.length <- width
           | child :: rest ->
-              let width = child.widget#size_request.columns * size.columns / total_requested_columns in
+              let width = child.widget#size_request.columns * rect.r_columns / total_requested_columns in
               child.length <- width;
               loop (column + width) rest
         in
         loop 0 children
     end;
-    List.iter (fun child -> child.widget#set_size { lines = size.lines; columns = child.length }) children
+    ignore (
+      List.fold_left
+        (fun column child ->
+           child.widget#set_allocation {
+             r_line = rect.r_line;
+             r_column = column;
+             r_lines = rect.r_lines;
+             r_columns = child.length;
+           };
+           column + child.length)
+        rect.r_column children
+    )
 
   method draw ctx focused =
-    let size = self#size in
+    let rect = self#allocation in
     let rec loop column children cursor =
       match children with
         | [] ->
@@ -353,7 +338,7 @@ class hbox = object(self)
                 (Lt_draw.sub ctx {
                    r_line = 0;
                    r_column = column;
-                   r_lines = size.lines;
+                   r_lines = rect.r_lines;
                    r_columns = child.length;
                  })
                 focused
@@ -376,21 +361,21 @@ class vbox = object(self)
         children
     )
 
-  method private compute_sizes =
-    let size = self#size in
+  method private compute_allocations =
+    let rect = self#allocation in
     let total_requested_lines = List.fold_left (fun acc child -> acc + child.widget#size_request.lines) 0 children in
-    if total_requested_lines <= size.lines then begin
+    if total_requested_lines <= rect.r_lines then begin
       (* There is enough space for everybody, we split free space
          between children that can expand. *)
       (* Count the number of children that can expand. *)
       let count_can_expand = List.fold_left (fun acc child -> if child.expand then acc + 1 else acc) 0 children in
       (* Divide free space between these children. *)
-      let heightf = if count_can_expand = 0 then 0. else float (size.lines - total_requested_lines) /. float count_can_expand in
+      let heightf = if count_can_expand = 0 then 0. else float (rect.r_lines - total_requested_lines) /. float count_can_expand in
       let rec loop linef = function
         | [] ->
             ()
         | [child] ->
-            let height = size.lines - truncate linef in
+            let height = rect.r_lines - truncate linef in
             child.length <- height
         | child :: rest ->
             let req_lines = child.widget#size_request.lines in
@@ -414,19 +399,30 @@ class vbox = object(self)
           | [] ->
               ()
           | [child] ->
-              let height = size.lines - line in
+              let height = rect.r_lines - line in
               child.length <- height
           | child :: rest ->
-              let height = child.widget#size_request.lines * size.lines / total_requested_lines in
+              let height = child.widget#size_request.lines * rect.r_lines / total_requested_lines in
               child.length <- height;
               loop (line + height) rest
         in
         loop 0 children
     end;
-    List.iter (fun child -> child.widget#set_size { lines = child.length; columns = size.columns }) children
+    ignore (
+      List.fold_left
+        (fun line child ->
+           child.widget#set_allocation {
+             r_line = line;
+             r_column = rect.r_column;
+             r_lines = child.length;
+             r_columns = rect.r_columns;
+           };
+           line + child.length)
+        rect.r_line children
+    )
 
   method draw ctx focused =
-    let size = self#size in
+    let rect = self#allocation in
     let rec loop line children cursor =
       match children with
         | [] ->
@@ -438,7 +434,7 @@ class vbox = object(self)
                    r_line = line;
                    r_column = 0;
                    r_lines = child.length;
-                   r_columns = size.columns;
+                   r_columns = rect.r_columns;
                  })
                 focused
             in
@@ -469,23 +465,28 @@ object(self)
       | None ->
           size_request <- { lines = 2; columns = 2 }
 
-  method private compute_size =
+  method private compute_allocation =
     match child with
       | Some widget ->
-          let size = self#size in
-          widget#set_size { lines = max 0 (size.lines - 2); columns = max 0 (size.columns - 2) }
+          let rect = self#allocation in
+          widget#set_allocation {
+            r_line = min (rect.r_line + rect.r_lines) (rect.r_line + 1);
+            r_column = min (rect.r_column + rect.r_columns) (rect.r_column + 1);
+            r_lines = max 0 (rect.r_lines - 2);
+            r_columns = max 0 (rect.r_columns - 2);
+          }
       | None ->
           ()
 
-  method set_size size =
-    super#set_size size;
-    self#compute_size
+  method set_allocation rect =
+    super#set_allocation rect;
+    self#compute_allocation
 
   method set : 'a. (#t as 'a) -> unit = fun widget ->
     child <- Some(widget :> t);
     widget#set_parent (Some (self :> t));
     self#compute_size_request;
-    self#compute_size;
+    self#compute_allocation;
     self#queue_draw
 
   method empty =
@@ -534,10 +535,7 @@ end
 
 class type line = object
   inherit t
-
   method connections : Lt_draw.connection * Lt_draw.connection * Lt_draw.connection
-    (** The start, middle and end connection of the line. *)
-
   method set_connections : Lt_draw.connection * Lt_draw.connection * Lt_draw.connection -> unit
 end
 
@@ -558,8 +556,9 @@ object(self)
     self#queue_draw
 
   method draw ctx focused =
+    let { lines } = Lt_draw.size ctx in
     let a, b, c = connections in
-    draw_hline ctx 0 0 (Lt_draw.size ctx).columns a b c;
+    draw_hline ctx (lines / 2) 0 (Lt_draw.size ctx).columns a b c;
     None
 end
 
@@ -580,8 +579,9 @@ object(self)
     self#queue_draw
 
   method draw ctx focused =
+    let { columns } = Lt_draw.size ctx in
     let a, b, c = connections in
-    draw_vline ctx 0 0 (Lt_draw.size ctx).lines a b c;
+    draw_vline ctx 0 (columns / 2) (Lt_draw.size ctx).lines a b c;
     None
 end
 
@@ -636,6 +636,95 @@ end
    | Focus cycling                                                   |
    +-----------------------------------------------------------------+ *)
 
+let make_widget_matrix root =
+  let { r_lines = lines; r_columns = columns } = root#allocation in
+  let m = Array.make_matrix lines columns None in
+  let rec loop widget =
+    if widget#can_focus then begin
+      let rect = widget#allocation in
+      for l = 0 to rect.r_lines - 1 do
+        for c = 0 to rect.r_columns - 1 do
+          m.(rect.r_line + l).(rect.r_column + c) <- Some widget
+        done
+      done
+    end;
+    List.iter loop widget#children
+  in
+  loop root;
+  m
+
+let focus_left root focused coord =
+  let { r_lines = lines; r_columns = columns } = root#allocation in
+  let m = make_widget_matrix root in
+  let rec loop coord =
+    if coord.line < 0 || coord.line >= lines || coord.column < 0 || coord.column >= columns then
+      None
+    else
+      match m.(coord.line).(coord.column) with
+        | None ->
+            loop { coord with column = coord.column - 1 }
+        | Some widget when widget = focused ->
+            loop { coord with column = coord.column - 1 }
+        | Some widget ->
+            let rect = widget#allocation in
+            Some(widget, { coord with column = rect.r_column + rect.r_columns / 2 })
+  in
+  loop coord
+
+let focus_right root focused coord =
+  let { r_lines = lines; r_columns = columns } = root#allocation in
+  let m = make_widget_matrix root in
+  let rec loop coord =
+    if coord.line < 0 || coord.line >= lines || coord.column < 0 || coord.column >= columns then
+      None
+    else
+      match m.(coord.line).(coord.column) with
+        | None ->
+            loop { coord with column = coord.column + 1 }
+        | Some widget when widget = focused ->
+            loop { coord with column = coord.column + 1 }
+        | Some widget ->
+            let rect = widget#allocation in
+            Some(widget, { coord with column = rect.r_column + rect.r_columns / 2 })
+  in
+  loop coord
+
+let focus_up root focused coord =
+  let { r_lines = lines; r_columns = columns } = root#allocation in
+  let m = make_widget_matrix root in
+  let rec loop coord =
+    if coord.line < 0 || coord.line >= lines || coord.column < 0 || coord.column >= columns then
+      None
+    else
+      match m.(coord.line).(coord.column) with
+        | None ->
+            loop { coord with line = coord.line - 1 }
+        | Some widget when widget = focused ->
+            loop { coord with line = coord.line - 1 }
+        | Some widget ->
+            let rect = widget#allocation in
+            Some(widget, { coord with line = rect.r_line + rect.r_lines / 2 })
+  in
+  loop coord
+
+let focus_down root focused coord =
+  let { r_lines = lines; r_columns = columns } = root#allocation in
+  let m = make_widget_matrix root in
+  let rec loop coord =
+    if coord.line < 0 || coord.line >= lines || coord.column < 0 || coord.column >= columns then
+      None
+    else
+      match m.(coord.line).(coord.column) with
+        | None ->
+            loop { coord with line = coord.line + 1 }
+        | Some widget when widget = focused ->
+            loop { coord with line = coord.line + 1 }
+        | Some widget ->
+            let rect = widget#allocation in
+            Some(widget, { coord with line = rect.r_line + rect.r_lines / 2 })
+  in
+  loop coord
+
 let rec find_focusable widget =
   if widget#can_focus then
     Some widget
@@ -650,60 +739,65 @@ and find_focusable_in_list = function
         | Some _ as some -> some
         | None -> find_focusable_in_list rest
 
-type search_result =
-  | Sr_some of t
-  | Sr_last
-  | Sr_none
-
-let rec next_focusable widget current =
-  if widget = current then
-    Sr_last
-  else
-    next_focusable_in_list widget#children current
-
-and next_focusable_in_list widgets current =
-  match widgets with
-    | [] ->
-        Sr_none
-    | child :: rest ->
-        match next_focusable child current with
-          | Sr_some _ as result ->
-              result
-          | Sr_none ->
-              next_focusable_in_list rest current
-          | Sr_last ->
-              match find_focusable_in_list rest with
-                | Some widget -> Sr_some widget
-                | None -> Sr_last
-
 (* +-----------------------------------------------------------------+
    | The toplevel widget                                             |
    +-----------------------------------------------------------------+ *)
 
 class toplevel focused widget = object(self)
-  inherit t
+  inherit t as super
   val children = [widget]
   method children = children
   method draw ctx focused = widget#draw ctx focused
-  method set_size size = widget#set_size size
+
+  val mutable coord = { line = 0; column = 0 }
+    (* Coordinates of the cursor inside the screen. *)
+
+  method set_allocation rect =
+    super#set_allocation rect;
+    widget#set_allocation rect;
+    let rect = !focused#allocation in
+    coord <- { line = rect.r_line + rect.r_lines / 2;
+               column = rect.r_column + rect.r_columns / 2 }
 
   initializer
     widget#set_parent (Some (self :> t));
     self#on_event
       (function
-         | Lt_event.Key { control = false; meta = false; shift = false; code = Tab } ->
-             (* Cycle focus. *)
-             focused :=
-               (match next_focusable widget !focused with
-                  | Sr_some widget ->
-                      widget
-                  | Sr_none ->
-                      widget
-                  | Sr_last ->
-                      match find_focusable widget with
-                        | Some widget -> widget
-                        | None -> widget);
-             self#queue_draw;
+         | Lt_event.Key { control = false; meta = false; shift = false; code = Left } ->
+             (match focus_left (self :> t) !focused coord with
+                | Some(widget, c) ->
+                    coord <- c;
+                    focused := widget;
+                    self#queue_draw
+                | None ->
+                    ());
+             true
+         | Lt_event.Key { control = false; meta = false; shift = false; code = Right } ->
+             (match focus_right (self :> t) !focused coord with
+                | Some(widget, c) ->
+                    coord <- c;
+                    focused := widget;
+                    self#queue_draw
+                | None ->
+                    ());
+             true
+         | Lt_event.Key { control = false; meta = false; shift = false; code = Up } ->
+             (match focus_up (self :> t) !focused coord with
+                | Some(widget, c) ->
+                    coord <- c;
+                    focused := widget;
+                    self#queue_draw
+                | None ->
+                    ());
+             true
+         | Lt_event.Key { control = false; meta = false; shift = false; code = Down } ->
+             (match focus_down (self :> t) !focused coord with
+                | Some(widget, c) ->
+                    coord <- c;
+                    focused := widget;
+                    self#queue_draw
+                | None ->
+                    ());
              true
          | ev ->
              false)
@@ -746,7 +840,13 @@ let run term ?save_state widget waiter =
 
   lwt ui = Lt_ui.create term ?save_state draw in
   toplevel#set_ui (Some ui);
-  toplevel#set_size (Lt_ui.size ui);
+  let size = Lt_ui.size ui in
+  toplevel#set_allocation {
+    r_line = 0;
+    r_column = 0;
+    r_lines = size.lines;
+    r_columns = size.columns;
+  };
 
   (* Loop handling events. *)
   let waiter = waiter >|= fun x -> Value x in
@@ -754,7 +854,12 @@ let run term ?save_state widget waiter =
     let thread = Lt_ui.loop ui >|= fun x -> Event x in
     choose [thread; waiter] >>= function
       | Event(Lt_event.Resize size) ->
-          toplevel#set_size size;
+          toplevel#set_allocation {
+            r_line = 0;
+            r_column = 0;
+            r_lines = size.lines;
+            r_columns = size.columns;
+          };
           loop ()
       | Event ev ->
           !focused#send_event ev;

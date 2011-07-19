@@ -41,6 +41,8 @@ let r_column rect = rect.r_column
 let r_lines rect = rect.r_lines
 let r_columns rect = rect.r_columns
 
+let size_of_rect rect = { lines = rect.r_lines; columns = rect.r_columns }
+
 let string_of_rect rect =
   Printf.sprintf
     "{ r_line = %d; r_column = %d; r_lines = %d; r_columns = %d }"

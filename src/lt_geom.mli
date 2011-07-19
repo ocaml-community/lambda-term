@@ -46,6 +46,9 @@ val r_column : rect -> int
 val r_lines : rect -> int
 val r_columns : rect -> int
 
+val size_of_rect : rect -> size
+  (** Returns the size of a rectangle. *)
+
 val string_of_rect : rect -> string
   (** Returns the string representation of the given rectangle. *)
 
