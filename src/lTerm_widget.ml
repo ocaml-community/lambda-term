@@ -857,7 +857,7 @@ let run term ?save_state widget waiter =
   (* Loop handling events. *)
   let waiter = waiter >|= fun x -> Value x in
   let rec loop () =
-    let thread = LTerm_ui.loop ui >|= fun x -> Event x in
+    let thread = LTerm_ui.wait ui >|= fun x -> Event x in
     choose [thread; waiter] >>= function
       | Event(LTerm_event.Resize size) ->
           toplevel#set_allocation {

@@ -14,7 +14,7 @@ open LTerm_text
 open LTerm_key
 
 let rec loop ui coord =
-  LTerm_ui.loop ui >>= function
+  LTerm_ui.wait ui >>= function
     | LTerm_event.Key{ code = Up } ->
         coord := { !coord with row = !coord.row - 1 };
         LTerm_ui.draw ui;

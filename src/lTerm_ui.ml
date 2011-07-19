@@ -192,7 +192,7 @@ let set_cursor_position ui coord =
    | Loop                                                            |
    +-----------------------------------------------------------------+ *)
 
-let loop ui =
+let wait ui =
   check ui;
   if ui.state = Init then draw ui;
   lwt ev = pick [LTerm.read_event ui.term; Lwt_stream.next ui.draw_error_stream >>= fail] in

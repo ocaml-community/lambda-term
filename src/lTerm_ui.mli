@@ -23,7 +23,7 @@ val quit : t -> unit Lwt.t
 
 val size : t -> LTerm_geom.size
   (** [size ui] returns the current size of the terminal used by the
-      given user-interface. It is updated by {!loop}. *)
+      given user-interface. It is updated by {!wait}. *)
 
 val draw : t -> unit
   (** [draw ui] enqueue a draw operation for the given UI. *)
@@ -44,5 +44,5 @@ val set_cursor_position : t -> LTerm_geom.coord -> unit
   (** [set_cursor_position ui coord] sets the position of the cursor
       inside the UI. *)
 
-val loop : t -> LTerm_event.t Lwt.t
-  (** [loop ui] wait for an event. *)
+val wait : t -> LTerm_event.t Lwt.t
+  (** [wait ui] wait for an event. *)
