@@ -82,6 +82,9 @@ val fill : context -> UChar.t -> unit
   (** [fill ctx ch] fills the given context with [ch]. This does not
       affect styles. *)
 
+val fill_style : context -> LTerm_style.t -> unit
+  (** [fill_style style] fills the given context with [style]. *)
+
 val point : context -> int -> int -> point
   (** [point ctx row column] returns the point at given position in
       [ctx]. It raises {!Out_of_bounds} if the coordinates are outside
@@ -124,13 +127,13 @@ type piece = { top : connection; bottom : connection; left : connection; right :
 val draw_piece : context -> int -> int -> piece -> unit
   (** Draws a piece. It may modify pieces around it. *)
 
-val draw_hline : context -> int -> int -> int -> connection -> connection -> connection -> unit
-  (** [draw_hline ctx row column length left middle right] draws an
+val draw_hline : context -> int -> int -> int -> connection -> unit
+  (** [draw_hline ctx row column length connection] draws an
       horizontal line. *)
 
-val draw_vline : context -> int -> int -> int -> connection -> connection -> connection -> unit
-  (** [draw_hline ctx row column length top middle bottom] draws an
-      vertical line. *)
+val draw_vline : context -> int -> int -> int -> connection -> unit
+  (** [draw_hline ctx row column length connection] draws a vertical
+      line. *)
 
 val draw_frame : context -> rect -> connection -> unit
   (** Draws a rectangle. *)

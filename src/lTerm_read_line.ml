@@ -155,6 +155,8 @@ let bindings = Hashtbl.create 128
 
 let () =
   let ( --> ) key action = Hashtbl.add bindings key action in
+  { control = false; meta = false; shift = false; code = Home } --> Edit Zed_edit.Goto_bot;
+  { control = false; meta = false; shift = false; code = End } --> Edit Zed_edit.Goto_eot;
   { control = false; meta = false; shift = false; code = Up } --> History_prev;
   { control = false; meta = false; shift = false; code = Down } --> History_next;
   { control = false; meta = false; shift = false; code = Tab } --> Complete;
@@ -884,7 +886,9 @@ object(self)
         (E.select [
            E.stamp (S.changes size) ();
            E.stamp (Zed_edit.changes self#edit) ();
+           E.stamp (S.changes (Zed_edit.selection self#edit)) ();
            E.stamp (S.changes (Zed_cursor.position (Zed_edit.cursor self#context))) ();
+           E.stamp (S.changes (Zed_cursor.position (Zed_edit.mark self#edit))) ();
            E.stamp (S.changes prompt) ();
            E.stamp (S.changes self#completion_words) ();
            E.stamp (S.changes self#completion_index) ();

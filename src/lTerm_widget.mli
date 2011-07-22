@@ -28,7 +28,15 @@ val exec_filters : ('a -> bool) Lwt_sequence.t -> 'a -> bool
 
 (** {6 Base class} *)
 
-class t : object
+(** The base class. The parameter is the initial resource class. The
+    resource class is the first part of all resource keys used by the
+    widget.
+
+    For examples, buttons use the resources
+    ["button.focused.foreground"], ["button.unfocused.bold"], ... so
+    their resource class is ["button"].
+*)
+class t : string -> object
   method children : t list
     (** The children of the widget. *)
 
@@ -36,27 +44,30 @@ class t : object
     (** The parent of the widget, if any. *)
 
   method set_parent : t option -> unit
-    (** Sets the parent of the widget. This also affect {!ui}. *)
-
-  method ui : LTerm_ui.t option
-    (** The UI on which the widget is displayed. *)
-
-  method set_ui : LTerm_ui.t option -> unit
-    (** Sets the UI on which the widget is displayed. This also sets
-        the UI of all the children of the widget. *)
+    (** Sets the parent of the widget. This also affect
+        {!queue_draw}. *)
 
   method can_focus : bool
     (** Whether the widget can receive the focus or not. *)
 
   method queue_draw : unit
-    (** Enqueue a redraw operation. This does nothing if {!ui} is not
-        set. *)
+    (** Enqueue a redraw operation. If the widget has a parent, this
+        is the same as calling the {!queue_draw} method of the parent,
+        otherwise this does nothing. *)
 
-  method draw : LTerm_draw.context -> t -> coord option
+  method set_queue_draw : (unit -> unit) -> unit
+    (** [set_queue_draw f] sets the function called when the
+        {!queue_draw} method is invoked, for this widget and all its
+        children. *)
+
+  method draw : LTerm_draw.context -> t -> unit
     (** [draw ctx focused] draws the widget on the given
-        context. [focused] is the focused widget. It returns the
-        position of the cursor inside the widget if it is focused and
-        the cursor should be displayed. *)
+        context. [focused] is the focused widget. *)
+
+  method cursor_position : coord option
+    (** Method invoked when the widget has the focus, it returns the
+        position of the cursor inside the widget if it should be
+        displayed. *)
 
   method allocation : rect
     (** The zone occuped by the widget. *)
@@ -75,6 +86,23 @@ class t : object
 
   method size_request : size
     (** The size wanted by the widget. *)
+
+  method resources : LTerm_resources.t
+    (** The set of resources used by the widget. *)
+
+  method set_resources : LTerm_resources.t -> unit
+    (** Sets the resources of the widget and of all its children. *)
+
+  method resource_class : string
+    (** The resource class of the widget. *)
+
+  method set_resource_class : string -> unit
+    (** Sets the resource class of the widget. This can be used to set
+        an alternative style for the widget. *)
+
+  method update_resources : unit
+    (** Method invoked when the resources or the resource class of the
+        widget change. The default function does nothing. *)
 end
 
 (** {6 Labels} *)
@@ -116,7 +144,7 @@ class vbox : box
   (** A widget displaying a list of widgets, listed vertically. *)
 
 (** A widget displayiing another widget in a box. *)
-class frame : ?connections : LTerm_draw.connection -> unit -> object
+class frame : object
   inherit t
 
   method set : #t -> unit
@@ -124,28 +152,14 @@ class frame : ?connections : LTerm_draw.connection -> unit -> object
 
   method empty : unit
     (** Remove the child of the frame. *)
-
-  method connections : LTerm_draw.connection
-    (** The connection used to draw the box around the widget. *)
-
-  method set_connections : LTerm_draw.connection -> unit
 end
 
 (** {6 Lines} *)
 
-class type line = object
-  inherit t
-
-  method connections : LTerm_draw.connection * LTerm_draw.connection * LTerm_draw.connection
-    (** The start, middle and end connection of the line. *)
-
-  method set_connections : LTerm_draw.connection * LTerm_draw.connection * LTerm_draw.connection -> unit
-end
-
-class hline : ?connections : LTerm_draw.connection * LTerm_draw.connection * LTerm_draw.connection -> unit -> line
+class hline : t
   (** A horizontal line. *)
 
-class vline : ?connections : LTerm_draw.connection * LTerm_draw.connection * LTerm_draw.connection -> unit -> line
+class vline : t
   (** A vertical line. *)
 
 (** {6 Buttons} *)
@@ -164,8 +178,12 @@ end
 
 (** {6 Running in a terminal} *)
 
-val run : LTerm.t -> ?save_state : bool -> #t -> 'a Lwt.t -> 'a Lwt.t
+val run : LTerm.t -> ?save_state : bool -> ?load_resources : bool -> ?resources_file : string -> #t -> 'a Lwt.t -> 'a Lwt.t
   (** [run term ?save_state widget w] runs on the given terminal using
       [widget] as main widget. It returns when [w] terminates. If
       [save_state] is [true] (the default) then the state of the
-      terminal is saved and restored when [w] terminates. *)
+      terminal is saved and restored when [w] terminates.
+
+      If [load_resources] is [true] (the default) then
+      [resources_file] (which default to ".lambda-termrc" in the home
+      directory) is loaded and the result is set to [w]. *)

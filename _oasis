@@ -41,7 +41,10 @@ Library "lambda-term"
     LTerm_edit,
     LTerm_read_line,
     LTerm_text,
-    LTerm_ui
+    LTerm_ui,
+    LTerm_resources
+  InternalModules:
+    LTerm_resource_lexer
   CSources:
     lTerm_term_stubs.c,
     lTerm_unix_stubs.c,
@@ -127,6 +130,13 @@ Executable "read-yes-no"
   Install: false
   CompiledObject: best
   MainIs: read_yes_no.ml
+  BuildDepends: lambda-term
+
+Executable "editor"
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: editor.ml
   BuildDepends: lambda-term
 
 # +-------------------------------------------------------------------+

@@ -71,50 +71,43 @@ let exec_filters seq x =
    | The widget class                                                |
    +-----------------------------------------------------------------+ *)
 
-class t : object
+class t initial_resource_class : object
   method children : t list
   method parent : t option
   method set_parent : t option -> unit
-  method ui : LTerm_ui.t option
-  method set_ui : LTerm_ui.t option -> unit
   method can_focus : bool
   method queue_draw : unit
-  method draw : LTerm_draw.context -> t -> coord option
+  method set_queue_draw : (unit -> unit) -> unit
+  method draw : LTerm_draw.context -> t -> unit
+  method cursor_position : coord option
   method allocation : rect
   method set_allocation : rect -> unit
   method send_event : LTerm_event.t -> unit
   method on_event : ?switch : switch -> (LTerm_event.t -> bool) -> unit
   method size_request : size
+  method resources : LTerm_resources.t
+  method set_resources : LTerm_resources.t -> unit
+  method resource_class : string
+  method set_resource_class : string -> unit
+  method update_resources : unit
 end = object(self)
 
   method children : t list = []
 
   method can_focus = false
 
-  val mutable ui : LTerm_ui.t option = None
-  method ui = ui
-  method set_ui opt =
-    ui <- opt;
-    List.iter (fun child -> child#set_ui opt) self#children
-
   val mutable parent : t option = None
   method parent = parent
-  method set_parent opt =
-    parent <- opt;
-    match opt with
-      | Some w ->
-          self#set_ui w#ui
-      | None ->
-          self#set_ui None
+  method set_parent opt = parent <- opt
 
-  method queue_draw =
-    match ui with
-      | Some ui ->
-          LTerm_ui.draw ui
-      | None ->
-          ()
+  val mutable queue_draw = ignore
+  method queue_draw = queue_draw ()
+  method set_queue_draw f =
+    queue_draw <- f;
+    List.iter (fun w -> w#set_queue_draw f) self#children
 
-  method draw (ctx : LTerm_draw.context) (focused : t) : coord option = None
+  method draw (ctx : LTerm_draw.context) (focused : t) = ()
+  method cursor_position = None
 
   val mutable allocation = { row1 = 0; col1 = 0; row2 = 0; col2 = 0 }
   method allocation = allocation
@@ -134,6 +127,21 @@ end = object(self)
 
   val size_request = { rows = 0; cols = 0 }
   method size_request = size_request
+
+  val mutable resource_class = initial_resource_class
+  method resource_class = resource_class
+  method set_resource_class rc =
+    resource_class <- rc;
+    self#update_resources
+
+  val mutable resources = LTerm_resources.empty
+  method resources = resources
+  method set_resources res =
+    resources <- res;
+    self#update_resources;
+    List.iter (fun w -> w#set_resources res) self#children
+
+  method update_resources = ()
 end
 
 (* +-----------------------------------------------------------------+
@@ -159,31 +167,32 @@ let text_size str =
   loop 0 1 0 0
 
 class label initial_text = object(self)
-  inherit t
+  inherit t "label"
   val mutable text = initial_text
+
   val mutable size_request = text_size initial_text
+  method size_request = size_request
+
+  val mutable style = LTerm_style.none
+  method update_resources =
+    style <- LTerm_resources.get_style self#resource_class self#resources
+
   method text = text
   method set_text t =
     text <- t;
     size_request <- text_size t;
     self#queue_draw
-  method size_request = size_request
+
   method draw ctx focused =
     let { rows } = LTerm_draw.size ctx in
     let row = (rows - size_request.rows) / 2 in
-    LTerm_draw.draw_string_aligned ctx row H_align_center text;
-    None
+    LTerm_draw.fill_style ctx style;
+    LTerm_draw.draw_string_aligned ctx row H_align_center text
 end
 
 (* +-----------------------------------------------------------------+
    | Boxes                                                           |
    +-----------------------------------------------------------------+ *)
-
-let choose_cursor c1 c2 =
-  match c1, c2 with
-    | Some _, _ -> c1
-    | _, Some _ -> c2
-    | None, None -> None
 
 exception Out_of_range
 
@@ -211,8 +220,8 @@ class type box = object
   method remove : #t -> unit
 end
 
-class virtual abox = object(self)
-  inherit t as super
+class virtual abox rc = object(self)
+  inherit t rc as super
 
   val mutable children = []
   method children = List.map (fun child -> child.widget) children
@@ -254,7 +263,7 @@ class virtual abox = object(self)
 end
 
 class hbox = object(self)
-  inherit abox
+  inherit abox "hbox"
 
   method private compute_size_request =
     size_request <- (
@@ -329,28 +338,26 @@ class hbox = object(self)
 
   method draw ctx focused =
     let rect = self#allocation in
-    let rec loop col children cursor =
+    let rec loop col children =
       match children with
         | [] ->
-            cursor
+            ()
         | child :: rest ->
-            let cursor' =
-              child.widget#draw
-                (LTerm_draw.sub ctx {
-                   row1 = 0;
-                   col1 = col;
-                   row2 = rect.row2 - rect.row1;
-                   col2 = col + child.length;
-                 })
-                focused
-            in
-            loop (col + child.length) rest (choose_cursor cursor cursor')
+            child.widget#draw
+              (LTerm_draw.sub ctx {
+                 row1 = 0;
+                 col1 = col;
+                 row2 = rect.row2 - rect.row1;
+                 col2 = col + child.length;
+               })
+              focused;
+            loop (col + child.length) rest
     in
-    loop 0 children None
+    loop 0 children
 end
 
 class vbox = object(self)
-  inherit abox
+  inherit abox "vbox"
 
   method private compute_size_request =
     size_request <- (
@@ -425,30 +432,26 @@ class vbox = object(self)
 
   method draw ctx focused =
     let rect = self#allocation in
-    let rec loop row children cursor =
+    let rec loop row children =
       match children with
         | [] ->
-            cursor
+            ()
         | child :: rest ->
-            let cursor' =
-              child.widget#draw
-                (LTerm_draw.sub ctx {
-                   row1 = row;
-                   col1 = 0;
-                   row2 = row + child.length;
-                   col2 = rect.col2 - rect.col1;
-                 })
-                focused
-            in
-            loop (row + child.length) rest (choose_cursor cursor cursor')
+            child.widget#draw
+              (LTerm_draw.sub ctx {
+                 row1 = row;
+                 col1 = 0;
+                 row2 = row + child.length;
+                 col2 = rect.col2 - rect.col1;
+               })
+              focused;
+            loop (row + child.length) rest
     in
-    loop 0 children None
+    loop 0 children
 end
 
-class frame ?(connections = Light) () =
-  let initial_connections = connections in
-object(self)
-  inherit t as super
+class frame = object(self)
+  inherit t "frame" as super
 
   val mutable child = None
   method children =
@@ -458,6 +461,13 @@ object(self)
 
   val mutable size_request = { rows = 2; cols = 2 }
   method size_request = size_request
+
+  val mutable style = LTerm_style.none
+  val mutable connection = LTerm_draw.Light
+  method update_resources =
+    let rc = self#resource_class and resources = self#resources in
+    style <- LTerm_resources.get_style rc resources;
+    connection <- LTerm_resources.get_connection (rc ^ ".connection") resources
 
   method private compute_size_request =
     match child with
@@ -502,93 +512,71 @@ object(self)
       | None ->
           ()
 
-  val mutable connections = initial_connections
-
-  method connections = connections
-
-  method set_connections c =
-    connections <- c;
-    self#queue_draw
-
   method draw ctx focused =
     let size = LTerm_draw.size ctx in
-    if size.rows >= 1 && size.cols >= 1 then
+    LTerm_draw.fill_style ctx style;
+    if size.rows >= 1 && size.cols >= 1 then begin
       draw_frame
         ctx
         { row1 = 0;
           col1 = 0;
           row2 = size.rows;
           col2 = size.cols }
-        connections;
-    match child with
-      | Some widget ->
-          if size.rows > 2 && size.cols > 2 then
-            widget#draw
-              (sub ctx { row1 = 1;
-                         col1 = 1;
-                         row2 = size.rows - 1;
-                         col2 = size.cols - 1 })
-              focused
-          else
-            None
-      | None ->
-          None
+        connection;
+      if size.rows > 2 && size.cols > 2 then
+        match child with
+          | Some widget ->
+              widget#draw
+                (sub ctx { row1 = 1;
+                           col1 = 1;
+                           row2 = size.rows - 1;
+                           col2 = size.cols - 1 })
+                focused
+          | None ->
+              ()
+    end
 end
 
 (* +-----------------------------------------------------------------+
    | Lines                                                           |
    +-----------------------------------------------------------------+ *)
 
-class type line = object
-  inherit t
-  method connections : LTerm_draw.connection * LTerm_draw.connection * LTerm_draw.connection
-  method set_connections : LTerm_draw.connection * LTerm_draw.connection * LTerm_draw.connection -> unit
-end
-
-class hline ?(connections = (Light, Light, Light)) () =
-  let initial_connections = connections in
-object(self)
-  inherit t
+class hline = object(self)
+  inherit t "hline"
 
   val size_request = { rows = 1; cols = 0 }
   method size_request = size_request
 
-  val mutable connections = initial_connections
-
-  method connections = connections
-
-  method set_connections c =
-    connections <- c;
-    self#queue_draw
+  val mutable style = LTerm_style.none
+  val mutable connection = LTerm_draw.Light
+  method update_resources =
+    let rc = self#resource_class and resources = self#resources in
+    style <- LTerm_resources.get_style rc resources;
+    connection <- LTerm_resources.get_connection (rc ^ ".connection") resources
 
   method draw ctx focused =
     let { rows } = LTerm_draw.size ctx in
-    let a, b, c = connections in
-    draw_hline ctx (rows / 2) 0 (LTerm_draw.size ctx).cols a b c;
-    None
+    LTerm_draw.fill_style ctx style;
+    draw_hline ctx (rows / 2) 0 (LTerm_draw.size ctx).cols connection
 end
 
-class vline ?(connections = (Light, Light, Light)) () =
-  let initial_connections = connections in
-object(self)
-  inherit t
+class vline = object(self)
+  inherit t "vline"
 
   val size_request = { rows = 0; cols = 1 }
   method size_request = size_request
 
-  val mutable connections = initial_connections
-
-  method connections = connections
-
-  method set_connections c =
-    connections <- c;
-    self#queue_draw
+  val mutable style = LTerm_style.none
+  val mutable connection = LTerm_draw.Light
+  method update_resources =
+    let rc = self#resource_class and resources = self#resources in
+    style <- LTerm_resources.get_style rc resources;
+    connection <- LTerm_resources.get_connection (rc ^ ".connection") resources
 
   method draw ctx focused =
     let { cols } = LTerm_draw.size ctx in
-    let a, b, c = connections in
-    draw_vline ctx 0 (cols / 2) (LTerm_draw.size ctx).rows a b c;
-    None
+    LTerm_draw.fill_style ctx style;
+    draw_vline ctx 0 (cols / 2) (LTerm_draw.size ctx).rows connection
 end
 
 (* +-----------------------------------------------------------------+
@@ -596,7 +584,7 @@ end
    +-----------------------------------------------------------------+ *)
 
 class button initial_label = object(self)
-  inherit t as super
+  inherit t "button" as super
 
   method can_focus = true
 
@@ -626,16 +614,23 @@ class button initial_label = object(self)
          | _ ->
              false)
 
+  val mutable focused_style = LTerm_style.none
+  val mutable unfocused_style = LTerm_style.none
+  method update_resources =
+    let rc = self#resource_class and resources = self#resources in
+    focused_style <- LTerm_resources.get_style (rc ^ ".focused") resources;
+    unfocused_style <- LTerm_resources.get_style (rc ^ ".unfocused") resources
+
   method draw ctx focused =
     let { rows; cols } = LTerm_draw.size ctx in
     let len = Zed_utf8.length label in
-    if focused = (self :> t) then
-      LTerm_draw.draw_styled ctx (rows / 2) ((cols - len - 4) / 2)
-        (eval [B_bold true; B_fg white; B_bg blue; S"< "; S label; S" >"])
-    else
-      LTerm_draw.draw_styled ctx (rows / 2) ((cols - len - 4) / 2)
-        (eval [S"< "; S label; S" >"]);
-    None
+    if focused = (self :> t) then begin
+      LTerm_draw.fill_style ctx focused_style;
+      LTerm_draw.draw_string ctx (rows / 2) ((cols - len - 4) / 2) (Printf.sprintf "< %s >" label)
+    end else begin
+      LTerm_draw.fill_style ctx unfocused_style;
+      LTerm_draw.draw_string ctx (rows / 2) ((cols - len - 4) / 2) (Printf.sprintf "< %s >" label)
+    end
 end
 
 (* +-----------------------------------------------------------------+
@@ -750,7 +745,7 @@ and find_focusable_in_list = function
    +-----------------------------------------------------------------+ *)
 
 class toplevel focused widget = object(self)
-  inherit t as super
+  inherit t "toplevel" as super
   val children = [widget]
   method children = children
   method draw ctx focused = widget#draw ctx focused
@@ -820,8 +815,20 @@ type 'a event =
   | Event of LTerm_event.t
       (* A event from the terminal. *)
 
-let run term ?save_state widget waiter =
+let lambda_termrc =
+  Filename.concat (try Sys.getenv "HOME" with Not_found -> "") ".lambda-termrc"
+
+let run term ?save_state ?(load_resources = true) ?(resources_file = lambda_termrc) widget waiter =
   let widget = (widget :> t) in
+
+  lwt () =
+    if load_resources then
+      lwt resources = LTerm_resources.load resources_file in
+      widget#set_resources resources;
+      return ()
+    else
+      return ()
+  in
 
   (* The currently focused widget. *)
   let focused =
@@ -836,16 +843,18 @@ let run term ?save_state widget waiter =
   let draw ui matrix =
     let ctx = LTerm_draw.context matrix (LTerm_ui.size ui) in
     LTerm_draw.clear ctx;
-    match toplevel#draw ctx !focused with
+    toplevel#draw ctx !focused;
+    match !focused#cursor_position with
       | Some coord ->
+          let rect = !focused#allocation in
           LTerm_ui.set_cursor_visible ui true;
-          LTerm_ui.set_cursor_position ui coord
+          LTerm_ui.set_cursor_position ui { row = rect.row1 + coord.row; col = rect.col1 + coord.col }
       | None ->
           LTerm_ui.set_cursor_visible ui false
   in
 
   lwt ui = LTerm_ui.create term ?save_state draw in
-  toplevel#set_ui (Some ui);
+  toplevel#set_queue_draw (fun () -> LTerm_ui.draw ui);
   let size = LTerm_ui.size ui in
   toplevel#set_allocation {
     row1 = 0;

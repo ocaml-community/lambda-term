@@ -135,6 +135,13 @@ let fill ctx ch =
     done
   done
 
+let fill_style ctx style =
+  for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
+    for col = ctx.ctx_col1 to ctx.ctx_col2 - 1 do
+      set_style (unsafe_get ctx.ctx_matrix row col) style
+    done
+  done
+
 let point ctx row col =
   if row < 0 || col < 0 then raise Out_of_bounds;
   let row = ctx.ctx_row1 + row and col = ctx.ctx_col1 + col in
@@ -523,33 +530,17 @@ let draw_piece ctx row col piece =
     (unsafe_get ctx.ctx_matrix row col).char <- char_of_piece piece
   end
 
-let draw_hline ctx row col len left middle right =
-  match len with
-    | 0 ->
-        ()
-    | 1 ->
-        draw_piece ctx row col { top = Blank; bottom = Blank; left = left; right = right };
-    | _ ->
-        draw_piece ctx row col { top = Blank; bottom = Blank; left = left; right = middle };
-        let piece = { top = Blank; bottom = Blank; left = middle; right = middle } in
-        for i = 1 to len - 2 do
-          draw_piece ctx row (col + i) piece
-        done;
-        draw_piece ctx row (col + len - 1) { top = Blank; bottom = Blank; left = middle; right = right }
+let draw_hline ctx row col len connection =
+  let piece = { top = Blank; bottom = Blank; left = connection; right = connection } in
+  for i = 0 to len - 1 do
+    draw_piece ctx row (col + i) piece
+  done
 
-let draw_vline ctx row col len top middle bottom =
-  match len with
-    | 0 ->
-        ()
-    | 1 ->
-        draw_piece ctx row col { top = top; bottom = bottom; left = Blank; right = Blank };
-    | _ ->
-        draw_piece ctx row col { top = top; bottom = middle; left = Blank; right = Blank };
-        let piece = { top = middle; bottom = middle; left = Blank; right = Blank } in
-        for i = 1 to len - 2 do
-          draw_piece ctx (row + i) col piece
-        done;
-        draw_piece ctx (row + len - 1) col { top = middle; bottom = bottom; left = Blank; right = Blank }
+let draw_vline ctx row col len connection =
+  let piece = { top = connection; bottom = connection; left = Blank; right = Blank } in
+  for i = 0 to len - 1 do
+    draw_piece ctx (row + i) col piece
+  done
 
 let draw_frame ctx rect connection =
   let hline = { top = Blank; bottom = Blank; left = connection; right = connection } in
