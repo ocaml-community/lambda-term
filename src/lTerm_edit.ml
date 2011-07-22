@@ -89,10 +89,12 @@ object(self)
 
   val mutable style = LTerm_style.none
   val mutable marked_style = LTerm_style.none
+  val mutable current_line_style = LTerm_style.none
   method update_resources =
     let rc = self#resource_class and resources = self#resources in
     style <- LTerm_resources.get_style rc resources;
-    marked_style <- LTerm_resources.get_style (rc ^ ".marked") resources
+    marked_style <- LTerm_resources.get_style (rc ^ ".marked") resources;
+    current_line_style <- LTerm_resources.get_style (rc ^ ".current-line") resources
 
   method editable pos len = true
   method move pos delta = pos + delta
@@ -225,23 +227,12 @@ object(self)
 
     let text = Zed_edit.text engine in
 
-    (* Compute the end of the displayed text. *)
-(*    let end_offset =
-      if start_line + size.rows > Zed_lines.count line_set then
-        Zed_rope.length text
-      else
-        Zed_lines.line_start line_set (start_line + size.rows)
-    in
-*)
     begin_line 0 (Zed_rope.Zip.make_f text start);
 
     (* Colorize the current line. *)
-    (*      let line = m.(tl_line + cursor_line - start_line) in
-            let style_current_line = Peps_var.get ~scope:area.edit Peps_edit.style_current_line in
-            for column = 1 to area.columns do
-            set_style line.(tl_column + column) style_current_line
-            done;
-    *)
+    for col = 0 to size.cols - 1 do
+      set_style (point ctx (cursor_line - start_line) col) current_line_style
+    done;
 
     (* Colorize the selection if needed *)
     if Zed_edit.get_selection engine then begin
