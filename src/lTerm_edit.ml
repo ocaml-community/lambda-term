@@ -115,15 +115,7 @@ object(self)
     cursor <- Zed_edit.new_cursor engine;
     context <- Zed_edit.context engine cursor;
     Zed_edit.set_data engine (self :> edit);
-    event <- (
-      E.map (fun _ -> self#queue_draw)
-        (E.select [
-           E.stamp (Zed_edit.changes engine) ();
-           E.stamp (S.changes (Zed_edit.selection engine)) ();
-           E.stamp (S.changes (Zed_cursor.position cursor)) ();
-           E.stamp (S.changes (Zed_cursor.position (Zed_edit.mark engine))) ();
-         ])
-    );
+    event <- E.map (fun _ -> self#queue_draw) (Zed_edit.update engine [cursor]);
     self#on_event
       (function
          | LTerm_event.Key { control = false; meta = false; shift = false; code = Char ch } ->

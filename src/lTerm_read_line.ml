@@ -885,10 +885,7 @@ object(self)
         (fun () -> if !running then self#queue_draw_update else return ())
         (E.select [
            E.stamp (S.changes size) ();
-           E.stamp (Zed_edit.changes self#edit) ();
-           E.stamp (S.changes (Zed_edit.selection self#edit)) ();
-           E.stamp (S.changes (Zed_cursor.position (Zed_edit.cursor self#context))) ();
-           E.stamp (S.changes (Zed_cursor.position (Zed_edit.mark self#edit))) ();
+           Zed_edit.update self#edit [Zed_edit.cursor self#context];
            E.stamp (S.changes prompt) ();
            E.stamp (S.changes self#completion_words) ();
            E.stamp (S.changes self#completion_index) ();
