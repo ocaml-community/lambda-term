@@ -270,7 +270,7 @@ object(self)
         let line_a = line_a - start_line and line_b = line_b - start_line in
         let column_a = column_a and column_b = column_b in
         if line_a = line_b then
-          for column = column_a to column_b do
+          for column = column_a to column_b - 1 do
             set_style (point ctx line_a column) marked_style
           done
         else begin
@@ -282,7 +282,7 @@ object(self)
               set_style (point ctx line column) marked_style
             done
           done;
-          for column = 0 to column_b do
+          for column = 0 to column_b - 1 do
             set_style (point ctx line_b column) marked_style
           done
         end
