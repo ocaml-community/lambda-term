@@ -792,11 +792,19 @@ let render_point term buf old_point new_point =
   end;
   Buffer.add_string buf (Zed_utf8.singleton new_point.char)
 
-let render_update_unix term old_matrix matrix =
+type render_kind = Render_screen | Render_box
+
+let render_update_unix term kind old_matrix matrix =
   let open LTerm_draw in
   let buf = Buffer.create 16 in
-  (* Go the the top-left and reset attributes *)
-  Buffer.add_string buf "\027[H\027[0m";
+  Buffer.add_string buf
+    (match kind with
+       | Render_screen ->
+           (* Go the the top-left and reset attributes *)
+           "\027[H\027[0m"
+       | Render_box ->
+           (* Go the the beginnig of line and reset attributes *)
+           "\r\027[0m");
   (* The last displayed point. *)
   let last_point = ref {
     char = UChar.of_char ' ';
@@ -828,7 +836,7 @@ let render_update_unix term old_matrix matrix =
   Buffer.add_string buf "\027[0m";
   fprint term (Buffer.contents buf)
 
-let render_windows term matrix =
+let render_windows term kind matrix =
   let open LTerm_draw in
   (* Build the matrix of char infos *)
   let matrix =
@@ -848,26 +856,46 @@ let render_windows term matrix =
            line)
       matrix
   in
+  let info = LTerm_windows.get_console_screen_buffer_info term.outgoing_fd in
+  let window_rect = info.LTerm_windows.window in
+  let rect =
+    match kind with
+      | Render_screen ->
+          window_rect
+      | Render_box ->
+          { window_rect with
+              col1 = info.LTerm_windows.cursor_position.col;
+              col2 = info.LTerm_windows.cursor_position.col + Array.length matrix }
+  in
   ignore (
     LTerm_windows.write_console_output
       term.outgoing_fd
       matrix
       { rows = Array.length matrix; cols = if matrix = [||] then 0 else Array.length matrix.(0) }
       { row = 0; col = 0 }
-      (LTerm_windows.get_console_screen_buffer_info term.outgoing_fd).LTerm_windows.window
+      rect
   );
   return ()
 
 let render_update term old_matrix matrix =
   if term.outgoing_is_a_tty then
     if term.windows then
-      render_windows term matrix
+      render_windows term Render_screen matrix
     else
-      render_update_unix term old_matrix matrix
+      render_update_unix term Render_screen old_matrix matrix
   else
     raise_lwt Not_a_tty
 
 let render term m = render_update term [||] m
+
+let print_box term matrix =
+  if term.outgoing_is_a_tty then
+    if term.windows then
+      render_windows term Render_box matrix
+    else
+      render_update_unix term Render_box [||] matrix
+  else
+    raise_lwt Not_a_tty
 
 (* +-----------------------------------------------------------------+
    | Misc                                                            |

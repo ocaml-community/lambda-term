@@ -518,7 +518,8 @@ end
    | Running in a terminal                                           |
    +-----------------------------------------------------------------+ *)
 
-let hline = (UChar.of_int 0x2500, LTerm_style.none)
+let vline = LTerm_draw.({ top = Light; bottom = Light; left = Blank; right = Blank })
+let reverse_style = { LTerm_style.none with LTerm_style.reverse = Some true }
 let default_prompt = LTerm_text.of_string "# "
 
 let rec drop count l =
@@ -529,64 +530,18 @@ let rec drop count l =
     | e :: l -> drop (count - 1) l
 
 (* Computes the position of the cursor after printing the given styled
-   string, assuming the terminal is a windows one. *)
-let compute_position_windows size pos text =
-  Array.fold_left
-    (fun pos (ch, style) ->
-       if ch = newline then
-         { row = pos.row + 1; col = 0 }
-       else if pos.col + 1 = size.cols then
-         { row = pos.row + 1; col = 0 }
-       else
-         { pos with col = pos.col + 1 })
-    pos text
-
-(* Same thing but for Unix. On Unix the cursor can be at the end of
-   the line. *)
-let compute_position_unix size pos text =
-  Array.fold_left
-    (fun pos (ch, style) ->
-       if ch = newline then
-         { row = pos.row + 1; col = 0 }
-       else if pos.col = size.cols then
-         { row = pos.row + 1; col = 1 }
-       else
-         { pos with col = pos.col + 1 })
-    pos text
-
-let draw_bar box start delimiter columns words =
-  let rec aux idx = function
-    | [] ->
-        for idx = idx to columns - 1 do
-          box.(start + idx) <- hline;
-        done
-    | (word, suffix) :: words ->
-        let len = Zed_utf8.length word in
-        let idx' = idx + len in
-        if idx' <= columns then begin
-          for idx = idx to idx' - 1 do
-            box.(start + idx) <- hline;
-          done;
-          if idx' + 1 <= columns then begin
-            box.(start + idx') <- (delimiter, LTerm_style.none);
-            aux (idx' + 1) words
-          end
-        end else
-          for idx = idx to columns - 1 do
-            box.(start + idx) <- hline;
-          done
-  in
-  aux 0 words
-
-let draw_word box start word count style =
-  let rec loop idx ofs =
-    if idx < count then begin
-      let ch, ofs = Zed_utf8.extract_next word ofs in
-      box.(start + idx) <- (ch, style);
-      loop (idx + 1) ofs
-    end
-  in
-  loop 0 0
+   string. *)
+let rec compute_position cols pos text start stop =
+  if start = stop then
+    pos
+  else
+    let ch, style = text.(start) in
+    if ch = newline then
+      compute_position cols { row = pos.row + 1; col = 0 } text (start + 1) stop
+    else if pos.col + 1 = cols then
+      compute_position cols { row = pos.row + 1; col = 0 } text (start + 1) stop
+    else
+      compute_position cols { pos with col = pos.col + 1 } text (start + 1) stop
 
 let rec get_index_of_last_displayed_word column columns index words =
   match words with
@@ -599,19 +554,26 @@ let rec get_index_of_last_displayed_word column columns index words =
         else
           index - 1
 
-let text_height cols text =
-  let { row } =
-    Array.fold_left
-      (fun pos (ch, style) ->
-         if ch = newline then
-           { row = pos.row + 1; col = 0 }
-         else if pos.col + 1 = cols then
-           { row = pos.row + 1; col = 0 }
-         else
-           { pos with col = pos.col + 1 })
-      { row = 0; col = 1 } text
+let draw_styled ctx row col str =
+  let size = LTerm_draw.size ctx in
+  let rec loop row col idx =
+    if idx < Array.length str then begin
+      let ch, style = Array.unsafe_get str idx in
+      if ch = newline then
+        loop (row + 1) 0 (idx + 1)
+      else begin
+        let point = LTerm_draw.point ctx row col in
+        point.LTerm_draw.char <- ch;
+        LTerm_draw.set_style point style;
+        let col = col + 1 in
+        if col = size.cols then
+          loop (row + 1) 0 (idx + 1)
+        else
+          loop row col (idx + 1)
+      end
+    end
   in
-  row + 1
+  loop row col 0
 
 class virtual ['a] term term =
   let size, set_size = S.create { cols = 80; rows = 25 } in
@@ -637,11 +599,11 @@ object(self)
   val mutable cursor = { row = 0; col = 0 }
     (* The position of the cursor. *)
 
-  val mutable end_of_display = { row = 0; col = 0 }
-    (* The position of the end of displayed material. *)
-
   val mutable completion_start = S.const 0
     (* Index of the first displayed word in the completion bar. *)
+
+  val mutable height = 0
+    (* The height of the displayed material. *)
 
   initializer
     completion_start <- (
@@ -682,9 +644,9 @@ object(self)
         lwt () = LTerm.move term 1 0 in
         erase (count - 1)
     in
-    lwt () = erase end_of_display.row in
+    lwt () = erase height in
     (* Move back again to the beginning. *)
-    LTerm.move term (-end_of_display.row) 0
+    LTerm.move term (-height) 0
 
   method private queue_draw_update =
     if draw_queued then
@@ -698,155 +660,151 @@ object(self)
     end
 
   method draw_update =
-    if visible then begin
-      lwt () =
-        if displayed then
-          self#erase
-        else begin
-          displayed <- true;
-          return ()
-        end
-      in
-      let { cols } = S.value size in
+    let size = S.value size in
+    if visible && size.cols > 0 then begin
       let styled, position = self#stylise in
-      let before = Array.sub styled 0 position in
-      let after = Array.sub styled position (Array.length styled - position) in
-      let before = Array.append (S.value prompt) before in
-      let box =
-        if not (LTerm.windows term) && self#show_box && cols > 2 then
+      let prompt = S.value prompt in
+      (* Compute the position of the cursor after displaying the
+         prompt. *)
+      let pos_after_prompt = compute_position size.cols { row = 0; col = 0 } prompt 0 (Array.length prompt) in
+      (* Compute the position of the cursor after displaying the
+         input before the cursor. *)
+      let pos_after_before = compute_position size.cols pos_after_prompt styled 0 position in
+      (* Compute the position of the cursor after displaying the
+         input. *)
+      let pos_after_styled = compute_position size.cols pos_after_before styled position (Array.length styled) in
+      let matrix =
+        if self#show_box && size.cols > 2 then
+          (* Compute the position of the cursor after displaying the
+             newline to separate the input and the box. *)
+          let pos_after_newline = compute_position size.cols pos_after_styled [|(newline, LTerm_style.none)|] 0 1 in
           match S.value self#message with
             | Some msg ->
-                let height = text_height (cols - 2) msg in
-                let box = Array.make ((cols + 1) * (height + 2)) (UChar.of_char ' ', LTerm_style.none) in
+                (* Compute the height of the message. *)
+                let message_height = (compute_position (size.cols - 2) { row = 0; col = 0 } msg 0 (Array.length msg)).row + 1 in
+                (* The total height of the displayed text. *)
+                let total_height = pos_after_newline.row + message_height + 2 in
 
-                (* Draw the top of the box. *)
-                box.(0) <- (UChar.of_char '\n', LTerm_style.none);
-                box.(1) <- (UChar.of_int 0x250c, LTerm_style.none);
-                for i = 0 to cols - 3 do
-                  box.(2 + i) <- hline
-                done;
-                box.(cols) <- (UChar.of_int 0x2510, LTerm_style.none);
+                (* Create the matrix for the rendering. *)
+                let matrix_size = { size with rows = if displayed then max total_height height else total_height } in
+                let matrix = LTerm_draw.make_matrix matrix_size in
+                let ctx = LTerm_draw.context matrix matrix_size in
 
-                (* Draw the left and right vertical lines. *)
-                for i = 1 to height do
-                  let start = (cols + 1) * i in
-                  box.(start) <- (UChar.of_char '\n', LTerm_style.none);
-                  box.(start + 1) <- (UChar.of_int 0x2502, LTerm_style.none);
-                  box.(start + cols) <- (UChar.of_int 0x2502, LTerm_style.none);
-                done;
+                (* Update the height parameter. *)
+                height <- total_height;
 
-                (* Draw the bottom of the box. *)
-                let start = (cols + 1) * (height + 1) in
-                box.(start) <- (UChar.of_char '\n', LTerm_style.none);
-                box.(start + 1) <- (UChar.of_int 0x2514, LTerm_style.none);
-                for i = 0 to cols - 3 do
-                  box.(start + 2 + i) <- hline
-                done;
-                box.(start + cols) <- (UChar.of_int 0x2518, LTerm_style.none);
+                (* Draw the prompt and the input. *)
+                draw_styled ctx 0 0 prompt;
+                draw_styled ctx pos_after_prompt.row pos_after_prompt.col styled;
+
+                (* Draw a frame for the message. *)
+                LTerm_draw.draw_frame ctx {
+                  row1 = pos_after_newline.row;
+                  col1 = 0;
+                  row2 = total_height;
+                  col2 = size.cols;
+                } LTerm_draw.Light;
 
                 (* Draw the message. *)
-                let rec loop row column idx =
-                  if idx < Array.length msg then begin
-                    let (ch, _) as point = msg.(idx) in
-                    if ch = newline then
-                      loop (row + 1) 0 (idx + 1)
-                    else begin
-                      box.((row + 1) * (cols + 1) + column + 2) <- point;
-                      if column = cols - 3 then
-                        loop (row + 1) 0 (idx + 1)
-                      else
-                        loop row (column + 1) (idx + 1)
-                    end
-                  end
-                in
-                loop 0 0 0;
+                let ctx = LTerm_draw.sub ctx {
+                  row1 = pos_after_newline.row + 1;
+                  col1 = 1;
+                  row2 = total_height - 1;
+                  col2 = size.cols - 1;
+                } in
+                draw_styled ctx 0 0 msg;
 
-                box
+                matrix
+
             | None ->
                 let comp_start = S.value self#completion_start in
                 let comp_index = S.value self#completion_index in
                 let comp_words = drop comp_start (S.value self#completion_words) in
-                let box = Array.make ((cols + 1) * 3) (UChar.of_char ' ', LTerm_style.none) in
 
-                (* Draw the top of the box. *)
-                box.(0) <- (UChar.of_char '\n', LTerm_style.none);
-                box.(1) <- (UChar.of_int 0x250c, LTerm_style.none);
-                draw_bar box 2 (UChar.of_int 0x252c) (cols - 2) comp_words;
-                box.(cols) <- (UChar.of_int 0x2510, LTerm_style.none);
+                (* The total height of the displayed text. *)
+                let total_height = pos_after_newline.row + 3 in
 
-                (* Draw the words. *)
-                let start = cols + 1 in
-                box.(start) <- (UChar.of_char '\n', LTerm_style.none);
-                box.(start + 1) <- (UChar.of_int 0x2502, LTerm_style.none);
+                (* Create the matrix for the rendering. *)
+                let matrix_size = { size with rows = if displayed then max total_height height else total_height } in
+                let matrix = LTerm_draw.make_matrix matrix_size in
+                let ctx = LTerm_draw.context matrix matrix_size in
 
-                let rec loop comp_idx idx = function
+                (* Update the height parameter. *)
+                height <- total_height;
+
+                (* Draw the prompt and the input. *)
+                draw_styled ctx 0 0 prompt;
+                draw_styled ctx pos_after_prompt.row pos_after_prompt.col styled;
+
+                (* Draw a frame for the completion. *)
+                LTerm_draw.draw_frame ctx {
+                  row1 = pos_after_newline.row;
+                  col1 = 0;
+                  row2 = total_height;
+                  col2 = size.cols;
+                } LTerm_draw.Light;
+
+                (* Draw the completion. *)
+                let ctx = LTerm_draw.sub ctx {
+                  row1 = pos_after_newline.row + 1;
+                  col1 = 1;
+                  row2 = total_height - 1;
+                  col2 = size.cols - 1;
+                } in
+
+                let rec loop idx col = function
                   | [] ->
                       ()
                   | (word, suffix) :: words ->
                       let len = Zed_utf8.length word in
-                      let idx' = idx + len in
-                      if idx' <= cols - 2 then begin
-                        draw_word
-                          box (start + 2 + idx) word len
-                          (if comp_idx = comp_index then
-                             { LTerm_style.none with reverse = Some true }
-                           else
-                             LTerm_style.none);
-                        if idx' + 1 <= cols - 2 then begin
-                          box.(start + 2 + idx') <- (UChar.of_int 0x2502, LTerm_style.none);
-                          loop (comp_idx + 1) (idx' + 1) words
-                        end
-                      end else
-                        draw_word box (start + 2 + idx) word (cols - 2 - idx) LTerm_style.none
+                      LTerm_draw.draw_string ctx 0 col word;
+                      (* Apply the reverse style if this is the selected word. *)
+                      if idx = comp_index then
+                        for col = col to min (col + len) (size.cols - 2) do
+                          LTerm_draw.set_style (LTerm_draw.point ctx 0 col) reverse_style
+                        done;
+                      (* Draw a separator. *)
+                      LTerm_draw.draw_piece ctx 0 (col + len) vline;
+                      let col = col + len + 1 in
+                      if col < size.cols - 2 then loop (idx + 1) col words
                 in
                 loop comp_start 0 comp_words;
 
-                box.(start + cols) <- (UChar.of_int 0x2502, LTerm_style.none);
+                matrix
 
-                (* Draw the bottom of the box. *)
-                let start = (cols + 1) * 2 in
-                box.(start) <- (UChar.of_char '\n', LTerm_style.none);
-                box.(start + 1) <- (UChar.of_int 0x2514, LTerm_style.none);
-                draw_bar box (start + 2) (UChar.of_int 0x2534) (cols - 2) comp_words;
-                box.(start + cols) <- (UChar.of_int 0x2518, LTerm_style.none);
-
-                box
-        else
-          [||]
+        else begin
+          let total_height = pos_after_styled.row + 1 in
+          let matrix_size = { size with rows = if displayed then max total_height height else total_height } in
+          let matrix = LTerm_draw.make_matrix matrix_size in
+          let ctx = LTerm_draw.context matrix matrix_size in
+          height <- total_height;
+          draw_styled ctx 0 0 prompt;
+          draw_styled ctx pos_after_prompt.row pos_after_prompt.col styled;
+          matrix
+        end
       in
-      let size = S.value size in
-      if LTerm.windows term then begin
-        let after = Array.append after box in
-        cursor <- compute_position_windows size { col = 0; row = 0 } before;
-        end_of_display <- compute_position_windows size cursor after;
-        lwt () = LTerm.fprints term (Array.append before after) in
-        lwt () = LTerm.move term (cursor.row - end_of_display.row) (cursor.col - end_of_display.col) in
-        LTerm.flush term
-      end else begin
-        cursor <- compute_position_unix size { col = 0; row = 0 } before;
-        end_of_display <- compute_position_unix size cursor (Array.append after box);
-        let after =
-          if cursor.col = size.cols && after = [||] then begin
-            (* If the cursor is at the end of line and there is
-               nothing after, insert a newline character. *)
-            let after = Array.concat [after; LTerm_text.of_string "\n"; box] in
-            cursor <- compute_position_unix size { col = 0; row = 0 } before;
-            end_of_display <- compute_position_unix size cursor after;
-            after
-          end else
-            Array.append after box
-        in
-        (* If the cursor is at the end of line, move it to the
-           beginning of the next line. *)
-        if cursor.col = size.cols then
-          cursor <- { col = 0; row = cursor.row + 1 };
-        (* Fix the position of the end of display. *)
-        if end_of_display.col = size.cols then
-          end_of_display <- { end_of_display with col = size.cols - 1 };
-        lwt () = LTerm.fprints term (Array.append before after) in
-        lwt () = LTerm.move term (cursor.row - end_of_display.row) (cursor.col - end_of_display.col) in
-        LTerm.flush term
-      end
+      lwt () =
+        if displayed then
+          (* Go back to the beginning of displayed text. *)
+          LTerm.move term (-cursor.row) (-cursor.col)
+        else
+          return ()
+      in
+      (* Display everything. *)
+      lwt () = LTerm.print_box term matrix in
+      (* Update the cursor. *)
+      cursor <- pos_after_before;
+      (* Move the cursor to the right position. *)
+      lwt () =
+        if LTerm.windows term then
+          LTerm.move term (cursor.row - height) cursor.col
+        else
+          (* On Unix the cursor stay at the end of line. *)
+          LTerm.move term (cursor.row - height + 1) (cursor.col - size.cols + 1)
+      in
+      lwt () = LTerm.flush term in
+      displayed <- true;
+      return ()
     end else
       return ()
 
