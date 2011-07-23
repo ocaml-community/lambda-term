@@ -518,9 +518,17 @@ module Codes = struct
   let background = 40
 end
 
-let hline = UChar.of_char '-'
-let vline = UChar.of_char '|'
-let corner = UChar.of_char '+'
+let vline = UChar.of_char '\xb3'
+let vlline = UChar.of_char '\xb4'
+let dlcorner = UChar.of_char '\xbf'
+let urcorner = UChar.of_char '\xc0'
+let huline = UChar.of_char '\xc1'
+let hdline = UChar.of_char '\xc2'
+let vrline = UChar.of_char '\xc3'
+let hline = UChar.of_char '\xc4'
+let cross = UChar.of_char '\xc5'
+let ulcorner = UChar.of_char '\xd9'
+let drcorner = UChar.of_char '\xda'
 
 (* Maps unicode characters used for drawing on windows. *)
 let windows_map_char char =
@@ -537,17 +545,76 @@ let windows_map_char char =
     | 0x2509 -> hline
     | 0x250a -> vline
     | 0x250b -> vline
-    | x when x >= 0x250c && x <= 0x254b -> corner
+    | 0x250c -> drcorner
+    | 0x250d -> drcorner
+    | 0x250e -> drcorner
+    | 0x250f -> drcorner
+    | 0x2510 -> dlcorner
+    | 0x2511 -> dlcorner
+    | 0x2512 -> dlcorner
+    | 0x2513 -> dlcorner
+    | 0x2514 -> urcorner
+    | 0x2515 -> urcorner
+    | 0x2516 -> urcorner
+    | 0x2517 -> urcorner
+    | 0x2518 -> ulcorner
+    | 0x2519 -> ulcorner
+    | 0x251a -> ulcorner
+    | 0x251b -> ulcorner
+    | 0x251c -> vrline
+    | 0x251d -> vrline
+    | 0x251e -> vrline
+    | 0x251f -> vrline
+    | 0x2520 -> vrline
+    | 0x2521 -> vrline
+    | 0x2522 -> vrline
+    | 0x2523 -> vrline
+    | 0x2524 -> vlline
+    | 0x2525 -> vlline
+    | 0x2526 -> vlline
+    | 0x2527 -> vlline
+    | 0x2528 -> vlline
+    | 0x2529 -> vlline
+    | 0x252a -> vlline
+    | 0x252b -> vlline
+    | 0x252c -> hdline
+    | 0x252d -> hdline
+    | 0x252e -> hdline
+    | 0x252f -> hdline
+    | 0x2530 -> hdline
+    | 0x2531 -> hdline
+    | 0x2532 -> hdline
+    | 0x2533 -> hdline
+    | 0x2534 -> huline
+    | 0x2535 -> huline
+    | 0x2536 -> huline
+    | 0x2537 -> huline
+    | 0x2538 -> huline
+    | 0x2539 -> huline
+    | 0x253a -> huline
+    | 0x253b -> huline
+    | 0x253c -> cross
+    | 0x253d -> cross
+    | 0x253e -> cross
+    | 0x253f -> cross
+    | 0x2540 -> cross
+    | 0x2541 -> cross
+    | 0x2542 -> cross
+    | 0x2543 -> cross
+    | 0x2544 -> cross
+    | 0x2545 -> cross
+    | 0x2546 -> cross
+    | 0x2547 -> cross
+    | 0x2548 -> cross
+    | 0x2549 -> cross
+    | 0x254a -> cross
+    | 0x254b -> cross
     | 0x254c -> hline
     | 0x254d -> hline
     | 0x254e -> vline
     | 0x254f -> vline
     | 0x2550 -> hline
     | 0x2551 -> vline
-    | x when x >= 0x2552 && x <= 0x2570 -> corner
-    | 0x2571 -> UChar.of_char '/'
-    | 0x2572 -> UChar.of_char '\\'
-    | 0x2573 -> UChar.of_char 'X'
     | _ -> char
 
 let fprint term str =
