@@ -713,7 +713,7 @@ object(self)
       let after = Array.sub styled position (Array.length styled - position) in
       let before = Array.append (S.value prompt) before in
       let box =
-        if self#show_box && cols > 2 then
+        if not (LTerm.windows term) && self#show_box && cols > 2 then
           match S.value self#message with
             | Some msg ->
                 let height = text_height (cols - 2) msg in

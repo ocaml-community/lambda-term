@@ -618,7 +618,6 @@ let windows_map_char char =
     | _ -> char
 
 let fprint term str =
-  let str = if term.windows then Zed_utf8.map windows_map_char str else str in
   Lwt_io.fprint term.oc (LTerm_iconv.recode_with term.outgoing_cd str)
 
 let fprintl term str =
@@ -746,7 +745,7 @@ let fprints_windows term oc text =
         else
           return ()
       in
-      lwt () = Lwt_io.write oc (LTerm_iconv.recode_with term.outgoing_cd (Zed_utf8.singleton (windows_map_char ch))) in
+      lwt () = Lwt_io.write oc (LTerm_iconv.recode_with term.outgoing_cd (Zed_utf8.singleton ch)) in
       loop (idx + 1) attr
     end
   in
