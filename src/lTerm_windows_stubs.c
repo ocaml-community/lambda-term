@@ -259,8 +259,8 @@ CAMLprim value lt_windows_get_console_screen_buffer_info(value val_fd)
   x = caml_alloc_tuple(4);
   Field(x, 0) = Val_int(info.srWindow.Top);
   Field(x, 1) = Val_int(info.srWindow.Left);
-  Field(x, 2) = Val_int(info.srWindow.Bottom - info.srWindow.Top + 1);
-  Field(x, 3) = Val_int(info.srWindow.Right - info.srWindow.Left + 1);
+  Field(x, 2) = Val_int(info.srWindow.Bottom + 1);
+  Field(x, 3) = Val_int(info.srWindow.Right + 1);
   Field(result, 3) = x;
 
   x = caml_alloc_tuple(2);
@@ -428,8 +428,8 @@ CAMLprim value lt_windows_write_console_output(value val_fd, value val_chars, va
   coord.Y = Int_val(Field(val_coord, 0));
   rect.Top = Int_val(Field(val_rect, 0));
   rect.Left = Int_val(Field(val_rect, 1));
-  rect.Bottom = rect.Top + Int_val(Field(val_rect, 2)) - 1;
-  rect.Right = rect.Left + Int_val(Field(val_rect, 3)) - 1;
+  rect.Bottom = Int_val(Field(val_rect, 2)) - 1;
+  rect.Right = Int_val(Field(val_rect, 3)) - 1;
 
   if (!WriteConsoleOutput(Handle_val(val_fd), buffer, size, coord, &rect)) {
     win32_maperr(GetLastError());
@@ -439,8 +439,8 @@ CAMLprim value lt_windows_write_console_output(value val_fd, value val_chars, va
   result = caml_alloc_tuple(4);
   Field(result, 0) = Val_int(rect.Top);
   Field(result, 1) = Val_int(rect.Left);
-  Field(result, 2) = Val_int(rect.Bottom - rect.Top + 1);
-  Field(result, 3) = Val_int(rect.Right - rect.Left + 1);
+  Field(result, 2) = Val_int(rect.Bottom + 1);
+  Field(result, 3) = Val_int(rect.Right + 1);
   CAMLreturn(result);
 }
 
