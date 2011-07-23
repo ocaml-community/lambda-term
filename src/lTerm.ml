@@ -864,8 +864,8 @@ let render_windows term kind matrix =
           window_rect
       | Render_box ->
           { window_rect with
-              col1 = info.LTerm_windows.cursor_position.col;
-              col2 = info.LTerm_windows.cursor_position.col + Array.length matrix }
+              row1 = info.LTerm_windows.cursor_position.row;
+              row2 = info.LTerm_windows.cursor_position.row + Array.length matrix }
   in
   ignore (
     LTerm_windows.write_console_output
