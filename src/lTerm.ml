@@ -774,6 +774,7 @@ let same_style p1 p2 =
   p1.bold = p2.bold &&
       p1.underline = p2.underline &&
       p1.blink = p2.blink &&
+      p1.reverse = p2.reverse &&
       p1.foreground = p2.foreground &&
       p1.background = p2.background
 

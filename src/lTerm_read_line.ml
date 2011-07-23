@@ -760,7 +760,7 @@ object(self)
                       LTerm_draw.draw_string ctx 0 col word;
                       (* Apply the reverse style if this is the selected word. *)
                       if idx = comp_index then
-                        for col = col to min (col + len) (size.cols - 2) do
+                        for col = col to min (col + len - 1) (size.cols - 2) do
                           LTerm_draw.set_style (LTerm_draw.point ctx 0 col) reverse_style
                         done;
                       (* Draw a separator. *)
@@ -797,10 +797,10 @@ object(self)
       (* Move the cursor to the right position. *)
       lwt () =
         if LTerm.windows term then
-          LTerm.move term (cursor.row - height) cursor.col
+          LTerm.move term (cursor.row - Array.length matrix) cursor.col
         else
           (* On Unix the cursor stay at the end of line. *)
-          LTerm.move term (cursor.row - height + 1) (cursor.col - size.cols + 1)
+          LTerm.move term (cursor.row - Array.length matrix + 1) (cursor.col - size.cols + 1)
       in
       lwt () = LTerm.flush term in
       displayed <- true;
