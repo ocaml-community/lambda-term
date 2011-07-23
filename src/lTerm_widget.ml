@@ -818,14 +818,25 @@ type 'a event =
 let lambda_termrc =
   Filename.concat (try Sys.getenv "HOME" with Not_found -> "") ".lambda-termrc"
 
+let file_exists file =
+  try_lwt
+    lwt () = Lwt_unix.access file [Unix.R_OK] in
+    return true
+  with Unix.Unix_error _ ->
+    return false
+
 let run term ?save_state ?(load_resources = true) ?(resources_file = lambda_termrc) widget waiter =
   let widget = (widget :> t) in
 
   lwt () =
     if load_resources then
-      lwt resources = LTerm_resources.load resources_file in
-      widget#set_resources resources;
-      return ()
+      match_lwt file_exists resources_file with
+        | true ->
+            lwt resources = LTerm_resources.load resources_file in
+            widget#set_resources resources;
+            return ()
+        | false ->
+            return ()
     else
       return ()
   in
