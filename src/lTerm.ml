@@ -746,7 +746,7 @@ let fprints_windows term oc text =
         else
           return ()
       in
-      lwt () = Lwt_io.write oc (Zed_utf8.singleton (windows_map_char ch)) in
+      lwt () = Lwt_io.write oc (LTerm_iconv.recode_with term.outgoing_cd (Zed_utf8.singleton (windows_map_char ch))) in
       loop (idx + 1) attr
     end
   in
