@@ -59,7 +59,7 @@ let make_prompt size exit_code time =
   eval [
     B_bold true;
 
-    B_fg lblue;
+    B_fg lcyan;
     S"─( ";
     B_fg lmagenta; S(Printf.sprintf "%02d:%02d:%02d" tm.Unix.tm_hour tm.Unix.tm_min tm.Unix.tm_sec); E_fg;
     S" )─< ";
