@@ -296,6 +296,7 @@ let hide_cursor term =
 let goto term coord =
   if term.outgoing_is_a_tty then
     if term.windows then begin
+      lwt () = Lwt_io.flush term.oc in
       let window = (LTerm_windows.get_console_screen_buffer_info term.outgoing_fd).LTerm_windows.window in
       LTerm_windows.set_console_cursor_position term.outgoing_fd {
         row = window.row1 + coord.row;
@@ -314,6 +315,7 @@ let goto term coord =
 let move term rows cols =
   if term.outgoing_is_a_tty then
     if term.windows then begin
+      lwt () = Lwt_io.flush term.oc in
       let pos = (LTerm_windows.get_console_screen_buffer_info term.outgoing_fd).LTerm_windows.cursor_position in
       LTerm_windows.set_console_cursor_position term.outgoing_fd {
         row = pos.row + rows;

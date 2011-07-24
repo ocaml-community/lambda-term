@@ -797,10 +797,15 @@ object(self)
       (* Move the cursor to the right position. *)
       lwt () =
         if LTerm.windows term then
-          LTerm.move term (cursor.row - Array.length matrix) cursor.col
+          (* On windows the cursor is not moved. *)
+          LTerm.move term cursor.row cursor.col
         else
-          (* On Unix the cursor stay at the end of line. *)
-          LTerm.move term (cursor.row - Array.length matrix + 1) (cursor.col - size.cols + 1)
+          (* On Unix the cursor stay at the end of line. We put it
+             back to the beginning of the line immediatly because all
+             terminals do not respond the same way when the cursor is
+             at the end of line. *)
+          lwt () = LTerm.fprint term "\r" in
+          LTerm.move term (cursor.row - Array.length matrix + 1) cursor.col
       in
       lwt () = LTerm.flush term in
       displayed <- true;

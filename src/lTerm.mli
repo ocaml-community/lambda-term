@@ -263,7 +263,10 @@ val print_box : t -> LTerm_draw.matrix -> unit Lwt.t
       at current cursor row. Note that when you have the choice
       between using {!fprints} and {!print_box} you should use
       {!print_box} because it works better under windows and is more
-      efficient. *)
+      efficient.
+
+      Note: on windows this does not move the cursor.
+  *)
 
 (** {6 Misc} *)
 

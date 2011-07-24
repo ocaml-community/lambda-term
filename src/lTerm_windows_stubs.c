@@ -236,7 +236,7 @@ CAMLprim value lt_windows_get_console_screen_buffer_info(value val_fd)
   Field(x, 1) = Val_int(info.dwSize.X);
   Field(result, 0) = x;
 
-  x = caml_alloc_tuple(4);
+  x = caml_alloc_tuple(2);
   Field(x, 0) = Val_int(info.dwCursorPosition.Y);
   Field(x, 1) = Val_int(info.dwCursorPosition.X);
   Field(result, 1) = x;
