@@ -149,12 +149,16 @@ class virtual ['a] engine : ?history : history -> unit -> object
   method completion_index : int signal
     (** The position in the completion bar. *)
 
-  method completion : (int * (Zed_utf8.t * Zed_utf8.t) list) Lwt.t
-    (** Compute possible completions for current input. It returns the
-        index of the beginning of the word being completed and the
-        list of possible completions with their suffixes. The result
-        is made available through the {!completions} signal. This
-        thread may be canceled using {!Lwt.cancel}. *)
+  method set_completion : int -> (Zed_utf8.t * Zed_utf8.t) list -> unit
+    (** [set_completion index words] sets the current
+        completions. [index] is the index of the beginning of the word
+        being completed and [words] is the list of possible
+        completions with their suffixes. The result is made available
+        through the {!compltion_words} signal. *)
+
+  method completion : unit
+    (** Ask for computing completion for current input. This method
+        should call {!set_completion}. *)
 
   method complete : unit
     (** Complete current input. This is the method called when the
@@ -178,7 +182,8 @@ class virtual ['a] abstract : object
   method virtual input_next : Zed_rope.t
   method virtual completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
   method virtual completion_index : int signal
-  method virtual completion : (int * (Zed_utf8.t * Zed_utf8.t) list) Lwt.t
+  method virtual set_completion : int -> (Zed_utf8.t * Zed_utf8.t) list -> unit
+  method virtual completion : unit
   method virtual complete : unit
   method virtual show_box : bool
   method virtual search_mode : bool signal

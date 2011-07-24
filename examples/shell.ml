@@ -95,7 +95,7 @@ let get_paths () =
     []
 
 (* Get the set of all binaries with a name starting with [prefix]. *)
-let binaries = lazy(
+let get_binaries () =
   Lwt_list.fold_left_s
     (fun set dir ->
        try_lwt
@@ -112,7 +112,6 @@ let binaries = lazy(
     String_set.empty
     (get_paths ())
   >|= String_set.elements
-)
 
 (* +-----------------------------------------------------------------+
    | Customization of the read-line engine                           |
@@ -125,15 +124,14 @@ let time =
   ignore (Lwt_engine.on_timer 1.0 true (fun _ -> set_time (Unix.time ())));
   time
 
-class read_line ~term ~history ~exit_code = object(self)
+class read_line ~term ~history ~exit_code ~binaries = object(self)
   inherit LTerm_read_line.read_line ~history ()
   inherit [Zed_utf8.t] LTerm_read_line.term term
 
   method completion =
     let prefix  = Zed_rope.to_string self#input_prev in
-    lwt binaries = Lazy.force binaries in
     let binaries = List.filter (fun file -> Zed_utf8.starts_with file prefix) binaries in
-    return (0, List.map (fun file -> (file, " ")) binaries)
+    self#set_completion 0 (List.map (fun file -> (file, " ")) binaries)
 
   initializer
     self#set_prompt (S.l2 (fun size time -> make_prompt size exit_code time) self#size time)
@@ -144,7 +142,8 @@ end
    +-----------------------------------------------------------------+ *)
 
 let rec loop term history exit_code =
-  lwt command = (new read_line ~term ~history ~exit_code)#run in
+  lwt binaries = get_binaries () in
+  lwt command = (new read_line ~term ~history ~exit_code ~binaries)#run in
   lwt status = Lwt_process.exec (Lwt_process.shell command) in
   loop
     term

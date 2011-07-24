@@ -218,40 +218,25 @@ object(self)
   method history = history
   method message = message
 
-  (* The thread that compute completion. *)
-  val mutable completion_thread = return ()
-
-  (* The event that compute completion when needed. *)
-  val mutable completion_event = E.never
-
   (* Whether a completion has been queued. *)
   val mutable completion_queued = false
 
+  (* The event which occurs when completion need to be recomputed. *)
+  val mutable completion_event = E.never
+
   (* The index of the start of the word being completed. *)
   val mutable completion_start = 0
+
+  method set_completion start words =
+    completion_start <- start;
+    set_completion_words words
 
   initializer
     completion_event <- (
       E.map
         (fun () ->
-           (* Cancel previous thread because it is now useless. *)
-           cancel completion_thread;
-           set_completion_index 0;
-           set_completion_words [];
-           if completion_queued then
-             return ()
-           else begin
-             completion_queued <- true;
-             lwt () = pause () in
-             completion_queued <- false;
-             completion_thread <- (
-               lwt start, comp = self#completion in
-               completion_start <- start;
-               set_completion_words comp;
-               return ()
-             );
-             return ()
-           end)
+           self#set_completion 0 [];
+           self#completion)
         (E.when_
            (S.map not search_mode)
            (E.select [
@@ -259,12 +244,7 @@ object(self)
               E.stamp (S.changes (Zed_cursor.position (Zed_edit.cursor context))) ();
             ]))
     );
-    completion_thread <- (
-      lwt start, comp = self#completion in
-      completion_start <- start;
-      set_completion_words comp;
-      return ()
-    )
+    self#completion
 
   method input_prev =
     Zed_rope.before (Zed_edit.text edit) (Zed_edit.position context)
@@ -274,7 +254,7 @@ object(self)
 
   method completion_words = completion_words
   method completion_index = completion_index
-  method completion = return (0, [])
+  method completion = self#set_completion 0 []
 
   method complete =
     let prefix_length = Zed_edit.position context - completion_start in
@@ -460,7 +440,8 @@ class virtual ['a] abstract = object
   method virtual input_next : Zed_rope.t
   method virtual completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
   method virtual completion_index : int signal
-  method virtual completion : (int * (Zed_utf8.t * Zed_utf8.t) list) Lwt.t
+  method virtual set_completion : int -> (Zed_utf8.t * Zed_utf8.t) list -> unit
+  method virtual completion : unit
   method virtual complete : unit
   method virtual show_box : bool
   method virtual search_mode : bool signal
@@ -511,7 +492,7 @@ class ['a] read_keyword ?history () = object(self)
   method completion =
     let word = Zed_rope.to_string self#input_prev in
     let keywords = List.filter (fun (keyword, value) -> Zed_utf8.starts_with keyword word) self#keywords in
-    return (0, List.map (fun (keyword, value) -> (keyword, "")) keywords)
+    self#set_completion 0 (List.map (fun (keyword, value) -> (keyword, "")) keywords)
 end
 
 (* +-----------------------------------------------------------------+
