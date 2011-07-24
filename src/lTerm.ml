@@ -820,14 +820,8 @@ let render_update_unix term kind old_matrix matrix =
   } in
   for y = 0 to Array.length matrix - 1 do
     let line = Array.unsafe_get matrix y in
-    if y < Array.length old_matrix && line = Array.unsafe_get old_matrix y then begin
-      (* If the current line is equal to the displayed one, skip it *)
-      if Array.length line > 0 then begin
-        let point = Array.unsafe_get line 0 in
-        render_point term buf !last_point point;
-        last_point := point
-      end
-    end else begin
+    (* If the current line is equal to the displayed one, skip it *)
+    if y >= Array.length old_matrix || line <> Array.unsafe_get old_matrix y then begin
       for x = 0 to Array.length line - 1 do
         let point = Array.unsafe_get line x in
         render_point term buf !last_point point;
