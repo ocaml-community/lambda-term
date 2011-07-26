@@ -613,22 +613,6 @@ object(self)
 
   val draw_mutex = Lwt_mutex.create ()
 
-  method private erase =
-    (* Move back to the beginning of printed material. *)
-    lwt () = LTerm.move term (-cursor.row) (-cursor.col) in
-    (* Erase everything, line by line. *)
-    let rec erase count =
-      if count = 0 then
-        LTerm.clear_line term
-      else
-        lwt () = LTerm.clear_line term in
-        lwt () = LTerm.move term 1 0 in
-        erase (count - 1)
-    in
-    lwt () = erase height in
-    (* Move back again to the beginning. *)
-    LTerm.move term (-height) 0
-
   method private queue_draw_update =
     if draw_queued then
       return ()
@@ -795,8 +779,25 @@ object(self)
       return ()
 
   method draw_success =
-    lwt () = if visible then self#erase else return () in
-    LTerm.fprintls term (Array.append (S.value prompt) (fst self#stylise))
+    let size = S.value size in
+    let styled, position = self#stylise in
+    let prompt = S.value prompt in
+    let pos_after_prompt = compute_position size.cols { row = 0; col = 0 } prompt 0 (Array.length prompt) in
+    let pos_after_before = compute_position size.cols pos_after_prompt styled 0 position in
+    let pos_after_styled = compute_position size.cols pos_after_before styled position (Array.length styled) in
+    let total_height = pos_after_styled.row + 1 in
+    let matrix_size = { size with rows = if displayed then max total_height height else total_height } in
+    let matrix = LTerm_draw.make_matrix matrix_size in
+    let ctx = LTerm_draw.context matrix matrix_size in
+    draw_styled ctx 0 0 prompt;
+    draw_styled ctx pos_after_prompt.row pos_after_prompt.col styled;
+    lwt () = if displayed then LTerm.move term (-cursor.row) (-cursor.col) else return () in
+    lwt () = LTerm.print_box term matrix in
+    if LTerm.windows term then
+      LTerm.move term total_height 0
+    else
+      lwt () = LTerm.fprint term "\r" in
+      LTerm.move term (total_height - Array.length matrix + 1) 0
 
   method draw_failure =
     self#draw_success
@@ -804,14 +805,31 @@ object(self)
   method hide =
     if visible then begin
       visible <- false;
-      Lwt_mutex.with_lock draw_mutex (fun () -> self#erase)
+      Lwt_mutex.with_lock draw_mutex (fun () ->
+                                        if displayed then
+                                          let matrix_size = { S.value size with rows = height } in
+                                          let matrix = LTerm_draw.make_matrix matrix_size in
+                                          lwt () = LTerm.move term (-cursor.row) (-cursor.col) in
+                                          lwt () = LTerm.print_box term matrix in
+                                          lwt () =
+                                            if LTerm.windows term then
+                                              return ()
+                                            else
+                                              lwt () = LTerm.fprint term "\r" in
+                                              LTerm.move term (1 - Array.length matrix) 0
+                                          in
+                                          cursor <- { row = 0; col = 0 };
+                                          height <- 0;
+                                          displayed <- false;
+                                          return ()
+                                        else
+                                          return ())
     end else
       return ()
 
   method show =
     if not visible then begin
       visible <- true;
-      displayed <- false;
       self#queue_draw_update
     end else
       return ()
