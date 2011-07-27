@@ -229,6 +229,7 @@ object(self)
 
   method set_completion start words =
     completion_start <- start;
+    set_completion_index 0;
     set_completion_words words
 
   initializer
