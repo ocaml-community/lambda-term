@@ -67,7 +67,7 @@ let escape line =
   Zed_utf8.iter
     (fun ch ->
        if ch = newline then
-         Buffer.add_string buf "\\\n"
+         Buffer.add_string buf "\\n"
        else if ch =  backslash then
          Buffer.add_string buf "\\\\"
        else
