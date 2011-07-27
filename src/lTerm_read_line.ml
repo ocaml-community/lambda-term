@@ -22,7 +22,7 @@ type prompt = LTerm_text.t
    | Completion                                                      |
    +-----------------------------------------------------------------+ *)
 
-let common_prefix a b =
+let common_prefix_one a b =
   let rec loop ofs =
     if ofs = String.length a || ofs = String.length b then
       String.sub a 0 ofs
@@ -36,12 +36,12 @@ let common_prefix a b =
   in
   loop 0
 
-let lookup word words =
-  match List.filter (fun word' -> Zed_utf8.starts_with word' word) words with
-    | [] ->
-        ("", [])
-    | (word :: rest) as words ->
-        (List.fold_left common_prefix word rest, words)
+let common_prefix = function
+  | [] -> ""
+  | word :: rest -> List.fold_left common_prefix_one word rest
+
+let lookup word words = List.filter (fun word' -> Zed_utf8.starts_with word' word) words
+let lookup_assoc word words = List.filter (fun (word', x) -> Zed_utf8.starts_with word' word) words
 
 (* +-----------------------------------------------------------------+
    | History                                                         |
@@ -265,7 +265,7 @@ object(self)
           Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after completion prefix_length));
           Zed_edit.insert context (Zed_rope.of_string suffix)
       | (completion, suffix) :: rest ->
-          let word = List.fold_left (fun acc (word, _) -> common_prefix acc word) completion rest in
+          let word = List.fold_left (fun acc (word, _) -> common_prefix_one acc word) completion rest in
           Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after word prefix_length))
 
   (* The event which search for the string in the history. *)

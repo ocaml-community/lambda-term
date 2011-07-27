@@ -24,11 +24,16 @@ type prompt = LTerm_text.t
 
 (** {6 Completion} *)
 
-val lookup : string -> Zed_utf8.t list -> string * Zed_utf8.t list
+val common_prefix : string list -> string
+  (** Returns the common prefix of a list of words. *)
+
+val lookup : Zed_utf8.t -> Zed_utf8.t list -> Zed_utf8.t list
   (** [lookup word words] lookup for completion of [word] into
-      [words]. It returns [(prefix, possibilities)] where
-      [possibilities] are all words starting with [word] and [prefix]
-      is the longest common prefix of [possibilities]. *)
+      [words]. It returns all words starting with [word]. *)
+
+val lookup_assoc : Zed_utf8.t -> (Zed_utf8.t * 'a) list -> (Zed_utf8.t * 'a) list
+  (** [lookup_assoc word words] does the same as {!lookup} but works
+      on associative list. *)
 
 (** {8 History} *)
 
