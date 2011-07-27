@@ -133,8 +133,10 @@ class virtual ['a] engine : ?history : history -> unit -> object
   method search_mode : bool signal
     (** Whether we are currently in backward search mode. *)
 
-  method stylise : LTerm_text.t * int
-    (** Returns the stylised input and the position of the cursor. *)
+  method stylise : bool -> LTerm_text.t * int
+    (** Returns the stylised input and the position of the cursor. The
+        argument is [true] if this is for the last drawing or [false]
+        otherwise. *)
 
   method history : (Zed_utf8.t list * Zed_utf8.t list) signal
     (** The history zipper. *)
@@ -180,7 +182,7 @@ class virtual ['a] abstract : object
   method virtual insert : UChar.t -> unit
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
-  method virtual stylise : LTerm_text.t * int
+  method virtual stylise : bool -> LTerm_text.t * int
   method virtual history : (Zed_utf8.t list * Zed_utf8.t list) signal
   method virtual message : LTerm_text.t option signal
   method virtual input_prev : Zed_rope.t

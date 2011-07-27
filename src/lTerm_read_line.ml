@@ -413,10 +413,10 @@ object(self)
       | _ ->
           ()
 
-  method stylise =
+  method stylise last =
     let txt = LTerm_text.of_rope (Zed_edit.text edit) in
     let pos = Zed_edit.position context in
-    if Zed_edit.get_selection edit then begin
+    if not last && Zed_edit.get_selection edit then begin
       let mark = Zed_cursor.get_position (Zed_edit.mark edit) in
       let a = min pos mark and b = max pos mark in
       for i = a to b - 1 do
@@ -433,7 +433,7 @@ class virtual ['a] abstract = object
   method virtual insert : UChar.t -> unit
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
-  method virtual stylise : LTerm_text.t * int
+  method virtual stylise : bool -> LTerm_text.t * int
   method virtual history : (Zed_utf8.t list * Zed_utf8.t list) signal
   method virtual message : LTerm_text.t option signal
   method virtual input_prev : Zed_rope.t
@@ -459,8 +459,8 @@ end
 class read_password () = object(self)
   inherit [Zed_utf8.t] engine () as super
 
-  method stylise =
-    let text, pos = super#stylise in
+  method stylise last =
+    let text, pos = super#stylise last in
     for i = 0 to Array.length text - 1 do
       let ch, style = text.(i) in
       text.(i) <- (UChar.of_char '*', style)
@@ -627,7 +627,7 @@ object(self)
   method draw_update =
     let size = S.value size in
     if visible && size.cols > 0 then begin
-      let styled, position = self#stylise in
+      let styled, position = self#stylise false in
       let prompt = S.value prompt in
       (* Compute the position of the cursor after displaying the
          prompt. *)
@@ -780,7 +780,7 @@ object(self)
 
   method draw_success =
     let size = S.value size in
-    let styled, position = self#stylise in
+    let styled, position = self#stylise true in
     let prompt = S.value prompt in
     let pos_after_prompt = compute_position size.cols { row = 0; col = 0 } prompt 0 (Array.length prompt) in
     let pos_after_before = compute_position size.cols pos_after_prompt styled 0 position in
