@@ -74,6 +74,13 @@ let set_style point style =
       | None -> ()
   end
 
+let maybe_set_style point style =
+  match style with
+    | Some style ->
+        set_style point style
+    | None ->
+        ()
+
 type context = {
   ctx_matrix : matrix;
   ctx_matrix_size : size;
@@ -128,12 +135,22 @@ let clear ctx =
     done
   done
 
-let fill ctx ch =
-  for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
-    for col = ctx.ctx_col1 to ctx.ctx_col2 - 1 do
-      (unsafe_get ctx.ctx_matrix row col).char <- ch
-    done
-  done
+let fill ctx ?style ch =
+  match style with
+    | Some style ->
+        for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
+          for col = ctx.ctx_col1 to ctx.ctx_col2 - 1 do
+            let point = unsafe_get ctx.ctx_matrix row col in
+            point.char <- ch;
+            set_style point style
+          done
+        done
+    | None ->
+        for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
+          for col = ctx.ctx_col1 to ctx.ctx_col2 - 1 do
+            (unsafe_get ctx.ctx_matrix row col).char <- ch
+          done
+        done
 
 let fill_style ctx style =
   for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
@@ -148,39 +165,45 @@ let point ctx row col =
   if row >= ctx.ctx_row2 || col >= ctx.ctx_col2 then raise Out_of_bounds;
   unsafe_get ctx.ctx_matrix row col
 
-let draw_char ctx row col ch =
+let draw_char ctx row col ?style ch =
   if row >= 0 && col >= 0 then begin
     let row = ctx.ctx_row1 + row and col = ctx.ctx_col1 + col in
     if row < ctx.ctx_row2 && col < ctx.ctx_col2 then
-      (unsafe_get ctx.ctx_matrix row col).char <- ch
+      let point = unsafe_get ctx.ctx_matrix row col in
+      point.char <- ch;
+      maybe_set_style point style
   end
 
-let draw_string ctx row col str =
+let draw_string ctx row col ?style str =
   let rec loop row col ofs =
     if ofs < String.length str then begin
       let ch, ofs = Zed_utf8.unsafe_extract_next str ofs in
       if ch = newline then
         loop (row + 1) ctx.ctx_col1 ofs
       else begin
-        if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col < ctx.ctx_col2 then
-          (unsafe_get ctx.ctx_matrix row col).char <- ch;
+        if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col < ctx.ctx_col2 then begin
+          let point = unsafe_get ctx.ctx_matrix row col in
+          point.char <- ch;
+          maybe_set_style point style
+        end;
         loop row (col + 1) ofs
       end
     end
   in
   loop (ctx.ctx_row1 + row) (ctx.ctx_col1 + col) 0
 
-let draw_styled ctx row col str =
+let draw_styled ctx row col ?style str =
   let rec loop row col idx =
     if idx < Array.length str then begin
-      let ch, style = Array.unsafe_get str idx in
+      let ch, ch_style = Array.unsafe_get str idx in
       if ch = newline then
         loop (row + 1) ctx.ctx_col1 (idx + 1)
       else begin
         if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col < ctx.ctx_col2 then begin
           let point = unsafe_get ctx.ctx_matrix row col in
           point.char <- ch;
-          set_style point style
+          maybe_set_style point style;
+          set_style point ch_style
         end;
         loop row (col + 1) (idx + 1)
       end
@@ -188,7 +211,7 @@ let draw_styled ctx row col str =
   in
   loop (ctx.ctx_row1 + row) (ctx.ctx_col1 + col) 0
 
-let draw_string_aligned ctx row alignment str =
+let draw_string_aligned ctx row alignment ?style str =
   let rec line_length ofs len =
     if ofs = String.length str then
       len
@@ -205,8 +228,11 @@ let draw_string_aligned ctx row alignment str =
       if ch = newline then
         ofs
       else begin
-        if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col < ctx.ctx_col2 then
-          (unsafe_get ctx.ctx_matrix row col).char <- ch;
+        if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col < ctx.ctx_col2 then begin
+          let point = unsafe_get ctx.ctx_matrix row col in
+          point.char <- ch;
+          maybe_set_style point style
+        end;
         loop row (col + 1) ofs
       end
     end else
@@ -230,7 +256,7 @@ let draw_string_aligned ctx row alignment str =
   in
   loop_lines (ctx.ctx_row1 + row) 0
 
-let draw_styled_aligned ctx row alignment str =
+let draw_styled_aligned ctx row alignment ?style str =
   let rec line_length idx len =
     if idx = Array.length str then
       len
@@ -242,14 +268,15 @@ let draw_styled_aligned ctx row alignment str =
   in
   let rec loop row col idx =
     if idx < Array.length str then begin
-      let ch, style = Array.unsafe_get str idx in
+      let ch, ch_style = Array.unsafe_get str idx in
       if ch = newline then
         idx + 1
       else begin
         if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col < ctx.ctx_col2 then begin
           let point = unsafe_get ctx.ctx_matrix row col in
           point.char <- ch;
-          set_style point style
+          maybe_set_style point style;
+          set_style point ch_style
         end;
         loop row (col + 1) (idx + 1)
       end
@@ -448,7 +475,7 @@ let char_of_piece = function
   | { top = Blank; bottom = Blank; left = Heavy; right = Light } -> UChar.of_int 0x257e
   | { top = Heavy; bottom = Light; left = Blank; right = Blank } -> UChar.of_int 0x257f
 
-let draw_piece ctx row col piece =
+let draw_piece ctx row col ?style piece =
   let row = ctx.ctx_row1 + row and col = ctx.ctx_col1 + col in
   if row >= ctx.ctx_row1 && col >= ctx.ctx_col1 && row < ctx.ctx_row2 && col < ctx.ctx_col2 then begin
     let piece =
@@ -527,33 +554,35 @@ let draw_piece ctx row col piece =
       end else
         piece
     in
-    (unsafe_get ctx.ctx_matrix row col).char <- char_of_piece piece
+    let point = unsafe_get ctx.ctx_matrix row col in
+    point.char <- char_of_piece piece;
+    maybe_set_style point style
   end
 
-let draw_hline ctx row col len connection =
+let draw_hline ctx row col len ?style connection =
   let piece = { top = Blank; bottom = Blank; left = connection; right = connection } in
   for i = 0 to len - 1 do
-    draw_piece ctx row (col + i) piece
+    draw_piece ctx row (col + i) ?style piece
   done
 
-let draw_vline ctx row col len connection =
+let draw_vline ctx row col len ?style connection =
   let piece = { top = connection; bottom = connection; left = Blank; right = Blank } in
   for i = 0 to len - 1 do
-    draw_piece ctx (row + i) col piece
+    draw_piece ctx (row + i) col ?style piece
   done
 
-let draw_frame ctx rect connection =
+let draw_frame ctx rect ?style connection =
   let hline = { top = Blank; bottom = Blank; left = connection; right = connection } in
   let vline = { top = connection; bottom = connection; left = Blank; right = Blank } in
   for col = rect.col1 + 1 to rect.col2 - 2 do
-    draw_piece ctx (rect.row1 + 0) col hline;
-    draw_piece ctx (rect.row2 - 1) col hline
+    draw_piece ctx (rect.row1 + 0) col ?style hline;
+    draw_piece ctx (rect.row2 - 1) col ?style hline
   done;
   for row = rect.row1 + 1 to rect.row2 - 2 do
-    draw_piece ctx row (rect.col1 + 0) vline;
-    draw_piece ctx row (rect.col2 - 1) vline
+    draw_piece ctx row (rect.col1 + 0) ?style vline;
+    draw_piece ctx row (rect.col2 - 1) ?style vline
   done;
-  draw_piece ctx (rect.row1 + 0) (rect.col1 + 0) { top = Blank; bottom = connection; left = Blank; right = connection };
-  draw_piece ctx (rect.row1 + 0) (rect.col2 - 1) { top = Blank; bottom = connection; left = connection; right = Blank };
-  draw_piece ctx (rect.row2 - 1) (rect.col2 - 1) { top = connection; bottom = Blank; left = connection; right = Blank };
-  draw_piece ctx (rect.row2 - 1) (rect.col1 + 0) { top = connection; bottom = Blank; left = Blank; right = connection }
+  draw_piece ctx (rect.row1 + 0) (rect.col1 + 0) ?style { top = Blank; bottom = connection; left = Blank; right = connection };
+  draw_piece ctx (rect.row1 + 0) (rect.col2 - 1) ?style { top = Blank; bottom = connection; left = connection; right = Blank };
+  draw_piece ctx (rect.row2 - 1) (rect.col2 - 1) ?style { top = connection; bottom = Blank; left = connection; right = Blank };
+  draw_piece ctx (rect.row2 - 1) (rect.col1 + 0) ?style { top = connection; bottom = Blank; left = Blank; right = connection }

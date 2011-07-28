@@ -78,9 +78,8 @@ val clear : context -> unit
   (** [clear ctx] clears the given context. It resets all styles to
       their default and sets characters to spaces. *)
 
-val fill : context -> UChar.t -> unit
-  (** [fill ctx ch] fills the given context with [ch]. This does not
-      affect styles. *)
+val fill : context -> ?style : LTerm_style.t -> UChar.t -> unit
+  (** [fill ctx ch] fills the given context with [ch]. *)
 
 val fill_style : context -> LTerm_style.t -> unit
   (** [fill_style style] fills the given context with [style]. *)
@@ -90,25 +89,24 @@ val point : context -> int -> int -> point
       [ctx]. It raises {!Out_of_bounds} if the coordinates are outside
       the given context. *)
 
-val draw_char : context -> int -> int -> UChar.t -> unit
-  (** [draw_char ctx row column ch] sets the character at given
-      coordinates to [ch]. This does not affect styles. It does
-      nothing if the given coordinates are outside the bounds of the
-      context. *)
+val draw_char : context -> int -> int -> ?style : LTerm_style.t -> UChar.t -> unit
+  (** [draw_char ctx row column ?style ch] sets the character at given
+      coordinates to [ch]. It does nothing if the given coordinates
+      are outside the bounds of the context. *)
 
-val draw_string : context -> int -> int -> string -> unit
-  (** [draw_string ctx row column str] draws the given string at given
-      coordinates. This does not affect styles. [str] may contains
-      newlines. *)
+val draw_string : context -> int -> int -> ?style : LTerm_style.t -> string -> unit
+  (** [draw_string ctx row column ?style str] draws the given string
+      at given coordinates. This does not affect styles. [str] may
+      contains newlines. *)
 
-val draw_styled : context -> int -> int -> LTerm_text.t -> unit
-  (** [draw_styled ctx row column text] draws the given styled text at
-      given coordinates. *)
+val draw_styled : context -> int -> int -> ?style : LTerm_style.t -> LTerm_text.t -> unit
+  (** [draw_styled ctx row column ?style text] draws the given styled
+      text at given coordinates. *)
 
-val draw_string_aligned : context -> int -> horz_alignment -> string -> unit
+val draw_string_aligned : context -> int -> horz_alignment -> ?style : LTerm_style.t -> string -> unit
   (** Draws a string with the given alignment. *)
 
-val draw_styled_aligned : context -> int -> horz_alignment -> LTerm_text.t -> unit
+val draw_styled_aligned : context -> int -> horz_alignment -> ?style : LTerm_style.t -> LTerm_text.t -> unit
   (** Draws a styled string with the given aglienment. *)
 
 (** Type of an connection in a piece that can be connected to other
@@ -124,16 +122,16 @@ type connection =
 type piece = { top : connection; bottom : connection; left : connection; right : connection }
     (** Type of a piece, given by its four connection. *)
 
-val draw_piece : context -> int -> int -> piece -> unit
+val draw_piece : context -> int -> int -> ?style : LTerm_style.t -> piece -> unit
   (** Draws a piece. It may modify pieces around it. *)
 
-val draw_hline : context -> int -> int -> int -> connection -> unit
+val draw_hline : context -> int -> int -> int -> ?style : LTerm_style.t -> connection -> unit
   (** [draw_hline ctx row column length connection] draws an
       horizontal line. *)
 
-val draw_vline : context -> int -> int -> int -> connection -> unit
+val draw_vline : context -> int -> int -> int -> ?style : LTerm_style.t -> connection -> unit
   (** [draw_hline ctx row column length connection] draws a vertical
       line. *)
 
-val draw_frame : context -> rect -> connection -> unit
+val draw_frame : context -> rect -> ?style : LTerm_style.t -> connection -> unit
   (** Draws a rectangle. *)
