@@ -116,7 +116,13 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
     model;
     colors;
     windows;
-    bold_is_bright = model = "linux";
+    bold_is_bright =
+      (match model with
+         | "linux" (* The linux frame buffer *)
+         | "xterm-color" (* The MacOS-X terminal *) ->
+             true
+         | _ ->
+             false);
     color_map =
       (match colors with
          | 16 -> LTerm_color_mappings.colors_16
