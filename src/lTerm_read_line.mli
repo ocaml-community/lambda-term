@@ -91,12 +91,15 @@ type action =
   | Cancel_search
       (** Cancel search mode. *)
 
-val bindings : (LTerm_key.t, action) Hashtbl.t
+val bindings : action list Zed_input.Make(LTerm_key).t ref
   (** Bindings. *)
 
-val bind : LTerm_key.t -> action option
-  (** [bind key] returns the action associated to the given key, if
-      any. *)
+val bind : LTerm_key.t list -> action list -> unit
+  (** [bind seq actions] associates [actions] to the given
+      sequence. *)
+
+val unbind : LTerm_key.t list -> unit
+  (** [unbind seq] unbinds [seq]. *)
 
 val actions : (action * string) list
   (** List of actions with their names, except {!Edit}. *)

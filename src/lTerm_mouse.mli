@@ -39,6 +39,9 @@ type t = {
       pressed. *)
 }
 
+val compare : t -> t -> int
+  (** Same as [Pervasives.compare]. *)
+
 val control : t -> bool
 val meta : t -> bool
 val button : t -> button

@@ -17,42 +17,46 @@ open Lwt_react
    | Bindings                                                        |
    +-----------------------------------------------------------------+ *)
 
-let bindings = Hashtbl.create 128
+module Bindings = Zed_input.Make (LTerm_key)
+
+let bindings = ref Bindings.empty
+
+let bind seq actions = bindings := Bindings.add seq actions !bindings
+let unbind seq = bindings := Bindings.remove seq !bindings
 
 let () =
-  let ( --> ) key action = Hashtbl.add bindings key action in
-  { control = false; meta = false; shift = false; code = Left } --> Prev_char;
-  { control = false; meta = false; shift = false; code = Right } --> Next_char;
-  { control = false; meta = false; shift = false; code = Up } --> Prev_line;
-  { control = false; meta = false; shift = false; code = Down } --> Next_line;
-  { control = false; meta = false; shift = false; code = Home } --> Goto_bol;
-  { control = false; meta = false; shift = false; code = End } --> Goto_eol;
-  { control = false; meta = false; shift = false; code = Insert } --> Switch_erase_mode;
-  { control = false; meta = false; shift = false; code = Delete } --> Delete_next_char;
-  { control = false; meta = false; shift = false; code = Enter } --> Newline;
-  { control = true; meta = false; shift = false; code = Char(UChar.of_char ' ') } --> Set_mark;
-  { control = true; meta = false; shift = false; code = Char(UChar.of_char 'a') } --> Goto_bol;
-  { control = true; meta = false; shift = false; code = Char(UChar.of_char 'e') } --> Goto_eol;
-  { control = true; meta = false; shift = false; code = Char(UChar.of_char 'd') } --> Delete_next_char;
-  { control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') } --> Kill_next_line;
-  { control = true; meta = false; shift = false; code = Char(UChar.of_char 'u') } --> Kill_prev_line;
-  { control = true; meta = false; shift = false; code = Char(UChar.of_char 'n') } --> Prev_char;
-  { control = true; meta = false; shift = false; code = Char(UChar.of_char 'p') } --> Next_char;
-  { control = true; meta = false; shift = false; code = Char(UChar.of_char 'w') } --> Kill;
-  { control = true; meta = false; shift = false; code = Char(UChar.of_char 'y') } --> Yank;
-  { control = false; meta = false; shift = false; code = Backspace } --> Delete_prev_char;
-  { control = false; meta = true; shift = false; code = Char(UChar.of_char 'w') } --> Copy;
-  { control = false; meta = true; shift = false; code = Char(UChar.of_char 'c') } --> Capitalize_word;
-  { control = false; meta = true; shift = false; code = Char(UChar.of_char 'l') } --> Lowercase_word;
-  { control = false; meta = true; shift = false; code = Char(UChar.of_char 'u') } --> Uppercase_word;
-  { control = false; meta = true; shift = false; code = Right } --> Next_word;
-  { control = false; meta = true; shift = false; code = Left } --> Prev_word;
-  { control = true; meta = false; shift = false; code = Right } --> Next_word;
-  { control = true; meta = false; shift = false; code = Left } --> Prev_word;
-  { control = false; meta = true; shift = false; code = Delete } --> Kill_prev_word;
-  { control = true; meta = false; shift = false; code = Delete } --> Kill_next_word;
-  { control = false; meta = true; shift = false; code = Char(UChar.of_char 'd') } --> Kill_next_word;
-  { control = true; meta = false; shift = false; code = Char(UChar.of_char '_') } --> Undo
+  bind [{ control = false; meta = false; shift = false; code = Left }] [Prev_char];
+  bind [{ control = false; meta = false; shift = false; code = Right }] [Next_char];
+  bind [{ control = false; meta = false; shift = false; code = Up }] [Prev_line];
+  bind [{ control = false; meta = false; shift = false; code = Down }] [Next_line];
+  bind [{ control = false; meta = false; shift = false; code = Home }] [Goto_bol];
+  bind [{ control = false; meta = false; shift = false; code = End }] [Goto_eol];
+  bind [{ control = false; meta = false; shift = false; code = Insert }] [Switch_erase_mode];
+  bind [{ control = false; meta = false; shift = false; code = Delete }] [Delete_next_char];
+  bind [{ control = false; meta = false; shift = false; code = Enter }] [Newline];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char ' ') }] [Set_mark];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'a') }] [Goto_bol];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'e') }] [Goto_eol];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'd') }] [Delete_next_char];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') }] [Kill_next_line];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'u') }] [Kill_prev_line];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'n') }] [Prev_char];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'p') }] [Next_char];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'w') }] [Kill];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'y') }] [Yank];
+  bind [{ control = false; meta = false; shift = false; code = Backspace }] [Delete_prev_char];
+  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'w') }] [Copy];
+  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'c') }] [Capitalize_word];
+  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'l') }] [Lowercase_word];
+  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'u') }] [Uppercase_word];
+  bind [{ control = false; meta = true; shift = false; code = Right }] [Next_word];
+  bind [{ control = false; meta = true; shift = false; code = Left }] [Prev_word];
+  bind [{ control = true; meta = false; shift = false; code = Right }] [Next_word];
+  bind [{ control = true; meta = false; shift = false; code = Left }] [Prev_word];
+  bind [{ control = false; meta = true; shift = false; code = Delete }] [Kill_prev_word];
+  bind [{ control = true; meta = false; shift = false; code = Delete }] [Kill_next_word];
+  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'd') }] [Kill_next_word];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char '_') }] [Undo]
 
 (* +-----------------------------------------------------------------+
    | Widgets                                                         |
@@ -107,6 +111,7 @@ object(self)
   method set_locale locale = set_locale locale
 
   val mutable event = E.never
+  val mutable resolver = None
 
   initializer
     engine <- (
@@ -124,15 +129,21 @@ object(self)
     event <- E.map (fun _ -> self#queue_draw) (Zed_edit.update engine [cursor]);
     self#on_event
       (function
-         | LTerm_event.Key { control = false; meta = false; shift = false; code = Char ch } ->
+         | LTerm_event.Key { control = false; meta = false; shift = false; code = Char ch } when resolver = None ->
              Zed_edit.insert context (Zed_rope.singleton ch);
              true
          | LTerm_event.Key key -> begin
-             match try Some (Hashtbl.find bindings key) with Not_found -> None with
-               | Some action ->
-                   Zed_edit.get_action action context;
+             let res = match resolver with Some res -> res | None -> Bindings.resolver [Bindings.pack (fun x -> x) !bindings] in
+             match Bindings.resolve key res with
+               | Bindings.Accepted actions ->
+                   resolver <- None;
+                   List.iter (fun action -> Zed_edit.get_action action context) actions;
                    true
-               | None ->
+               | Bindings.Continue res ->
+                   resolver <- Some res;
+                   true
+               | Bindings.Rejected ->
+                   resolver <- None;
                    false
            end
          | _ ->

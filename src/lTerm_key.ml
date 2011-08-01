@@ -45,6 +45,8 @@ type t = {
   code : code;
 }
 
+let compare = compare
+
 let control key = key.control
 let meta key = key.meta
 let code key = key.code

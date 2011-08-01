@@ -54,6 +54,9 @@ type t = {
   (** The code of the key. *)
 }
 
+val compare : t -> t -> int
+  (** Same as [Pervasives.compare]. *)
+
 val control : t -> bool
 val meta : t -> bool
 val code : t -> code

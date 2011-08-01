@@ -27,6 +27,8 @@ type t = {
   col : int;
 }
 
+let compare = compare
+
 let control m = m.control
 let meta m = m.meta
 let button m = m.button

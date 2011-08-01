@@ -183,8 +183,8 @@ let actions = [
   Cancel_search, "cancel-search";
 ]
 
-let actions_to_names = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> compare a1 a2) actions)
-let names_to_actions = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> compare n1 n2) actions)
+let actions_to_names = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> Pervasives.compare a1 a2) actions)
+let names_to_actions = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> Pervasives.compare n1 n2) actions)
 
 let action_of_name x =
   let rec loop a b =
@@ -193,7 +193,7 @@ let action_of_name x =
     else
       let c = (a + b) / 2 in
       let action, name = Array.unsafe_get names_to_actions c in
-      match compare x name with
+      match Pervasives.compare x name with
         | d when d < 0 ->
             loop a c
         | d when d > 0 ->
@@ -210,7 +210,7 @@ let name_of_action x =
     else
       let c = (a + b) / 2 in
       let action, name = Array.unsafe_get actions_to_names c in
-      match compare x action with
+      match Pervasives.compare x action with
         | d when d < 0 ->
             loop a c
         | d when d > 0 ->
@@ -222,36 +222,32 @@ let name_of_action x =
     | Edit x -> Zed_edit.name_of_action x
     | _ -> loop 0 (Array.length actions_to_names)
 
-let bindings = Hashtbl.create 128
+
+module Bindings = Zed_input.Make (LTerm_key)
+
+let bindings = ref Bindings.empty
+
+let bind seq actions = bindings := Bindings.add seq actions !bindings
+let unbind seq = bindings := Bindings.remove seq !bindings
 
 let () =
-  let ( --> ) key action = Hashtbl.add bindings key action in
-  { control = false; meta = false; shift = false; code = Home } --> Edit Zed_edit.Goto_bot;
-  { control = false; meta = false; shift = false; code = End } --> Edit Zed_edit.Goto_eot;
-  { control = false; meta = false; shift = false; code = Up } --> History_prev;
-  { control = false; meta = false; shift = false; code = Down } --> History_next;
-  { control = false; meta = false; shift = false; code = Tab } --> Complete;
-  { control = false; meta = false; shift = false; code = Enter } --> Accept;
-  { control = true; meta = false; shift = false; code = Char(UChar.of_char 'm') } --> Accept;
-  { control = true; meta = false; shift = false; code = Char(UChar.of_char 'l') } --> Clear_screen;
-  { control = true; meta = false; shift = false; code = Char(UChar.of_char 'r') } --> Prev_search;
-  { control = true; meta = false; shift = false; code = Char(UChar.of_char 'd') } --> Interrupt_or_delete_next_char;
-  { control = false; meta = true; shift = false; code = Left } --> Complete_bar_prev;
-  { control = false; meta = true; shift = false; code = Right } --> Complete_bar_next;
-  { control = false; meta = true; shift = false; code = Home } --> Complete_bar_first;
-  { control = false; meta = true; shift = false; code = End } --> Complete_bar_last;
-  { control = false; meta = true; shift = false; code = Tab } --> Complete_bar;
-  { control = false; meta = true; shift = false; code = Enter } --> Edit Zed_edit.Newline;
-  { control = false; meta = false; shift = false; code = Escape } --> Cancel_search
-
-let bind key =
-  try
-    Some(Hashtbl.find bindings key)
-  with Not_found ->
-    try
-      Some(Edit(Hashtbl.find LTerm_edit.bindings key))
-    with Not_found ->
-      None
+  bind [{ control = false; meta = false; shift = false; code = Home }] [Edit Zed_edit.Goto_bot];
+  bind [{ control = false; meta = false; shift = false; code = End }] [Edit Zed_edit.Goto_eot];
+  bind [{ control = false; meta = false; shift = false; code = Up }] [History_prev];
+  bind [{ control = false; meta = false; shift = false; code = Down }] [History_next];
+  bind [{ control = false; meta = false; shift = false; code = Tab }] [Complete];
+  bind [{ control = false; meta = false; shift = false; code = Enter }] [Accept];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'm') }] [Accept];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'l') }] [Clear_screen];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'r') }] [Prev_search];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'd') }] [Interrupt_or_delete_next_char];
+  bind [{ control = false; meta = true; shift = false; code = Left }] [Complete_bar_prev];
+  bind [{ control = false; meta = true; shift = false; code = Right }] [Complete_bar_next];
+  bind [{ control = false; meta = true; shift = false; code = Home }] [Complete_bar_first];
+  bind [{ control = false; meta = true; shift = false; code = End }] [Complete_bar_last];
+  bind [{ control = false; meta = true; shift = false; code = Tab }] [Complete_bar];
+  bind [{ control = false; meta = true; shift = false; code = Enter }] [Edit Zed_edit.Newline];
+  bind [{ control = false; meta = false; shift = false; code = Escape }] [Cancel_search]
 
 (* +-----------------------------------------------------------------+
    | The read-line engine                                            |
@@ -658,6 +654,9 @@ object(self)
   val mutable height = 0
     (* The height of the displayed material. *)
 
+  val mutable resolver = None
+    (* The current resolver for resolving input sequences. *)
+
   initializer
     completion_start <- (
       S.fold
@@ -934,26 +933,41 @@ object(self)
         | LTerm_event.Resize size ->
             set_size size;
             loop ()
+        | LTerm_event.Key { control = false; meta = false; shift = false; code = Char ch } when resolver = None ->
+            self#insert ch;
+            loop ()
         | LTerm_event.Key key -> begin
-            match bind key with
-              | Some Accept ->
-                  return self#eval
-              | Some Clear_screen ->
-                  lwt () = LTerm.clear_screen term in
-                  lwt () = LTerm.goto term { row = 0; col = 0 } in
-                  displayed <- false;
-                  lwt () = self#queue_draw_update in
-                  loop ()
-              | Some action ->
-                  self#send_action action;
-                  loop ()
-              | None ->
-                  match key with
-                    | { control = false; meta = false; shift = false; code = Char ch } ->
-                        self#insert ch;
-                        loop ()
-                    | _ ->
-                        loop ()
+             let res =
+               match resolver with
+                 | Some res -> res
+                 | None -> Bindings.resolver [Bindings.pack (fun x -> x) !bindings;
+                                              Bindings.pack (List.map (fun x -> Edit x)) !LTerm_edit.bindings]
+             in
+             match Bindings.resolve key res with
+               | Bindings.Accepted actions ->
+                   resolver <- None;
+                   let rec exec = function
+                     | Accept :: _ ->
+                         return self#eval
+                     | Clear_screen :: actions ->
+                         lwt () = LTerm.clear_screen term in
+                         lwt () = LTerm.goto term { row = 0; col = 0 } in
+                         displayed <- false;
+                         lwt () = self#queue_draw_update in
+                         exec actions
+                     | action :: actions ->
+                         self#send_action action;
+                         exec actions
+                     | [] ->
+                         loop ()
+                   in
+                   exec actions
+               | Bindings.Continue res ->
+                   resolver <- Some res;
+                   loop ()
+               | Bindings.Rejected ->
+                   resolver <- None;
+                   loop ()
           end
         | _ ->
             loop ()

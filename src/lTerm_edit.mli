@@ -11,9 +11,16 @@
 
 (** {6 Bindings} *)
 
-val bindings : (LTerm_key.t, Zed_edit.action) Hashtbl.t
+val bindings : Zed_edit.action list Zed_input.Make(LTerm_key).t ref
   (** Bindings. These bindings are used by {!LTerm_read_line} and by
       edition widgets. *)
+
+val bind : LTerm_key.t list -> Zed_edit.action list -> unit
+  (** [bind seq actions] associates [actions] to the given
+      sequence. *)
+
+val unbind : LTerm_key.t list -> unit
+  (** [unbind seq] unbinds [seq]. *)
 
 (** {6 Widgets} *)
 
