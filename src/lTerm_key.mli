@@ -60,3 +60,7 @@ val code : t -> code
 
 val to_string : t -> string
   (** Returns the string representation of the given key. *)
+
+val to_string_compact : t -> string
+  (** Returns the string representation of the given key in the form
+      "C-M-a". *)

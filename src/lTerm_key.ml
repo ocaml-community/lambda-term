@@ -80,3 +80,31 @@ let string_of_code = function
 
 let to_string key =
   Printf.sprintf "{ control = %B; meta = %B; shift = %B; code = %s }" key.control key.meta key.shift (string_of_code key.code)
+
+let to_string_compact key =
+  let buffer = Buffer.create 32 in
+  if key.control then Buffer.add_string buffer "C-";
+  if key.meta then Buffer.add_string buffer "M-";
+  if key.shift then Buffer.add_string buffer "S-";
+  (match key.code with
+     | Char ch ->
+         let code = UChar.code ch in
+         if code <= 255 then
+           match Char.chr code with
+             | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9'
+             | '_' | '(' | ')' | '[' | ']' | '{' | '}'
+             | '#' | '~' | '&' | '$' | '*' | '%'
+             | '!' | '?' | ',' | ';' | ':' | '/' | '\\'
+             | '.' | '@' | '=' | '+' | '-' as ch ->
+                 Buffer.add_char buffer ch
+             | ' ' ->
+                 Buffer.add_string buffer "space"
+             | _ ->
+                 Printf.bprintf buffer "U+%02x" code
+         else if code <= 0xffff then
+           Printf.bprintf buffer "U+%04x" code
+         else
+           Printf.bprintf buffer "U+%06x" code
+     | code ->
+         Buffer.add_string buffer (String.lowercase (string_of_code code)));
+  Buffer.contents buffer
