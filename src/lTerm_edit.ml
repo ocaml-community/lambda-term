@@ -51,7 +51,8 @@ let () =
   { control = true; meta = false; shift = false; code = Left } --> Prev_word;
   { control = false; meta = true; shift = false; code = Delete } --> Kill_prev_word;
   { control = true; meta = false; shift = false; code = Delete } --> Kill_next_word;
-  { control = false; meta = true; shift = false; code = Char(UChar.of_char 'd') } --> Kill_next_word
+  { control = false; meta = true; shift = false; code = Char(UChar.of_char 'd') } --> Kill_next_word;
+  { control = true; meta = false; shift = false; code = Char(UChar.of_char '_') } --> Undo
 
 (* +-----------------------------------------------------------------+
    | Widgets                                                         |
