@@ -48,7 +48,9 @@ let () =
   { control = false; meta = true; shift = false; code = Right } --> Next_word;
   { control = false; meta = true; shift = false; code = Left } --> Prev_word;
   { control = true; meta = false; shift = false; code = Right } --> Next_word;
-  { control = true; meta = false; shift = false; code = Left } --> Prev_word
+  { control = true; meta = false; shift = false; code = Left } --> Prev_word;
+  { control = true; meta = false; shift = false; code = Char(UChar.of_char 'w') } --> Delete_prev_word;
+  { control = false; meta = true; shift = false; code = Char(UChar.of_char 'd') } --> Delete_next_word
 
 (* +-----------------------------------------------------------------+
    | Widgets                                                         |
