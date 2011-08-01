@@ -151,6 +151,77 @@ type action =
   | Prev_search
   | Cancel_search
 
+let doc_of_action = function
+  | Edit action -> Zed_edit.doc_of_action action
+  | Interrupt_or_delete_next_char -> "interrupt if at the beginning of an empty line, or delete the next character."
+  | Complete -> "complete current input."
+  | Complete_bar_next -> "go to the next possible completion in the completion bar."
+  | Complete_bar_prev -> "go to the previous possible completion in the completion bar."
+  | Complete_bar_first -> "go to the beginning of the completion bar."
+  | Complete_bar_last -> "Goto the end of the completion bar."
+  | Complete_bar -> "complete current input using the completion bar."
+  | History_prev -> "go to the previous entry of the history."
+  | History_next -> "go to the next entry of the history."
+  | Accept -> "accept the current input."
+  | Clear_screen -> "clear the screen."
+  | Prev_search -> "search backward in the history."
+  | Cancel_search -> "cancel search mode."
+
+let actions = [
+  Interrupt_or_delete_next_char, "interrupt-or-delete-next-char";
+  Complete, "complete";
+  Complete_bar_next, "complete-bar-next";
+  Complete_bar_prev, "complete-bar-prev";
+  Complete_bar_first, "complete-bar-first";
+  Complete_bar_last, "complete-bar-last";
+  Complete_bar, "complete-bar";
+  History_prev, "history-prev";
+  History_next, "history-next";
+  Accept, "accept";
+  Clear_screen, "clear-screen";
+  Prev_search, "prev-search";
+  Cancel_search, "cancel-search";
+]
+
+let actions_to_names = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> compare a1 a2) actions)
+let names_to_actions = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> compare n1 n2) actions)
+
+let action_of_name x =
+  let rec loop a b =
+    if a = b then
+      Edit (Zed_edit.action_of_name x)
+    else
+      let c = (a + b) / 2 in
+      let action, name = Array.unsafe_get names_to_actions c in
+      match compare x name with
+        | d when d < 0 ->
+            loop a c
+        | d when d > 0 ->
+            loop (c + 1) b
+        | _ ->
+            action
+  in
+  loop 0 (Array.length names_to_actions)
+
+let name_of_action x =
+  let rec loop a b =
+    if a = b then
+      raise Not_found
+    else
+      let c = (a + b) / 2 in
+      let action, name = Array.unsafe_get actions_to_names c in
+      match compare x action with
+        | d when d < 0 ->
+            loop a c
+        | d when d > 0 ->
+            loop (c + 1) b
+        | _ ->
+            name
+  in
+  match x with
+    | Edit x -> Zed_edit.name_of_action x
+    | _ -> loop 0 (Array.length actions_to_names)
+
 let bindings = Hashtbl.create 128
 
 let () =

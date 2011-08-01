@@ -98,6 +98,23 @@ val bind : LTerm_key.t -> action option
   (** [bind key] returns the action associated to the given key, if
       any. *)
 
+val actions : (action * string) list
+  (** List of actions with their names, except {!Edit}. *)
+
+val doc_of_action : action -> string
+  (** [doc_of_action action] returns a short description of the
+      action. *)
+
+val action_of_name : string -> action
+  (** [action_of_name str] converts the given action name into an
+      action. Action name are the same as variants name but lowercased
+      and with '_' replaced by '-'. It raises [Not_found] if the name
+      does not correspond to an action. It also recognizes zed
+      actions. *)
+
+val name_of_action : action -> string
+  (** [name_of_action act] returns the name of the given action. *)
+
 (** {6 The read-line engine} *)
 
 class virtual ['a] engine : ?history : history -> unit -> object
