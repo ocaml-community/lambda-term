@@ -158,7 +158,7 @@ let doc_of_action = function
   | Complete_bar_next -> "go to the next possible completion in the completion bar."
   | Complete_bar_prev -> "go to the previous possible completion in the completion bar."
   | Complete_bar_first -> "go to the beginning of the completion bar."
-  | Complete_bar_last -> "Goto the end of the completion bar."
+  | Complete_bar_last -> "go to the end of the completion bar."
   | Complete_bar -> "complete current input using the completion bar."
   | History_prev -> "go to the previous entry of the history."
   | History_next -> "go to the next entry of the history."
