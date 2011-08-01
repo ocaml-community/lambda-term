@@ -49,9 +49,9 @@ let () =
   { control = false; meta = true; shift = false; code = Left } --> Prev_word;
   { control = true; meta = false; shift = false; code = Right } --> Next_word;
   { control = true; meta = false; shift = false; code = Left } --> Prev_word;
-  { control = false; meta = true; shift = false; code = Delete } --> Delete_prev_word;
-  { control = true; meta = false; shift = false; code = Delete } --> Delete_next_word;
-  { control = false; meta = true; shift = false; code = Char(UChar.of_char 'd') } --> Delete_next_word
+  { control = false; meta = true; shift = false; code = Delete } --> Kill_prev_word;
+  { control = true; meta = false; shift = false; code = Delete } --> Kill_next_word;
+  { control = false; meta = true; shift = false; code = Char(UChar.of_char 'd') } --> Kill_next_word
 
 (* +-----------------------------------------------------------------+
    | Widgets                                                         |
