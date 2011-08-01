@@ -173,7 +173,7 @@ let doc_of_action = function
   | Start_macro -> "start a new macro."
   | Stop_macro -> "end the current macro."
   | Cancel_macro -> "cancel the current macro."
-  | Play_macro -> "play the last recorder macro."
+  | Play_macro -> "play the last recorded macro."
 
 let actions = [
   Interrupt_or_delete_next_char, "interrupt-or-delete-next-char";
