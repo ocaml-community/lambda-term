@@ -90,6 +90,8 @@ type action =
       (** Search backward in the history. *)
   | Cancel_search
       (** Cancel search mode. *)
+  | Break
+      (** Raise [Sys.Break]. *)
 
 val bindings : action list Zed_input.Make(LTerm_key).t ref
   (** Bindings. *)

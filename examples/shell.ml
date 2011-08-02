@@ -143,15 +143,24 @@ end
 
 let rec loop term history exit_code =
   lwt binaries = get_binaries () in
-  lwt command = (new read_line ~term ~history ~exit_code ~binaries)#run in
-  lwt status = Lwt_process.exec (Lwt_process.shell command) in
-  loop
-    term
-    (LTerm_read_line.add_entry command history)
-    (match status with
-       | Unix.WEXITED code -> code
-       | Unix.WSIGNALED code -> code
-       | Unix.WSTOPPED code -> code)
+  match_lwt
+    try_lwt
+      lwt command = (new read_line ~term ~history ~exit_code ~binaries)#run in
+      return (Some command)
+    with Sys.Break ->
+      return None
+  with
+    | Some command ->
+        lwt status = Lwt_process.exec (Lwt_process.shell command) in
+        loop
+          term
+          (LTerm_read_line.add_entry command history)
+          (match status with
+             | Unix.WEXITED code -> code
+             | Unix.WSIGNALED code -> code
+             | Unix.WSTOPPED code -> code)
+    | None ->
+        loop term history 130
 
 (* +-----------------------------------------------------------------+
    | Entry point                                                     |

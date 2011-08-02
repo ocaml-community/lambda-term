@@ -150,6 +150,7 @@ type action =
   | Clear_screen
   | Prev_search
   | Cancel_search
+  | Break
 
 let doc_of_action = function
   | Edit action -> LTerm_edit.doc_of_action action
@@ -166,6 +167,7 @@ let doc_of_action = function
   | Clear_screen -> "clear the screen."
   | Prev_search -> "search backward in the history."
   | Cancel_search -> "cancel search mode."
+  | Break -> "cancel edition."
 
 let actions = [
   Interrupt_or_delete_next_char, "interrupt-or-delete-next-char";
@@ -181,6 +183,7 @@ let actions = [
   Clear_screen, "clear-screen";
   Prev_search, "prev-search";
   Cancel_search, "cancel-search";
+  Break, "break";
 ]
 
 let actions_to_names = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> Pervasives.compare a1 a2) actions)
@@ -236,6 +239,7 @@ let () =
   bind [{ control = false; meta = false; shift = false; code = Down }] [History_next];
   bind [{ control = false; meta = false; shift = false; code = Tab }] [Complete];
   bind [{ control = false; meta = false; shift = false; code = Enter }] [Accept];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'c') }] [Break];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'm') }] [Accept];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'l') }] [Clear_screen];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'r') }] [Prev_search];
@@ -498,6 +502,10 @@ object(self)
       | Edit LTerm_edit.Insert_macro_counter ->
           Zed_edit.insert context (Zed_rope.of_string (string_of_int (Zed_macro.get_counter macro)));
           Zed_macro.add_counter macro 1
+
+      | Break ->
+          Zed_edit.insert context (Zed_rope.of_string "^C");
+          raise Sys.Break
 
       | _ ->
           ()
