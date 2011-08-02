@@ -23,6 +23,7 @@ type action =
   | Stop_macro
   | Cancel_macro
   | Play_macro
+  | Insert_macro_counter
 
 let doc_of_action = function
   | Zed action -> Zed_edit.doc_of_action action
@@ -30,12 +31,14 @@ let doc_of_action = function
   | Stop_macro -> "end the current macro."
   | Cancel_macro -> "cancel the current macro."
   | Play_macro -> "play the last recorded macro."
+  | Insert_macro_counter -> "insert the current value of the macro counter."
 
 let actions = [
   Start_macro, "start-macro";
   Stop_macro, "stop-macro";
   Cancel_macro, "cancel-macro";
   Play_macro, "play-macro";
+  Insert_macro_counter, "insert-macro-counter";
 ]
 
 let actions_to_names = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> Pervasives.compare a1 a2) actions)
@@ -120,7 +123,10 @@ let () =
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(UChar.of_char '(') }] [Start_macro];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(UChar.of_char ')') }] [Stop_macro];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(UChar.of_char 'e') }] [Play_macro];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'g') }] [Cancel_macro]
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'g') }] [Cancel_macro];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') };
+        { control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') };
+        { control = false; meta = false; shift = false; code = Tab }] [Insert_macro_counter]
 
 (* +-----------------------------------------------------------------+
    | Widgets                                                         |
@@ -217,6 +223,11 @@ object(self)
                      | Play_macro :: actions ->
                          Zed_macro.cancel macro;
                          exec (Zed_macro.contents macro @ actions)
+                     | Insert_macro_counter :: actions ->
+                         Zed_macro.add macro Insert_macro_counter;
+                         Zed_edit.insert context (Zed_rope.of_string (string_of_int (Zed_macro.get_counter macro)));
+                         Zed_macro.add_counter macro 1;
+                         exec actions
                      | [] ->
                          true
                    in

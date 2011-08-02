@@ -495,6 +495,10 @@ object(self)
           Zed_macro.cancel macro;
           List.iter self#send_action (Zed_macro.contents macro)
 
+      | Edit LTerm_edit.Insert_macro_counter ->
+          Zed_edit.insert context (Zed_rope.of_string (string_of_int (Zed_macro.get_counter macro)));
+          Zed_macro.add_counter macro 1
+
       | _ ->
           ()
 
