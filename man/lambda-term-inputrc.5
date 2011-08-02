@@ -1,0 +1,106 @@
+\" lambda-term-inputrc.5
+\" ---------------------
+\" Copyright : (c) 2011, Jeremie Dimino <jeremie@dimino.org>
+\" Licence   : BSD3
+\"
+\" This file is a part of Lambda-Term.
+
+.TH LAMBDA-TERM-INPUTRC 1 "August 2011"
+
+.SH NAME
+lambda-term-inputrc \- Key bindings for lambda-term applications
+
+.SH SYNOPSIS
+.B ~/.lambda-term-inputrc
+
+.SH DESCRIPTION
+
+This manual page describes the format of the
+.I ~/.lambda-term-inputrc
+file. This file is a text file which associates editing actions to key
+sequences. Comments start with a '#' character and empty lines are
+ignored.
+
+Bindings are of the form:
+
+        <key-sequence>: <actions>
+
+Where
+.I <key-sequence>
+is a sequence of keys in the emacs format. For example Control+w is
+written "C-w", Control+Meta+x followed by "e" is written "C-M-x e".
+.I <actions>
+is a list of editing actions separeted by commas. The list of all
+available actions with a short description can be obtained by running
+the command
+.BR lambda-term-actions (1)
+in a terminal.
+
+Here is an example of bindings:
+
+        C-w: kill-prev-word
+        M-!: play-macro
+
+In addition to letters and symbols the following keys can be used:
+
+        * enter
+        * escape
+        * tab
+        * up
+        * down
+        * left
+        * right
+        * f1
+        * f2
+        * f3
+        * f4
+        * f5
+        * f6
+        * f7
+        * f8
+        * f9
+        * f10
+        * f11
+        * f12
+        * next
+        * prev
+        * home
+        * end
+        * insert
+        * delete
+        * backspace
+
+Note that lambda-term accept only ascii characters in the
+configuration file, to use other unicode character you must use the
+notation
+.I U+<code>
+where
+.I <code>
+is the code of the character in hexadecimal.
+
+The file is divided in two section, the
+.B [edit]
+section and the
+.B [read-line]
+section. The first one is for key bindings that apply everyhere and
+the second for key bindings that apply only in read-line.
+
+.SH FILES
+.I ~/.lambda-term-inputrc
+
+.SH EXAMPLE
+[edit]
+
+C-e: play-macro
+
+[read-line]
+
+C-left: complete-bar-prev
+
+C-right: complete-bar-next
+
+.SH AUTHOR
+Jérémie Dimino <jeremie@dimino.org>
+
+.SH "SEE ALSO"
+.BR lambda-term-actions (1).

@@ -166,6 +166,30 @@ Document "lambda-term-api"
   XOCamlbuildLibraries: lambda-term
 
 # +-------------------------------------------------------------------+
+# | Manual pages                                                      |
+# +-------------------------------------------------------------------+
+
+Document "lambda-term-actions-man"
+  Type: custom (0.2)
+  Title: Man page for lambda-term-actions
+  Install: true
+  BuildTools: gzip
+  XCustom: $gzip -c man/lambda-term-actions.1 > man/lambda-term-actions.1.gz
+  XCustomClean: $rm man/lambda-term-actions.1.gz
+  DataFiles: man/lambda-term-actions.1.gz
+  InstallDir: $mandir/man1
+
+Document "lambda-term-inputrc-man"
+  Type: custom (0.2)
+  Title: Man page for ~/.lambda-term-inputrc
+  Install: true
+  BuildTools: gzip
+  XCustom: $gzip -c man/lambda-term-inputrc.5 > man/lambda-term-inputrc.5.gz
+  XCustomClean: $rm man/lambda-term-inputrc.5.gz
+  DataFiles: man/lambda-term-inputrc.5.gz
+  InstallDir: $mandir/man5
+
+# +-------------------------------------------------------------------+
 # | Misc                                                              |
 # +-------------------------------------------------------------------+
 
