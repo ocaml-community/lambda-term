@@ -60,7 +60,7 @@ val load_history : string -> history Lwt.t
 
 (** Type of actions. *)
 type action =
-  | Edit of Zed_edit.action
+  | Edit of LTerm_edit.action
       (** An edition action. *)
   | Interrupt_or_delete_next_char
       (** Interrupt if at the beginning of an empty line, or delete
@@ -90,14 +90,6 @@ type action =
       (** Search backward in the history. *)
   | Cancel_search
       (** Cancel search mode. *)
-  | Start_macro
-      (** Start a new macro. *)
-  | Stop_macro
-      (** Ends the current macro. *)
-  | Cancel_macro
-      (** Cancel the current macro. *)
-  | Play_macro
-      (** Play the last recorded macro. *)
 
 val bindings : action list Zed_input.Make(LTerm_key).t ref
   (** Bindings. *)
@@ -120,7 +112,7 @@ val action_of_name : string -> action
   (** [action_of_name str] converts the given action name into an
       action. Action name are the same as variants name but lowercased
       and with '_' replaced by '-'. It raises [Not_found] if the name
-      does not correspond to an action. It also recognizes zed
+      does not correspond to an action. It also recognizes edition
       actions. *)
 
 val name_of_action : action -> string
@@ -128,13 +120,13 @@ val name_of_action : action -> string
 
 (** {6 The read-line engine} *)
 
-val macro_recorder : action Zed_macro.t
+val macro : action Zed_macro.t
   (** The global macro recorder. *)
 
 (** The read-line engine. If no clipboard is provided,
     {!LTerm_edit.clipboard} is used. If no macro recorder is provided,
-    the global one is used. *)
-class virtual ['a] engine : ?history : history -> ?clipboard : Zed_edit.clipboard -> ?macro_recorder : action Zed_macro.t -> unit -> object
+    {!macro} is used. *)
+class virtual ['a] engine : ?history : history -> ?clipboard : Zed_edit.clipboard -> ?macro : action Zed_macro.t -> unit -> object
 
   (** {6 Result} *)
 
@@ -161,7 +153,7 @@ class virtual ['a] engine : ?history : history -> ?clipboard : Zed_edit.clipboar
   method clipboard : Zed_edit.clipboard
     (** The clipboard used by the edition engine. *)
 
-  method macro_recorder : action Zed_macro.t
+  method macro : action Zed_macro.t
     (** The macro recorder. *)
 
   method input_prev : Zed_rope.t
@@ -223,7 +215,7 @@ class virtual ['a] abstract : object
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
   method virtual clipboard : Zed_edit.clipboard
-  method virtual macro_recorder : action Zed_macro.t
+  method virtual macro : action Zed_macro.t
   method virtual stylise : bool -> LTerm_text.t * int
   method virtual history : (Zed_utf8.t list * Zed_utf8.t list) signal
   method virtual message : LTerm_text.t option signal

@@ -14,8 +14,68 @@ open LTerm_geom
 open Lwt_react
 
 (* +-----------------------------------------------------------------+
-   | Bindings                                                        |
+   | Actions                                                         |
    +-----------------------------------------------------------------+ *)
+
+type action =
+  | Zed of Zed_edit.action
+  | Start_macro
+  | Stop_macro
+  | Cancel_macro
+  | Play_macro
+
+let doc_of_action = function
+  | Zed action -> Zed_edit.doc_of_action action
+  | Start_macro -> "start a new macro."
+  | Stop_macro -> "end the current macro."
+  | Cancel_macro -> "cancel the current macro."
+  | Play_macro -> "play the last recorded macro."
+
+let actions = [
+  Start_macro, "start-macro";
+  Stop_macro, "stop-macro";
+  Cancel_macro, "cancel-macro";
+  Play_macro, "play-macro";
+]
+
+let actions_to_names = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> Pervasives.compare a1 a2) actions)
+let names_to_actions = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> Pervasives.compare n1 n2) actions)
+
+let action_of_name x =
+  let rec loop a b =
+    if a = b then
+      Zed (Zed_edit.action_of_name x)
+    else
+      let c = (a + b) / 2 in
+      let action, name = Array.unsafe_get names_to_actions c in
+      match Pervasives.compare x name with
+        | d when d < 0 ->
+            loop a c
+        | d when d > 0 ->
+            loop (c + 1) b
+        | _ ->
+            action
+  in
+  loop 0 (Array.length names_to_actions)
+
+let name_of_action x =
+  let rec loop a b =
+    if a = b then
+      raise Not_found
+    else
+      let c = (a + b) / 2 in
+      let action, name = Array.unsafe_get actions_to_names c in
+      match Pervasives.compare x action with
+        | d when d < 0 ->
+            loop a c
+        | d when d > 0 ->
+            loop (c + 1) b
+        | _ ->
+            name
+  in
+  match x with
+    | Zed x -> Zed_edit.name_of_action x
+    | _ -> loop 0 (Array.length actions_to_names)
 
 module Bindings = Zed_input.Make (LTerm_key)
 
@@ -25,47 +85,49 @@ let bind seq actions = bindings := Bindings.add seq actions !bindings
 let unbind seq = bindings := Bindings.remove seq !bindings
 
 let () =
-  bind [{ control = false; meta = false; shift = false; code = Left }] [Prev_char];
-  bind [{ control = false; meta = false; shift = false; code = Right }] [Next_char];
-  bind [{ control = false; meta = false; shift = false; code = Up }] [Prev_line];
-  bind [{ control = false; meta = false; shift = false; code = Down }] [Next_line];
-  bind [{ control = false; meta = false; shift = false; code = Home }] [Goto_bol];
-  bind [{ control = false; meta = false; shift = false; code = End }] [Goto_eol];
-  bind [{ control = false; meta = false; shift = false; code = Insert }] [Switch_erase_mode];
-  bind [{ control = false; meta = false; shift = false; code = Delete }] [Delete_next_char];
-  bind [{ control = false; meta = false; shift = false; code = Enter }] [Newline];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char ' ') }] [Set_mark];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'a') }] [Goto_bol];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'e') }] [Goto_eol];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'd') }] [Delete_next_char];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') }] [Kill_next_line];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'u') }] [Kill_prev_line];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'n') }] [Prev_char];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'p') }] [Next_char];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'w') }] [Kill];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'y') }] [Yank];
-  bind [{ control = false; meta = false; shift = false; code = Backspace }] [Delete_prev_char];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'w') }] [Copy];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'c') }] [Capitalize_word];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'l') }] [Lowercase_word];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'u') }] [Uppercase_word];
-  bind [{ control = false; meta = true; shift = false; code = Right }] [Next_word];
-  bind [{ control = false; meta = true; shift = false; code = Left }] [Prev_word];
-  bind [{ control = true; meta = false; shift = false; code = Right }] [Next_word];
-  bind [{ control = true; meta = false; shift = false; code = Left }] [Prev_word];
-  bind [{ control = false; meta = true; shift = false; code = Delete }] [Kill_prev_word];
-  bind [{ control = true; meta = false; shift = false; code = Delete }] [Kill_next_word];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'd') }] [Kill_next_word];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char '_') }] [Undo]
+  bind [{ control = false; meta = false; shift = false; code = Left }] [Zed Prev_char];
+  bind [{ control = false; meta = false; shift = false; code = Right }] [Zed Next_char];
+  bind [{ control = false; meta = false; shift = false; code = Up }] [Zed Prev_line];
+  bind [{ control = false; meta = false; shift = false; code = Down }] [Zed Next_line];
+  bind [{ control = false; meta = false; shift = false; code = Home }] [Zed Goto_bol];
+  bind [{ control = false; meta = false; shift = false; code = End }] [Zed Goto_eol];
+  bind [{ control = false; meta = false; shift = false; code = Insert }] [Zed Switch_erase_mode];
+  bind [{ control = false; meta = false; shift = false; code = Delete }] [Zed Delete_next_char];
+  bind [{ control = false; meta = false; shift = false; code = Enter }] [Zed Newline];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char ' ') }] [Zed Set_mark];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'a') }] [Zed Goto_bol];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'e') }] [Zed Goto_eol];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'd') }] [Zed Delete_next_char];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') }] [Zed Kill_next_line];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'u') }] [Zed Kill_prev_line];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'n') }] [Zed Prev_char];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'p') }] [Zed Next_char];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'w') }] [Zed Kill];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'y') }] [Zed Yank];
+  bind [{ control = false; meta = false; shift = false; code = Backspace }] [Zed Delete_prev_char];
+  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'w') }] [Zed Copy];
+  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'c') }] [Zed Capitalize_word];
+  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'l') }] [Zed Lowercase_word];
+  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'u') }] [Zed Uppercase_word];
+  bind [{ control = false; meta = true; shift = false; code = Right }] [Zed Next_word];
+  bind [{ control = false; meta = true; shift = false; code = Left }] [Zed Prev_word];
+  bind [{ control = true; meta = false; shift = false; code = Right }] [Zed Next_word];
+  bind [{ control = true; meta = false; shift = false; code = Left }] [Zed Prev_word];
+  bind [{ control = false; meta = true; shift = false; code = Delete }] [Zed Kill_prev_word];
+  bind [{ control = true; meta = false; shift = false; code = Delete }] [Zed Kill_next_word];
+  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'd') }] [Zed Kill_next_word];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char '_') }] [Zed Undo];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(UChar.of_char '(') }] [Start_macro];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(UChar.of_char ')') }] [Stop_macro];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(UChar.of_char 'e') }] [Play_macro];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'g') }] [Cancel_macro]
 
 (* +-----------------------------------------------------------------+
    | Widgets                                                         |
    +-----------------------------------------------------------------+ *)
 
-let clipboard =
-  let x = ref Zed_rope.empty in
-  { Zed_edit.clipboard_get = (fun () -> !x);
-    Zed_edit.clipboard_set = (fun r -> x := r) }
+let clipboard = Zed_edit.new_clipboard ()
+let macro = Zed_macro.create []
 
 let regexp_word =
   let set = UCharInfo.load_property_set `Alphabetic in
@@ -77,10 +139,13 @@ let dummy_cursor = Zed_edit.new_cursor dummy_engine
 let dummy_context = Zed_edit.context dummy_engine dummy_cursor
 let newline = UChar.of_char '\n'
 
-class edit ?(clipboard = clipboard) () =
+class edit ?(clipboard = clipboard) ?(macro = macro) () =
   let locale, set_locale = S.create None in
 object(self)
   inherit LTerm_widget.t "edit"
+
+  method clipboard = clipboard
+  method macro = macro
 
   method can_focus = true
 
@@ -105,7 +170,6 @@ object(self)
     current_line_style <- LTerm_resources.get_style (rc ^ ".current-line") resources
 
   method editable pos len = true
-  method move pos delta = pos + delta
   method match_word text pos = match_by_regexp regexp_word text pos
   method locale = S.value locale
   method set_locale locale = set_locale locale
@@ -117,7 +181,6 @@ object(self)
     engine <- (
       Zed_edit.create
         ~editable:(fun pos len -> self#editable pos len)
-        ~move:(fun pos delta -> self#move pos delta)
         ~match_word:(fun text pos -> self#match_word text pos)
         ~clipboard
         ~locale
@@ -137,8 +200,27 @@ object(self)
              match Bindings.resolve key res with
                | Bindings.Accepted actions ->
                    resolver <- None;
-                   List.iter (fun action -> Zed_edit.get_action action context) actions;
-                   true
+                   let rec exec = function
+                     | Zed action :: actions ->
+                         Zed_macro.add macro (Zed action);
+                         Zed_edit.get_action action context;
+                         exec actions
+                     | Start_macro :: actions ->
+                         Zed_macro.set_recording macro true;
+                         exec actions
+                     | Stop_macro :: actions ->
+                         Zed_macro.set_recording macro false;
+                         exec actions
+                     | Cancel_macro :: actions ->
+                         Zed_macro.cancel macro;
+                         exec actions
+                     | Play_macro :: actions ->
+                         Zed_macro.cancel macro;
+                         exec (Zed_macro.contents macro @ actions)
+                     | [] ->
+                         true
+                   in
+                   exec actions
                | Bindings.Continue res ->
                    resolver <- Some res;
                    true

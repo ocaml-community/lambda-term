@@ -136,7 +136,7 @@ let save_history name history =
    +-----------------------------------------------------------------+ *)
 
 type action =
-  | Edit of Zed_edit.action
+  | Edit of LTerm_edit.action
   | Interrupt_or_delete_next_char
   | Complete
   | Complete_bar_next
@@ -150,13 +150,9 @@ type action =
   | Clear_screen
   | Prev_search
   | Cancel_search
-  | Start_macro
-  | Stop_macro
-  | Cancel_macro
-  | Play_macro
 
 let doc_of_action = function
-  | Edit action -> Zed_edit.doc_of_action action
+  | Edit action -> LTerm_edit.doc_of_action action
   | Interrupt_or_delete_next_char -> "interrupt if at the beginning of an empty line, or delete the next character."
   | Complete -> "complete current input."
   | Complete_bar_next -> "go to the next possible completion in the completion bar."
@@ -170,10 +166,6 @@ let doc_of_action = function
   | Clear_screen -> "clear the screen."
   | Prev_search -> "search backward in the history."
   | Cancel_search -> "cancel search mode."
-  | Start_macro -> "start a new macro."
-  | Stop_macro -> "end the current macro."
-  | Cancel_macro -> "cancel the current macro."
-  | Play_macro -> "play the last recorded macro."
 
 let actions = [
   Interrupt_or_delete_next_char, "interrupt-or-delete-next-char";
@@ -189,10 +181,6 @@ let actions = [
   Clear_screen, "clear-screen";
   Prev_search, "prev-search";
   Cancel_search, "cancel-search";
-  Start_macro, "start-macro";
-  Stop_macro, "stop-macro";
-  Cancel_macro, "cancel-macro";
-  Play_macro, "play-macro";
 ]
 
 let actions_to_names = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> Pervasives.compare a1 a2) actions)
@@ -201,7 +189,7 @@ let names_to_actions = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> Pervas
 let action_of_name x =
   let rec loop a b =
     if a = b then
-      Edit (Zed_edit.action_of_name x)
+      Edit (LTerm_edit.action_of_name x)
     else
       let c = (a + b) / 2 in
       let action, name = Array.unsafe_get names_to_actions c in
@@ -231,9 +219,8 @@ let name_of_action x =
             name
   in
   match x with
-    | Edit x -> Zed_edit.name_of_action x
+    | Edit x -> LTerm_edit.name_of_action x
     | _ -> loop 0 (Array.length actions_to_names)
-
 
 module Bindings = Zed_input.Make (LTerm_key)
 
@@ -243,8 +230,8 @@ let bind seq actions = bindings := Bindings.add seq actions !bindings
 let unbind seq = bindings := Bindings.remove seq !bindings
 
 let () =
-  bind [{ control = false; meta = false; shift = false; code = Home }] [Edit Zed_edit.Goto_bot];
-  bind [{ control = false; meta = false; shift = false; code = End }] [Edit Zed_edit.Goto_eot];
+  bind [{ control = false; meta = false; shift = false; code = Home }] [Edit (LTerm_edit.Zed Zed_edit.Goto_bot)];
+  bind [{ control = false; meta = false; shift = false; code = End }] [Edit (LTerm_edit.Zed Zed_edit.Goto_eot)];
   bind [{ control = false; meta = false; shift = false; code = Up }] [History_prev];
   bind [{ control = false; meta = false; shift = false; code = Down }] [History_next];
   bind [{ control = false; meta = false; shift = false; code = Tab }] [Complete];
@@ -258,12 +245,8 @@ let () =
   bind [{ control = false; meta = true; shift = false; code = Home }] [Complete_bar_first];
   bind [{ control = false; meta = true; shift = false; code = End }] [Complete_bar_last];
   bind [{ control = false; meta = true; shift = false; code = Tab }] [Complete_bar];
-  bind [{ control = false; meta = true; shift = false; code = Enter }] [Edit Zed_edit.Newline];
-  bind [{ control = false; meta = false; shift = false; code = Escape }] [Cancel_search];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(UChar.of_char '(') }] [Start_macro];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(UChar.of_char ')') }] [Stop_macro];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(UChar.of_char 'e') }] [Play_macro];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'g') }] [Cancel_macro]
+  bind [{ control = false; meta = true; shift = false; code = Enter }] [Edit (LTerm_edit.Zed Zed_edit.Newline)];
+  bind [{ control = false; meta = false; shift = false; code = Escape }] [Cancel_search]
 
 (* +-----------------------------------------------------------------+
    | The read-line engine                                            |
@@ -284,9 +267,9 @@ let search_string str sub =
   in
   loop 0 0
 
-let macro_recorder = Zed_macro.create []
+let macro = Zed_macro.create []
 
-class virtual ['a] engine ?(history = []) ?(clipboard = LTerm_edit.clipboard) ?(macro_recorder = macro_recorder) () =
+class virtual ['a] engine ?(history = []) ?(clipboard = LTerm_edit.clipboard) ?(macro = macro) () =
   let edit : unit Zed_edit.t = Zed_edit.create ~clipboard () in
   let context = Zed_edit.context edit (Zed_edit.new_cursor edit) in
   let completion_words, set_completion_words = S.create ([] : (Zed_utf8.t * Zed_utf8.t) list) in
@@ -303,7 +286,7 @@ object(self)
   method history = history
   method message = message
   method clipboard = clipboard
-  method macro_recorder = macro_recorder
+  method macro = macro
 
   (* Whether a completion has been queued. *)
   val mutable completion_queued = false
@@ -399,7 +382,7 @@ object(self)
     Zed_edit.insert context (Zed_rope.singleton ch)
 
   method send_action action =
-    if action <> Stop_macro then Zed_macro.add macro_recorder action;
+    if action <> Edit LTerm_edit.Stop_macro then Zed_macro.add macro action;
     match action with
       | (Complete | Complete_bar) when S.value search_mode -> begin
           set_search_mode false;
@@ -414,7 +397,7 @@ object(self)
                 ()
         end
 
-      | Edit action ->
+      | Edit (LTerm_edit.Zed action) ->
           Zed_edit.get_action action context
 
       | Interrupt_or_delete_next_char ->
@@ -499,18 +482,18 @@ object(self)
             set_message None
           end
 
-      | Start_macro when not (S.value search_mode) ->
-          Zed_macro.set_recording macro_recorder true
+      | Edit LTerm_edit.Start_macro when not (S.value search_mode) ->
+          Zed_macro.set_recording macro true
 
-      | Stop_macro ->
-          Zed_macro.set_recording macro_recorder false
+      | Edit LTerm_edit.Stop_macro ->
+          Zed_macro.set_recording macro false
 
-      | Cancel_macro ->
-          Zed_macro.cancel macro_recorder
+      | Edit LTerm_edit.Cancel_macro ->
+          Zed_macro.cancel macro
 
-      | Play_macro ->
-          Zed_macro.cancel macro_recorder;
-          List.iter self#send_action (Zed_macro.contents macro_recorder)
+      | Edit LTerm_edit.Play_macro ->
+          Zed_macro.cancel macro;
+          List.iter self#send_action (Zed_macro.contents macro)
 
       | _ ->
           ()
@@ -536,7 +519,7 @@ class virtual ['a] abstract = object
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
   method virtual clipboard : Zed_edit.clipboard
-  method virtual macro_recorder : action Zed_macro.t
+  method virtual macro : action Zed_macro.t
   method virtual stylise : bool -> LTerm_text.t * int
   method virtual history : (Zed_utf8.t list * Zed_utf8.t list) signal
   method virtual message : LTerm_text.t option signal
@@ -970,7 +953,7 @@ object(self)
             set_size size;
             loop ()
         | LTerm_event.Key { control = false; meta = false; shift = false; code = Char ch } when resolver = None ->
-            Zed_macro.add self#macro_recorder (Edit (Zed_edit.Insert ch));
+            Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert ch)));
             self#insert ch;
             loop ()
         | LTerm_event.Key key -> begin
@@ -985,18 +968,18 @@ object(self)
                    resolver <- None;
                    let rec exec = function
                      | Accept :: _ ->
-                         Zed_macro.add self#macro_recorder Accept;
+                         Zed_macro.add self#macro Accept;
                          return self#eval
                      | Clear_screen :: actions ->
-                         Zed_macro.add self#macro_recorder Clear_screen;
+                         Zed_macro.add self#macro Clear_screen;
                          lwt () = LTerm.clear_screen term in
                          lwt () = LTerm.goto term { row = 0; col = 0 } in
                          displayed <- false;
                          lwt () = self#queue_draw_update in
                          exec actions
-                     | Play_macro :: actions ->
-                         Zed_macro.cancel self#macro_recorder;
-                         exec (Zed_macro.contents macro_recorder @ actions)
+                     | Edit LTerm_edit.Play_macro :: actions ->
+                         Zed_macro.cancel self#macro;
+                         exec (Zed_macro.contents macro @ actions)
                      | action :: actions ->
                          self#send_action action;
                          exec actions

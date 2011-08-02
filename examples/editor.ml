@@ -20,7 +20,7 @@ lwt () =
 
   (* Exit when the user presses Ctrl+X *)
   frame#on_event (function
-                    | LTerm_event.Key { LTerm_key.control = true; meta = false; shift = false; code = LTerm_key.Char ch } when ch = UChar.of_char 'x'->
+                    | LTerm_event.Key { LTerm_key.control = true; meta = false; shift = false; code = LTerm_key.Char ch } when ch = UChar.of_char 'c'->
                         wakeup wakener ();
                         true
                     | _ ->
@@ -30,7 +30,7 @@ lwt () =
     (Zed_rope.of_string "\
 This is a simple edition widget.
 
-Type Control+X to exit.
+Type Control+C to exit.
 
 ");
 

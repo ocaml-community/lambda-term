@@ -9,27 +9,59 @@
 
 (** Text edition *)
 
-(** {6 Bindings} *)
+(** {6 Actions} *)
 
-val bindings : Zed_edit.action list Zed_input.Make(LTerm_key).t ref
+type action =
+  | Zed of Zed_edit.action
+      (** A zed action. *)
+  | Start_macro
+      (** Start a new macro. *)
+  | Stop_macro
+      (** Ends the current macro. *)
+  | Cancel_macro
+      (** Cancel the current macro. *)
+  | Play_macro
+      (** Play the last recorded macro. *)
+
+val bindings : action list Zed_input.Make(LTerm_key).t ref
   (** Bindings. These bindings are used by {!LTerm_read_line} and by
       edition widgets. *)
 
-val bind : LTerm_key.t list -> Zed_edit.action list -> unit
+val bind : LTerm_key.t list -> action list -> unit
   (** [bind seq actions] associates [actions] to the given
       sequence. *)
 
 val unbind : LTerm_key.t list -> unit
   (** [unbind seq] unbinds [seq]. *)
 
+val actions : (action * string) list
+  (** List of actions with their names, except {!Zed}. *)
+
+val doc_of_action : action -> string
+  (** [doc_of_action action] returns a short description of the
+      action. *)
+
+val action_of_name : string -> action
+  (** [action_of_name str] converts the given action name into an
+      action. Action name are the same as variants name but lowercased
+      and with '_' replaced by '-'. It raises [Not_found] if the name
+      does not correspond to an action. It also recognizes zed
+      actions. *)
+
+val name_of_action : action -> string
+  (** [name_of_action act] returns the name of the given action. *)
+
 (** {6 Widgets} *)
 
 val clipboard : Zed_edit.clipboard
   (** The global clipboard. *)
 
+val macro : action Zed_macro.t
+  (** The global macro recorder. *)
+
 (** Class of edition widgets. If no clipboard is provided, then the
     global one is used. *)
-class edit : ?clipboard : Zed_edit.clipboard -> unit -> object
+class edit : ?clipboard : Zed_edit.clipboard -> ?macro : action Zed_macro.t -> unit -> object
   inherit LTerm_widget.t
 
   method engine : edit Zed_edit.t
@@ -41,15 +73,18 @@ class edit : ?clipboard : Zed_edit.clipboard -> unit -> object
   method context : edit Zed_edit.context
     (** The context for editing the engine. *)
 
+  method clipboard : Zed_edit.clipboard
+    (** The clipboard used by the edition engine. *)
+
+  method macro : action Zed_macro.t
+    (** The macro recorder. *)
+
   method text : string
     (** Shorthand for [Zed_rope.to_string (Zed_edit.text
         edit#engine)]. *)
 
   method editable : int -> int -> bool
     (** The editable function of the engine. *)
-
-  method move : int -> int -> int
-    (** The move function of the engine. *)
 
   method match_word : Zed_rope.t -> int -> int option
     (** The match word function of the engine. *)
