@@ -158,6 +158,7 @@ let rec loop term history exit_code =
    +-----------------------------------------------------------------+ *)
 
 lwt () =
+  lwt () = LTerm_inputrc.load () in
   try_lwt
     lwt term = Lazy.force LTerm.stdout in
     loop term [] 0

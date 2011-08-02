@@ -42,7 +42,8 @@ Library "lambda-term"
     LTerm_read_line,
     LTerm_text,
     LTerm_ui,
-    LTerm_resources
+    LTerm_resources,
+    LTerm_inputrc
   InternalModules:
     LTerm_resource_lexer
   CSources:
@@ -137,6 +138,17 @@ Executable "editor"
   Install: false
   CompiledObject: best
   MainIs: editor.ml
+  BuildDepends: lambda-term
+
+# +-------------------------------------------------------------------+
+# | Utils                                                             |
+# +-------------------------------------------------------------------+
+
+Executable "lambda-term-actions"
+  Path: tools
+  Install: true
+  CompiledObject: best
+  MainIs: lambda_term_actions.ml
   BuildDepends: lambda-term
 
 # +-------------------------------------------------------------------+

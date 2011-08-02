@@ -107,6 +107,10 @@ let to_string_compact key =
            Printf.bprintf buffer "U+%04x" code
          else
            Printf.bprintf buffer "U+%06x" code
+     | Next_page ->
+         Buffer.add_string buffer "next"
+     | Prev_page ->
+         Buffer.add_string buffer "prev"
      | code ->
          Buffer.add_string buffer (String.lowercase (string_of_code code)));
   Buffer.contents buffer

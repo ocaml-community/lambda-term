@@ -1,0 +1,41 @@
+# -*- conf-colon -*-
+
+# Copy this file to your ~/.lambda-term-inputrc
+
+[read-line]
+
+# Read-line only key bindings
+
+[edit]
+
+# General key bindings
+
+# Each line is of the form:
+#
+#   <input sequence>: <actions>
+#
+# where <input sequence> is a list of keys in emacs style. For example
+# to bind Control+w to cut the word before the cursor, write:
+#
+# C-w: kill-prev-word
+#
+# <actions> may contains several action. For example, to insert
+# "Hello, world!" when pressing Control+h, write:
+#
+# C-h: insert(H), insert(e), insert(l), insert(l), insert(o), insert(,), insert( ), insert(w), insert(o), insert(r), insert(l), insert(d), insert(!)
+#
+# Note that in keys and actions, lambda-term recognize only ascii
+# character, if you want to use non-ascii ones, you must write them
+# U+<hexa code>. For example to bind Control+é to inserting "É",
+# write:
+#
+# C-U+e9: insert(U+c9)
+#
+# For a list of possible actions, run the command
+# "lambda-term-actions".
+#
+# This file is divided in sections, and each section refer to a
+# particular set of key bindings. There is two sections: [edit] and
+# [read-line]. The [edit] section is for key bindings that apply
+# everywhere, and the [read-line] section is for key bindings that
+# apply only in read-line.

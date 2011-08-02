@@ -21,6 +21,7 @@ class read_password term = object(self)
 end
 
 lwt () =
+  lwt () = LTerm_inputrc.load () in
   lwt term = Lazy.force LTerm.stdout in
   lwt password = (new read_password term)#run in
   Lwt_io.printlf "You typed %S" password
