@@ -190,6 +190,17 @@ Document "lambda-term-inputrc-man"
   InstallDir: $mandir/man5
 
 # +-------------------------------------------------------------------+
+# | Configuration examples                                            |
+# +-------------------------------------------------------------------+
+
+Document "lamda-term-inputrc"
+  Type: custom (0.2)
+  Title: lambda-term-inputrc example
+  XCustom: true
+  Install: true
+  DataFiles: lambda-term-inputrc
+
+# +-------------------------------------------------------------------+
 # | Misc                                                              |
 # +-------------------------------------------------------------------+
 
