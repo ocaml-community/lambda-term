@@ -24,6 +24,8 @@ type action =
   | Cancel_macro
   | Play_macro
   | Insert_macro_counter
+  | Set_macro_counter
+  | Add_macro_counter
 
 let doc_of_action = function
   | Zed action -> Zed_edit.doc_of_action action
@@ -32,6 +34,8 @@ let doc_of_action = function
   | Cancel_macro -> "cancel the current macro."
   | Play_macro -> "play the last recorded macro."
   | Insert_macro_counter -> "insert the current value of the macro counter."
+  | Set_macro_counter -> "sets the value of the macro counter."
+  | Add_macro_counter -> "adds a value to the macro counter."
 
 let actions = [
   Start_macro, "start-macro";
@@ -39,6 +43,8 @@ let actions = [
   Cancel_macro, "cancel-macro";
   Play_macro, "play-macro";
   Insert_macro_counter, "insert-macro-counter";
+  Set_macro_counter, "set-macro-counter";
+  Add_macro_counter, "add-macro-counter";
 ]
 
 let actions_to_names = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> Pervasives.compare a1 a2) actions)
@@ -126,7 +132,13 @@ let () =
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'g') }] [Cancel_macro];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') };
         { control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') };
-        { control = false; meta = false; shift = false; code = Tab }] [Insert_macro_counter]
+        { control = false; meta = false; shift = false; code = Tab }] [Insert_macro_counter];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') };
+        { control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') };
+        { control = true; meta = false; shift = false; code = Char(UChar.of_char 'a') }] [Add_macro_counter];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') };
+        { control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') };
+        { control = true; meta = false; shift = false; code = Char(UChar.of_char 'c') }] [Set_macro_counter]
 
 (* +-----------------------------------------------------------------+
    | Widgets                                                         |
@@ -224,6 +236,8 @@ object(self)
                          Zed_macro.add macro Insert_macro_counter;
                          Zed_edit.insert context (Zed_rope.of_string (string_of_int (Zed_macro.get_counter macro)));
                          Zed_macro.add_counter macro 1;
+                         exec actions
+                     | (Add_macro_counter | Set_macro_counter) :: actions ->
                          exec actions
                      | [] ->
                          true

@@ -24,6 +24,10 @@ type action =
       (** Play the last recorded macro. *)
   | Insert_macro_counter
       (** Insert the current value of the macro counter. *)
+  | Set_macro_counter
+      (** Sets the value of the macro counter. *)
+  | Add_macro_counter
+      (** Adds a value to the macro counter. *)
 
 val bindings : action list Zed_input.Make(LTerm_key).t ref
   (** Bindings. These bindings are used by {!LTerm_read_line} and by

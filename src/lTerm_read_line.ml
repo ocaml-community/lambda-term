@@ -273,12 +273,18 @@ let search_string str sub =
 
 let macro = Zed_macro.create []
 
+type mode =
+  | Edition
+  | Search
+  | Set_counter
+  | Add_counter
+
 class virtual ['a] engine ?(history = []) ?(clipboard = LTerm_edit.clipboard) ?(macro = macro) () =
   let edit : unit Zed_edit.t = Zed_edit.create ~clipboard () in
   let context = Zed_edit.context edit (Zed_edit.new_cursor edit) in
   let completion_words, set_completion_words = S.create ([] : (Zed_utf8.t * Zed_utf8.t) list) in
   let completion_index, set_completion_index = S.create 0 in
-  let search_mode, set_search_mode = S.create false in
+  let mode, set_mode = S.create Edition in
   let history, set_history = S.create (history, []) in
   let message, set_message = S.create None in
 object(self)
@@ -286,7 +292,7 @@ object(self)
   method edit = edit
   method context = context
   method show_box = true
-  method search_mode = search_mode
+  method mode = mode
   method history = history
   method message = message
   method clipboard = clipboard
@@ -301,6 +307,9 @@ object(self)
   (* The index of the start of the word being completed. *)
   val mutable completion_start = 0
 
+  (* Save for when setting the macro counter. *)
+  val mutable save = (0, Zed_rope.empty)
+
   method set_completion start words =
     completion_start <- start;
     set_completion_index 0;
@@ -313,7 +322,7 @@ object(self)
            self#set_completion 0 [];
            self#completion)
         (E.when_
-           (S.map not search_mode)
+           (S.map (fun mode -> mode = Edition) mode)
            (E.select [
               E.stamp (Zed_edit.changes edit) ();
               E.stamp (S.changes (Zed_cursor.position (Zed_edit.cursor context))) ();
@@ -352,7 +361,7 @@ object(self)
   val mutable search_result = None
 
   initializer
-    search_event <- E.map (fun _ -> search_result <- None; self#search) (E.when_ search_mode (Zed_edit.changes edit))
+    search_event <- E.map (fun _ -> search_result <- None; self#search) (E.when_ (S.map (fun mode -> mode = Search) mode) (Zed_edit.changes edit))
 
   method private search =
     let input = Zed_rope.to_string (Zed_edit.text edit) in
@@ -388,8 +397,8 @@ object(self)
   method send_action action =
     if action <> Edit LTerm_edit.Stop_macro then Zed_macro.add macro action;
     match action with
-      | (Complete | Complete_bar) when S.value search_mode -> begin
-          set_search_mode false;
+      | (Complete | Complete_bar | Accept) when S.value mode = Search -> begin
+          set_mode Edition;
           set_message None;
           match search_result with
             | Some(entry, pos, rest) ->
@@ -410,28 +419,28 @@ object(self)
           else
             Zed_edit.delete_next_char context
 
-      | Complete when not (S.value search_mode) ->
+      | Complete when S.value mode = Edition ->
           self#complete
 
-      | Complete_bar_next when not (S.value search_mode) ->
+      | Complete_bar_next when S.value mode = Edition ->
           let index = S.value completion_index in
           if index < List.length (S.value completion_words) - 1 then
             set_completion_index (index + 1)
 
-      | Complete_bar_prev when not (S.value search_mode) ->
+      | Complete_bar_prev when S.value mode = Edition ->
           let index = S.value completion_index in
           if index > 0 then
             set_completion_index (index - 1)
 
-      | Complete_bar_first when not (S.value search_mode) ->
+      | Complete_bar_first when S.value mode = Edition ->
           set_completion_index 0
 
-      | Complete_bar_last when not (S.value search_mode) ->
+      | Complete_bar_last when S.value mode = Edition ->
           let len = List.length (S.value completion_words) in
           if len > 0 then
             set_completion_index (len - 1)
 
-      | Complete_bar when not (S.value search_mode) ->
+      | Complete_bar when S.value mode = Edition ->
           let words = S.value completion_words in
           if words <> [] then begin
             let prefix_length = Zed_edit.position context - completion_start in
@@ -440,7 +449,7 @@ object(self)
             Zed_edit.insert context (Zed_rope.of_string suffix)
           end
 
-      | History_prev when not (S.value search_mode) ->begin
+      | History_prev when S.value mode = Edition ->begin
           let prev, next = S.value history in
           match prev with
             | [] ->
@@ -453,7 +462,7 @@ object(self)
                 Zed_edit.insert context (Zed_rope.of_string line)
         end
 
-      | History_next when not (S.value search_mode) -> begin
+      | History_next when S.value mode = Edition -> begin
           let prev, next = S.value history in
           match next with
             | [] ->
@@ -466,27 +475,30 @@ object(self)
                 Zed_edit.insert context (Zed_rope.of_string line)
         end
 
-      | Prev_search ->
-          if S.value search_mode then
-            self#search
-          else begin
-            let text = Zed_edit.text edit in
-            Zed_edit.goto context 0;
-            Zed_edit.remove context (Zed_rope.length text);
-            let prev, next = S.value history in
-            set_history (Zed_rope.to_string text :: (List.rev_append next prev), []);
-            search_result <- None;
-            set_search_mode true;
-            self#search
-          end
+      | Prev_search -> begin
+          match S.value mode with
+            | Search ->
+                self#search
+            | Edition ->
+                let text = Zed_edit.text edit in
+                Zed_edit.goto context 0;
+                Zed_edit.remove context (Zed_rope.length text);
+                let prev, next = S.value history in
+                set_history (Zed_rope.to_string text :: (List.rev_append next prev), []);
+                search_result <- None;
+                set_mode Search;
+                self#search
+            | _ ->
+                ()
+        end
 
       | Cancel_search ->
-          if S.value search_mode then begin
-            set_search_mode false;
+          if S.value mode = Search then begin
+            set_mode Edition;
             set_message None
           end
 
-      | Edit LTerm_edit.Start_macro when not (S.value search_mode) ->
+      | Edit LTerm_edit.Start_macro when S.value mode = Edition ->
           Zed_macro.set_recording macro true
 
       | Edit LTerm_edit.Stop_macro ->
@@ -502,6 +514,54 @@ object(self)
       | Edit LTerm_edit.Insert_macro_counter ->
           Zed_edit.insert context (Zed_rope.of_string (string_of_int (Zed_macro.get_counter macro)));
           Zed_macro.add_counter macro 1
+
+      | Edit LTerm_edit.Set_macro_counter when S.value mode = Edition ->
+          let text = Zed_edit.text edit in
+          save <- (Zed_edit.position context, text);
+          Zed_edit.goto context 0;
+          Zed_edit.remove context (Zed_rope.length text);
+          set_mode Set_counter;
+          set_message (Some (LTerm_text.of_string "Enter a value for the macro counter."))
+
+      | Edit LTerm_edit.Add_macro_counter when S.value mode = Edition ->
+          let text = Zed_edit.text edit in
+          save <- (Zed_edit.position context, text);
+          Zed_edit.goto context 0;
+          Zed_edit.remove context (Zed_rope.length text);
+          set_mode Add_counter;
+          set_message (Some (LTerm_text.of_string "Enter a value to add to the macro counter."))
+
+      | Accept -> begin
+          match S.value mode with
+            | Edition | Search ->
+                ()
+            | Set_counter ->
+                let pos, text = save in
+                save <- (0, Zed_rope.empty);
+                (try
+                   Zed_macro.set_counter macro (int_of_string (Zed_rope.to_string (Zed_edit.text edit)))
+                 with Failure _ ->
+                   ());
+                Zed_edit.goto context 0;
+                Zed_edit.remove context (Zed_rope.length (Zed_edit.text edit));
+                Zed_edit.insert context text;
+                Zed_edit.goto context pos;
+                set_mode Edition;
+                set_message None
+            | Add_counter ->
+                let pos, text = save in
+                save <- (0, Zed_rope.empty);
+                (try
+                   Zed_macro.add_counter macro (int_of_string (Zed_rope.to_string (Zed_edit.text edit)))
+                 with Failure _ ->
+                   ());
+                Zed_edit.goto context 0;
+                Zed_edit.remove context (Zed_rope.length (Zed_edit.text edit));
+                Zed_edit.insert context text;
+                Zed_edit.goto context pos;
+                set_mode Edition;
+                set_message None
+        end
 
       | Break ->
           Zed_edit.insert context (Zed_rope.of_string "^C");
@@ -543,7 +603,7 @@ class virtual ['a] abstract = object
   method virtual completion : unit
   method virtual complete : unit
   method virtual show_box : bool
-  method virtual search_mode : bool signal
+  method virtual mode : mode signal
 end
 
 (* +-----------------------------------------------------------------+
@@ -979,7 +1039,7 @@ object(self)
                    resolver <- None;
                    set_key_sequence [];
                    let rec exec = function
-                     | Accept :: _ ->
+                     | Accept :: _ when S.value self#mode = Edition ->
                          Zed_macro.add self#macro Accept;
                          return self#eval
                      | Clear_screen :: actions ->

@@ -125,6 +125,17 @@ val name_of_action : action -> string
 val macro : action Zed_macro.t
   (** The global macro recorder. *)
 
+(** The current read-line mode. *)
+type mode =
+  | Edition
+      (** Editing. *)
+  | Search
+      (** Backward search. *)
+  | Set_counter
+      (** Setting the macro counter value. *)
+  | Add_counter
+      (** Adding a value to the macro counter. *)
+
 (** The read-line engine. If no clipboard is provided,
     {!LTerm_edit.clipboard} is used. If no macro recorder is provided,
     {!macro} is used. *)
@@ -164,8 +175,8 @@ class virtual ['a] engine : ?history : history -> ?clipboard : Zed_edit.clipboar
   method input_next : Zed_rope.t
     (** The input after the cursor. *)
 
-  method search_mode : bool signal
-    (** Whether we are currently in backward search mode. *)
+  method mode : mode signal
+    (** The current mode. *)
 
   method stylise : bool -> LTerm_text.t * int
     (** Returns the stylised input and the position of the cursor. The
@@ -229,7 +240,7 @@ class virtual ['a] abstract : object
   method virtual completion : unit
   method virtual complete : unit
   method virtual show_box : bool
-  method virtual search_mode : bool signal
+  method virtual mode : mode signal
 end
 
 (** {6 Predefined classes} *)
