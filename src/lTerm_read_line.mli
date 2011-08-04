@@ -300,6 +300,10 @@ class virtual ['a] term : LTerm.t -> object
   method run : 'a Lwt.t
     (** Run this read-line instance. *)
 
+  method private exec : action list -> 'a Lwt.t
+    (** Executes a list of actions. Rememver to call [Zed_macro.add
+        self#macro action] if you overload this method. *)
+
   method draw_update : unit Lwt.t
     (** Updates current display and put the cursor at current edition
         position. *)

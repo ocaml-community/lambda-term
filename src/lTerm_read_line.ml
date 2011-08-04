@@ -999,6 +999,64 @@ object(self)
     end else
       return ()
 
+  (* The main loop. *)
+  method private loop =
+    match_lwt LTerm.read_event term with
+      | LTerm_event.Resize size ->
+          set_size size;
+          self#loop
+      | LTerm_event.Key key -> begin
+          let res =
+            match resolver with
+              | Some res -> res
+              | None -> Bindings.resolver [Bindings.pack (fun x -> x) !bindings;
+                                           Bindings.pack (List.map (fun x -> Edit x)) !LTerm_edit.bindings]
+          in
+          match Bindings.resolve key res with
+            | Bindings.Accepted actions ->
+                resolver <- None;
+                set_key_sequence [];
+                self#exec actions
+            | Bindings.Continue res ->
+                resolver <- Some res;
+                set_key_sequence (S.value key_sequence @ [key]);
+                self#loop
+            | Bindings.Rejected ->
+                set_key_sequence [];
+                if resolver = None then
+                  match key with
+                    | { control = false; meta = false; shift = false; code = Char ch } ->
+                        Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert ch)));
+                        self#insert ch
+                    | _ ->
+                        ()
+                else
+                  resolver <- None;
+                self#loop
+        end
+      | _ ->
+          self#loop
+
+  method private exec = function
+    | Accept :: _ when S.value self#mode = Edition ->
+        Zed_macro.add self#macro Accept;
+        return self#eval
+    | Clear_screen :: actions ->
+        Zed_macro.add self#macro Clear_screen;
+        lwt () = LTerm.clear_screen term in
+        lwt () = LTerm.goto term { row = 0; col = 0 } in
+        displayed <- false;
+        lwt () = self#queue_draw_update in
+        self#exec actions
+    | Edit LTerm_edit.Play_macro :: actions ->
+        Zed_macro.cancel self#macro;
+        self#exec (Zed_macro.contents macro @ actions)
+    | action :: actions ->
+        self#send_action action;
+        self#exec actions
+    | [] ->
+        self#loop
+
   method run =
     (* Get the initial size of the terminal. *)
     lwt initial_size = LTerm.get_size term in
@@ -1021,65 +1079,6 @@ object(self)
          ])
     in
 
-    (* The main loop. *)
-    let rec loop () =
-      LTerm.read_event term >>= function
-        | LTerm_event.Resize size ->
-            set_size size;
-            loop ()
-        | LTerm_event.Key key -> begin
-             let res =
-               match resolver with
-                 | Some res -> res
-                 | None -> Bindings.resolver [Bindings.pack (fun x -> x) !bindings;
-                                              Bindings.pack (List.map (fun x -> Edit x)) !LTerm_edit.bindings]
-             in
-             match Bindings.resolve key res with
-               | Bindings.Accepted actions ->
-                   resolver <- None;
-                   set_key_sequence [];
-                   let rec exec = function
-                     | Accept :: _ when S.value self#mode = Edition ->
-                         Zed_macro.add self#macro Accept;
-                         return self#eval
-                     | Clear_screen :: actions ->
-                         Zed_macro.add self#macro Clear_screen;
-                         lwt () = LTerm.clear_screen term in
-                         lwt () = LTerm.goto term { row = 0; col = 0 } in
-                         displayed <- false;
-                         lwt () = self#queue_draw_update in
-                         exec actions
-                     | Edit LTerm_edit.Play_macro :: actions ->
-                         Zed_macro.cancel self#macro;
-                         exec (Zed_macro.contents macro @ actions)
-                     | action :: actions ->
-                         self#send_action action;
-                         exec actions
-                     | [] ->
-                         loop ()
-                   in
-                   exec actions
-               | Bindings.Continue res ->
-                   resolver <- Some res;
-                   set_key_sequence (S.value key_sequence @ [key]);
-                   loop ()
-               | Bindings.Rejected ->
-                   set_key_sequence [];
-                   if resolver = None then
-                     match key with
-                       | { control = false; meta = false; shift = false; code = Char ch } ->
-                           Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert ch)));
-                           self#insert ch
-                       | _ ->
-                           ()
-                   else
-                     resolver <- None;
-                   loop ()
-          end
-        | _ ->
-            loop ()
-    in
-
     lwt mode =
       match LTerm.is_a_tty term with
         | true ->
@@ -1095,7 +1094,7 @@ object(self)
            calculation will be false. *)
         lwt () = LTerm.fprint term "\r" in
         lwt () = self#queue_draw_update in
-        loop ()
+        self#loop
       with exn ->
         running := false;
         E.stop event;
