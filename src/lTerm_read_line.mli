@@ -309,6 +309,9 @@ class virtual ['a] term : LTerm.t -> object
     (** The size of the terminal. This can be used for computing the
         prompt. *)
 
+  method key_sequence : LTerm_key.t list signal
+    (** The currently typed key sequence. *)
+
   method completion_start : int signal
     (** Index of the first displayed word in the completion bar. *)
 

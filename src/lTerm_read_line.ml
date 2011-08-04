@@ -659,6 +659,7 @@ class virtual ['a] term term =
   let size, set_size = S.create { cols = 80; rows = 25 } in
   let event, set_prompt = E.create () in
   let prompt = S.switch (S.const default_prompt) event in
+  let key_sequence, set_key_sequence = S.create [] in
 object(self)
   inherit ['a] abstract
   method size = size
@@ -710,6 +711,8 @@ object(self)
               self#completion_index
               size))
     )
+
+  method key_sequence = key_sequence
 
   method completion_start = completion_start
 
@@ -978,6 +981,7 @@ object(self)
              match Bindings.resolve key res with
                | Bindings.Accepted actions ->
                    resolver <- None;
+                   set_key_sequence [];
                    let rec exec = function
                      | Accept :: _ ->
                          Zed_macro.add self#macro Accept;
@@ -1001,9 +1005,11 @@ object(self)
                    exec actions
                | Bindings.Continue res ->
                    resolver <- Some res;
+                   set_key_sequence (S.value key_sequence @ [key]);
                    loop ()
                | Bindings.Rejected ->
                    resolver <- None;
+                   set_key_sequence [];
                    loop ()
           end
         | _ ->
