@@ -967,10 +967,6 @@ object(self)
         | LTerm_event.Resize size ->
             set_size size;
             loop ()
-        | LTerm_event.Key { control = false; meta = false; shift = false; code = Char ch } when resolver = None ->
-            Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert ch)));
-            self#insert ch;
-            loop ()
         | LTerm_event.Key key -> begin
              let res =
                match resolver with
@@ -1008,8 +1004,16 @@ object(self)
                    set_key_sequence (S.value key_sequence @ [key]);
                    loop ()
                | Bindings.Rejected ->
-                   resolver <- None;
                    set_key_sequence [];
+                   if resolver = None then
+                     match key with
+                       | { control = false; meta = false; shift = false; code = Char ch } ->
+                           Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert ch)));
+                           self#insert ch
+                       | _ ->
+                           ()
+                   else
+                     resolver <- None;
                    loop ()
           end
         | _ ->

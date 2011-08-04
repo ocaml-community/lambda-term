@@ -198,9 +198,6 @@ object(self)
     event <- E.map (fun _ -> self#queue_draw) (Zed_edit.update engine [cursor]);
     self#on_event
       (function
-         | LTerm_event.Key { control = false; meta = false; shift = false; code = Char ch } when resolver = None ->
-             Zed_edit.insert context (Zed_rope.singleton ch);
-             true
          | LTerm_event.Key key -> begin
              let res = match resolver with Some res -> res | None -> Bindings.resolver [Bindings.pack (fun x -> x) !bindings] in
              match Bindings.resolve key res with
@@ -236,8 +233,17 @@ object(self)
                    resolver <- Some res;
                    true
                | Bindings.Rejected ->
-                   resolver <- None;
-                   false
+                   if resolver = None then
+                     match key with
+                       | { control = false; meta = false; shift = false; code = Char ch } ->
+                           Zed_edit.insert context (Zed_rope.singleton ch);
+                           true
+                       | _ ->
+                           false
+                   else begin
+                     resolver <- None;
+                     false
+                   end
            end
          | _ ->
              false)
