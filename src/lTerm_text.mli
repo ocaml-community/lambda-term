@@ -33,6 +33,13 @@ val stylise : string -> LTerm_style.t -> t
   (** [stylise string style] creates a styled string with all styles
       set to [style]. *)
 
+(** {6 Parenthesis matching} *)
+
+val stylise_parenthesis : t -> ?paren : (UChar.t * UChar.t) list -> int -> LTerm_style.t -> unit
+  (** [stylise_parenthesis text ?paren pos style] searchs for
+      parenthesis group starting or ending at [pos] and apply them the
+      style [style]. [paren] is the list of parenthesis recognized. *)
+
 (** {6 Markup strings} *)
 
 (** Markup strings are used to conveniently define styled strings. *)

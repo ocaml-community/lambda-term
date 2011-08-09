@@ -70,6 +70,102 @@ let stylise str style =
   loop 0 0
 
 (* +-----------------------------------------------------------------+
+   | Parenthesis matching                                            |
+   +-----------------------------------------------------------------+ *)
+
+let lparen = UChar.of_char '('
+let rparen = UChar.of_char ')'
+let lbrace = UChar.of_char '{'
+let rbrace = UChar.of_char '}'
+let lbracket = UChar.of_char '['
+let rbracket = UChar.of_char ']'
+
+type search_result =
+  | No_match_found
+  | No_paren_found
+  | Match_found of int
+
+let stylise_parenthesis text ?(paren = [(lparen, rparen); (lbrace, rbrace); (lbracket, rbracket)]) pos style_paren =
+  if Array.length text > 0 then begin
+    let rec rsearch idx left right depth =
+      if idx >= Array.length text then
+        No_match_found
+      else
+        let ch, _ = text.(idx) in
+        if ch = right then
+          if depth = 0 then
+            Match_found idx
+          else
+            rsearch (idx + 1) left right (depth - 1)
+        else if ch = left then
+          rsearch (idx + 1) left right (depth + 1)
+        else
+          rsearch (idx + 1) left right depth
+    in
+    let rec lsearch idx left right depth =
+      if idx < 0 then
+        No_match_found
+      else
+        let ch, _ = text.(idx) in
+        if ch = left then
+          if depth = 0 then
+            Match_found idx
+          else
+            lsearch (idx - 1) left right (depth - 1)
+        else if ch = right then
+          lsearch (idx - 1) left right (depth + 1)
+        else
+          lsearch (idx - 1) left right depth
+    in
+    let found =
+      if pos = Array.length text then
+        false
+      else
+        let ch, _ = text.(pos) in
+        let rec loop = function
+          | [] ->
+              No_paren_found
+          | (lparen, rparen) :: rest ->
+              if ch = lparen then
+                rsearch (pos + 1) lparen rparen 0
+              else if ch = rparen then
+                lsearch (pos - 1) lparen rparen 0
+              else
+                loop rest
+        in
+        match loop paren with
+          | Match_found idx ->
+              let ch, style = text.(idx) in
+              text.(idx) <- (ch, LTerm_style.merge style_paren style);
+              true
+          | No_match_found ->
+              true
+          | No_paren_found ->
+              false
+    in
+    if not found && pos > 0 then
+      let ch, style = text.(pos - 1) in
+      let rec loop = function
+        | [] ->
+            No_paren_found
+        | (lparen, rparen) :: rest ->
+            if ch = lparen then
+              rsearch (pos + 1) lparen rparen 0
+            else if ch = rparen then
+              lsearch (pos - 2) lparen rparen 0
+            else
+              loop rest
+      in
+      match loop paren with
+        | Match_found idx ->
+            text.(pos - 1) <- (ch, LTerm_style.merge style_paren style);
+            let ch, style = text.(idx) in
+            text.(idx) <- (ch, LTerm_style.merge style_paren style)
+        | No_match_found | No_paren_found ->
+            ()
+  end
+
+(* +-----------------------------------------------------------------+
    | Markup strings                                                  |
    +-----------------------------------------------------------------+ *)
 
