@@ -45,6 +45,49 @@ val create :
       transliteration is used so printing unicode character on the
       terminal will never fail. *)
 
+(** {6 Signals} *)
+
+val catch_resize : bool -> unit
+  (** [catch_resize status] sets whether lambda-term should catch the
+      SIGWINCH signal. If [true] [read_event] will return
+      {!LTerm_event.Resize} events when the user presses Control+C.
+
+      It is catched by default. *)
+
+val catch_break : bool -> unit
+  (** [catch_break status] sets whether lambda-term should catch the
+      SIGINT signal. If [true] [read_event] will return
+      {!LTerm_event.Break} events when the user presses Control+C.
+
+      It is catched by default. *)
+
+val catch_suspend : bool -> unit
+  (** [catch_suspend status] sets whether lambda-term should catch the
+      SIGTSTP signal. If [true] [read_event] will return
+      {!LTerm_event.Suspend} events when the user presses
+      Control+Z.
+
+      It is catched by default. *)
+
+val catch_quit : bool -> unit
+  (** [catch_quit status] sets whether lambda-term should catch the
+      SIGQUIT signal. If [true] [read_event] will return
+      {!LTerm_event.Quit} events when the user presses Control+\.
+
+      It is catched by default. *)
+
+val break : unit -> unit
+  (** Send a SIGINT signal to the process using the default signal
+      handler. *)
+
+val suspend : unit -> unit
+  (** Send a SIGTSTP signal to the process using the default signal
+      handler. *)
+
+val quit : unit -> unit
+  (** Send a SIGQUIT signal to the process using the default signal
+      handler. *)
+
 (** {6 Informations} *)
 
 val model : t -> string

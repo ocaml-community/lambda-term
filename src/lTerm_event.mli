@@ -19,6 +19,15 @@ type t =
       (** An uninterpreted escape sequence. *)
   | Mouse of LTerm_mouse.t
       (** A mouse button has been pressed. *)
+  | Break
+      (** A SIGINT signal have been received (the user pressed
+          Ctrl+C). *)
+  | Suspend
+      (** A SIGTSTP signal have been received (the user pressed
+          Ctrl+Z). *)
+  | Quit
+      (** A SIGQUIT signal have been received (the user pressed
+          Ctrl+\). *)
 
 val to_string : t -> string
   (** [to_string event] returns the string representation of the given

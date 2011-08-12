@@ -12,6 +12,9 @@ type t =
   | Key of LTerm_key.t
   | Sequence of string
   | Mouse of LTerm_mouse.t
+  | Break
+  | Suspend
+  | Quit
 
 let to_string = function
   | Resize size ->
@@ -22,3 +25,9 @@ let to_string = function
       Printf.sprintf "Sequence %S" seq
   | Mouse mouse ->
       Printf.sprintf "Mouse %s" (LTerm_mouse.to_string mouse)
+  | Break ->
+      "Break"
+  | Suspend ->
+      "Suspend"
+  | Quit ->
+      "Quit"

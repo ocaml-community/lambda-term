@@ -564,7 +564,6 @@ object(self)
         end
 
       | Break ->
-          Zed_edit.insert context (Zed_rope.of_string "^C");
           raise Sys.Break
 
       | _ ->
@@ -999,6 +998,8 @@ object(self)
     end else
       return ()
 
+  val mutable mode = None
+
   (* The main loop. *)
   method private loop =
     match_lwt LTerm.read_event term with
@@ -1034,6 +1035,36 @@ object(self)
                   resolver <- None;
                 self#loop
         end
+      | LTerm_event.Break ->
+          raise Sys.Break
+      | LTerm_event.Suspend ->
+          let is_visible = visible in
+          lwt () = self#hide in
+          lwt () = LTerm.flush term in
+          lwt () =
+            match mode with
+              | Some mode ->
+                  LTerm.leave_raw_mode term mode
+              | None ->
+                  return ()
+          in
+          LTerm.suspend ();
+          lwt () =
+            match LTerm.is_a_tty term with
+              | true ->
+                  lwt m = LTerm.enter_raw_mode term in
+                  mode <- Some m;
+                  return ()
+              | false ->
+                  return ()
+          in
+          lwt () = if is_visible then self#show else return () in
+          self#loop
+      | LTerm_event.Quit ->
+          lwt () = self#hide in
+          lwt () = LTerm.flush term in
+          LTerm.quit ();
+          self#loop
       | _ ->
           self#loop
 
@@ -1079,13 +1110,14 @@ object(self)
          ])
     in
 
-    lwt mode =
+    lwt () =
       match LTerm.is_a_tty term with
         | true ->
-            lwt mode = LTerm.enter_raw_mode term in
-            return (Some mode)
+            lwt m = LTerm.enter_raw_mode term in
+            mode <- Some m;
+            return ()
         | false ->
-            return None
+            return ()
     in
 
     lwt result =
