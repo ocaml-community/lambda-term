@@ -358,7 +358,10 @@ and comma_actions seq l = parse
                 | Error msg ->
                     raise (Parse_error (file, num, msg))
       in
-      loop 1 handle_edit_action
+      try_lwt
+        loop 1 handle_edit_action
+      finally
+        Lwt_io.close ic
     with Unix.Unix_error(Unix.ENOENT, _, _) ->
       return ()
 }
