@@ -239,7 +239,6 @@ let () =
   bind [{ control = false; meta = false; shift = false; code = Down }] [History_next];
   bind [{ control = false; meta = false; shift = false; code = Tab }] [Complete];
   bind [{ control = false; meta = false; shift = false; code = Enter }] [Accept];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'c') }] [Break];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'm') }] [Accept];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'l') }] [Clear_screen];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'r') }] [Prev_search];
