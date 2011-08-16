@@ -104,6 +104,26 @@ let break_event, send_break = E.create ()
 let suspend_event, send_suspend = E.create ()
 let quit_event, send_quit = E.create ()
 
+let handle_resize, set_handle_resize = S.create true
+let handle_break, set_handle_break = S.create true
+let handle_suspend, set_handle_suspend = S.create true
+let handle_quit, set_handle_quit = S.create true
+
+let resize_event = E.when_ handle_resize resize_event
+let break_event = E.when_ handle_break break_event
+let suspend_event = E.when_ handle_suspend suspend_event
+let quit_event = E.when_ handle_quit quit_event
+
+let get_ignore_resize () = not (S.value handle_resize)
+let get_ignore_break () = not (S.value handle_break)
+let get_ignore_suspend () = not (S.value handle_suspend)
+let get_ignore_quit () = not (S.value handle_quit)
+
+let set_ignore_resize b = set_handle_resize (not b)
+let set_ignore_break b = set_handle_break (not b)
+let set_ignore_suspend b = set_handle_suspend (not b)
+let set_ignore_quit b = set_handle_quit (not b)
+
 type signal_handler_status =
   | Not_initialized
   | Catched of Lwt_unix.signal_handler_id

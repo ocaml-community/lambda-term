@@ -88,6 +88,38 @@ val quit : unit -> unit
   (** Send a SIGQUIT signal to the process using the default signal
       handler. *)
 
+val get_ignore_resize : unit -> bool
+  (** Returns whether lambda-term is currently ignoring resize
+      events. *)
+
+val get_ignore_break : unit -> bool
+  (** Returns whether lambda-term is currently ignoring break
+      events. *)
+
+val get_ignore_suspend : unit -> bool
+  (** Returns whether lambda-term is currently ignoring suspend
+      events. *)
+
+val get_ignore_quit : unit -> bool
+  (** Returns whether lambda-term is currently ignoring quit
+      events. *)
+
+val set_ignore_resize : bool -> unit
+  (** [set_ignore_resize state] sets whether lambda-term must ignore
+      resize events. *)
+
+val set_ignore_break : bool -> unit
+  (** [set_ignore_resize state] sets whether lambda-term must ignore
+      break events. *)
+
+val set_ignore_suspend : bool -> unit
+  (** [set_ignore_resize state] sets whether lambda-term must ignore
+      suspend events. *)
+
+val set_ignore_quit : bool -> unit
+  (** [set_ignore_resize state] sets whether lambda-term must ignore
+      quit events. *)
+
 (** {6 Informations} *)
 
 val model : t -> string
