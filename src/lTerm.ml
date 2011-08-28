@@ -66,7 +66,7 @@ type t = {
   (* Whether a SIGQUIT signal have been received and have not yet been
      reported. *)
 
-  event_cond : [ `Resize | `Break | `Suspend | `Quit | `Event of LTerm_event.t ] Lwt_condition.t;
+  event_cond : [ `Resize | `Event of LTerm_event.t ] Lwt_condition.t;
   (* Condition used to wakeup the read_event thread on unix. *)
 
   mutable event : unit event;
@@ -84,128 +84,14 @@ type t = {
    | Signals                                                         |
    +-----------------------------------------------------------------+ *)
 
-let break () =
-  let behavior = Sys.signal Sys.sigint Sys.Signal_default in
-  Unix.kill (Unix.getpid ()) Sys.sigint;
-  Sys.set_signal Sys.sigint behavior
-
-let suspend () =
-  let behavior = Sys.signal Sys.sigtstp Sys.Signal_default in
-  Unix.kill (Unix.getpid ()) Sys.sigtstp;
-  Sys.set_signal Sys.sigtstp behavior
-
-let quit () =
-  let behavior = Sys.signal Sys.sigquit Sys.Signal_default in
-  Unix.kill (Unix.getpid ()) Sys.sigquit;
-  Sys.set_signal Sys.sigquit behavior
-
 let resize_event, send_resize = E.create ()
-let break_event, send_break = E.create ()
-let suspend_event, send_suspend = E.create ()
-let quit_event, send_quit = E.create ()
 
-let handle_resize, set_handle_resize = S.create true
-let handle_break, set_handle_break = S.create true
-let handle_suspend, set_handle_suspend = S.create true
-let handle_quit, set_handle_quit = S.create true
-
-let resize_event = E.when_ handle_resize resize_event
-let break_event = E.when_ handle_break break_event
-let suspend_event = E.when_ handle_suspend suspend_event
-let quit_event = E.when_ handle_quit quit_event
-
-let get_ignore_resize () = not (S.value handle_resize)
-let get_ignore_break () = not (S.value handle_break)
-let get_ignore_suspend () = not (S.value handle_suspend)
-let get_ignore_quit () = not (S.value handle_quit)
-
-let set_ignore_resize b = set_handle_resize (not b)
-let set_ignore_break b = set_handle_break (not b)
-let set_ignore_suspend b = set_handle_suspend (not b)
-let set_ignore_quit b = set_handle_quit (not b)
-
-type signal_handler_status =
-  | Not_initialized
-  | Catched of Lwt_unix.signal_handler_id
-  | Disabled
-
-let resize_handler = ref Not_initialized
-let break_handler = ref Not_initialized
-let suspend_handler = ref Not_initialized
-let quit_handler = ref Not_initialized
-
-let catch_resize status =
-  if status then
-    match !resize_handler with
-      | Not_initialized | Disabled -> begin
-          match LTerm_unix.sigwinch with
-            | Some signum ->
-                resize_handler := Catched (Lwt_unix.on_signal signum send_resize)
-            | None ->
-                resize_handler := Disabled
-        end
-      | Catched _ ->
-          ()
-  else
-    match !resize_handler with
-      | Not_initialized ->
-          resize_handler := Disabled
-      | Disabled ->
-          ()
-      | Catched id ->
-          resize_handler := Disabled;
-          Lwt_unix.disable_signal_handler id
-
-let catch_break status =
-  if status then
-    match !break_handler with
-      | Not_initialized | Disabled ->
-          break_handler := Catched (Lwt_unix.on_signal Sys.sigint send_break)
-      | Catched _ ->
-          ()
-  else
-    match !break_handler with
-      | Not_initialized ->
-          break_handler := Disabled;
-      | Disabled ->
-          ()
-      | Catched id ->
-          break_handler := Disabled;
-          Lwt_unix.disable_signal_handler id
-
-let catch_suspend status =
-  if status then
-    match !suspend_handler with
-      | Not_initialized | Disabled ->
-          suspend_handler := Catched (Lwt_unix.on_signal Sys.sigtstp send_suspend)
-      | Catched _ ->
-          ()
-  else
-    match !suspend_handler with
-      | Not_initialized ->
-          suspend_handler := Disabled;
-      | Disabled ->
-          ()
-      | Catched id ->
-          suspend_handler := Disabled;
-          Lwt_unix.disable_signal_handler id
-
-let catch_quit status =
-  if status then
-    match !quit_handler with
-      | Not_initialized | Disabled ->
-          quit_handler := Catched (Lwt_unix.on_signal Sys.sigquit send_quit)
-      | Catched _ ->
-          ()
-  else
-    match !quit_handler with
-      | Not_initialized ->
-          quit_handler := Disabled;
-      | Disabled ->
-          ()
-      | Catched id ->
-          quit_handler := Disabled;
-          Lwt_unix.disable_signal_handler id
+let ()=
+  match LTerm_unix.sigwinch with
+    | Some signum ->
+        ignore (Lwt_unix.on_signal signum send_resize)
+    | None ->
+        ()
 
 (* +-----------------------------------------------------------------+
    | Creation                                                        |
@@ -290,34 +176,13 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
     outgoing_is_a_tty;
     escape_time = 0.1;
   } in
-  if not windows then begin
-    if !resize_handler = Not_initialized then catch_resize true;
-    if !break_handler = Not_initialized then catch_break true;
-    if !suspend_handler = Not_initialized then catch_suspend true;
-    if !quit_handler = Not_initialized then catch_quit true;
-    term.event <- E.select [
-      E.map
-        (fun _ ->
-           term.resize_received <- true;
-           Lwt_condition.signal term.event_cond `Resize)
-        resize_event;
-      E.map
-        (fun _ ->
-           term.break_received <- true;
-           Lwt_condition.signal term.event_cond `Break)
-        break_event;
-      E.map
-        (fun _ ->
-           term.suspend_received <- true;
-           Lwt_condition.signal term.event_cond `Suspend)
-        suspend_event;
-      E.map
-        (fun _ ->
-           term.quit_received <- true;
-           Lwt_condition.signal term.event_cond `Quit)
-        quit_event;
-    ]
-  end;
+  term.event <- (
+    E.map
+      (fun _ ->
+         term.resize_received <- true;
+         Lwt_condition.signal term.event_cond `Resize)
+      resize_event
+  );
   return term
 
 let model t = t.model
@@ -396,6 +261,7 @@ let enter_raw_mode term =
           Unix.c_icanon = false;
           Unix.c_vmin = 1;
           Unix.c_vtime = 0;
+          Unix.c_isig = false;
       } in
       term.raw_mode <- true;
       return (Mode_unix attr)
@@ -666,15 +532,6 @@ let read_event term =
     term.resize_received <- false;
     lwt size = get_size term in
     return (LTerm_event.Resize size)
-  end else if term.break_received then begin
-    term.break_received <- false;
-    return LTerm_event.Break
-  end else if term.suspend_received then begin
-    term.suspend_received <- false;
-    return LTerm_event.Suspend
-  end else if term.quit_received then begin
-    term.quit_received <- false;
-    return LTerm_event.Quit
   end else
     pick [LTerm_unix.parse_event ~escape_time:term.escape_time term.incoming_cd term.input_stream >|= (fun ev -> `Event ev);
           Lwt_condition.wait term.event_cond] >>= function
@@ -684,15 +541,6 @@ let read_event term =
           term.resize_received <- false;
           lwt size = get_size term in
           return (LTerm_event.Resize size)
-      | `Break ->
-          term.break_received <- false;
-          return LTerm_event.Break
-      | `Suspend ->
-          term.suspend_received <- false;
-          return LTerm_event.Suspend
-      | `Quit ->
-          term.quit_received <- false;
-          return LTerm_event.Quit
 
 (* +-----------------------------------------------------------------+
    | Styled printing                                                 |

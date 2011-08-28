@@ -92,6 +92,8 @@ type action =
       (** Cancel search mode. *)
   | Break
       (** Raise [Sys.Break]. *)
+  | Suspend
+      (** Suspend the program. *)
 
 val bindings : action list Zed_input.Make(LTerm_key).t ref
   (** Bindings. *)

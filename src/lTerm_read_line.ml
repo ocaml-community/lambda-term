@@ -151,6 +151,7 @@ type action =
   | Prev_search
   | Cancel_search
   | Break
+  | Suspend
 
 let doc_of_action = function
   | Edit action -> LTerm_edit.doc_of_action action
@@ -168,6 +169,7 @@ let doc_of_action = function
   | Prev_search -> "search backward in the history."
   | Cancel_search -> "cancel search mode."
   | Break -> "cancel edition."
+  | Suspend -> "suspend edition."
 
 let actions = [
   Interrupt_or_delete_next_char, "interrupt-or-delete-next-char";
@@ -184,6 +186,7 @@ let actions = [
   Prev_search, "prev-search";
   Cancel_search, "cancel-search";
   Break, "break";
+  Suspend, "suspend";
 ]
 
 let actions_to_names = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> Pervasives.compare a1 a2) actions)
@@ -239,6 +242,8 @@ let () =
   bind [{ control = false; meta = false; shift = false; code = Down }] [History_next];
   bind [{ control = false; meta = false; shift = false; code = Tab }] [Complete];
   bind [{ control = false; meta = false; shift = false; code = Enter }] [Accept];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'c') }] [Break];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'z') }] [Suspend];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'm') }] [Accept];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'l') }] [Clear_screen];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'r') }] [Prev_search];
@@ -1034,36 +1039,6 @@ object(self)
                   resolver <- None;
                 self#loop
         end
-      | LTerm_event.Break ->
-          raise Sys.Break
-      | LTerm_event.Suspend ->
-          let is_visible = visible in
-          lwt () = self#hide in
-          lwt () = LTerm.flush term in
-          lwt () =
-            match mode with
-              | Some mode ->
-                  LTerm.leave_raw_mode term mode
-              | None ->
-                  return ()
-          in
-          LTerm.suspend ();
-          lwt () =
-            match LTerm.is_a_tty term with
-              | true ->
-                  lwt m = LTerm.enter_raw_mode term in
-                  mode <- Some m;
-                  return ()
-              | false ->
-                  return ()
-          in
-          lwt () = if is_visible then self#show else return () in
-          self#loop
-      | LTerm_event.Quit ->
-          lwt () = self#hide in
-          lwt () = LTerm.flush term in
-          LTerm.quit ();
-          self#loop
       | _ ->
           self#loop
 
@@ -1081,6 +1056,29 @@ object(self)
     | Edit LTerm_edit.Play_macro :: actions ->
         Zed_macro.cancel self#macro;
         self#exec (Zed_macro.contents macro @ actions)
+    | Suspend :: actions ->
+        let is_visible = visible in
+        lwt () = self#hide in
+        lwt () = LTerm.flush term in
+        lwt () =
+          match mode with
+            | Some mode ->
+                LTerm.leave_raw_mode term mode
+            | None ->
+                return ()
+        in
+        Unix.kill (Unix.getpid ()) Sys.sigtstp;
+        lwt () =
+          match LTerm.is_a_tty term with
+            | true ->
+                lwt m = LTerm.enter_raw_mode term in
+                mode <- Some m;
+                return ()
+            | false ->
+                return ()
+        in
+        lwt () = if is_visible then self#show else return () in
+        self#exec actions
     | action :: actions ->
         self#send_action action;
         self#exec actions
