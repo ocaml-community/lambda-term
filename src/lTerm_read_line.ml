@@ -1033,6 +1033,10 @@ object(self)
                     | { control = false; meta = false; shift = false; code = Char ch } ->
                         Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert ch)));
                         self#insert ch
+                    | { code = Char ch } when LTerm.windows term && UChar.code ch >= 32 ->
+                        (* Windows reports Shift+A for A, ... *)
+                        Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert ch)));
+                        self#insert ch
                     | _ ->
                         ()
                 else
