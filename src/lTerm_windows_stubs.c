@@ -102,6 +102,9 @@ static void worker_read_console_input(struct job_read_console_input *job)
 {
   DWORD event_count;
   INPUT_RECORD *input = &(job->input);
+  WORD code;
+  int i;
+  DWORD bs;
 
   for (;;) {
     if (!ReadConsoleInput(job->handle, input, 1, &event_count)) {
@@ -114,15 +117,15 @@ static void worker_read_console_input(struct job_read_console_input *job)
       if (input->Event.KeyEvent.bKeyDown) {
         if (input->Event.KeyEvent.uChar.UnicodeChar)
           return;
-        WORD code = input->Event.KeyEvent.wVirtualKeyCode;
-        int i;
+        code = input->Event.KeyEvent.wVirtualKeyCode;
+        i;
         for (i = 0; i < sizeof(code_table)/sizeof(code_table[0]); i++)
           if (code == code_table[i])
             return;
       }
       break;
     case MOUSE_EVENT: {
-      DWORD bs = input->Event.MouseEvent.dwButtonState;
+      bs = input->Event.MouseEvent.dwButtonState;
       if (!(input->Event.MouseEvent.dwEventFlags & MOUSE_MOVED) &&
           bs & (FROM_LEFT_1ST_BUTTON_PRESSED |
                 FROM_LEFT_2ND_BUTTON_PRESSED |
@@ -149,6 +152,10 @@ CAMLprim value lt_windows_read_console_input_job(value val_fd)
 
 CAMLprim value lt_windows_read_console_input_result(value val_job)
 {
+  INPUT_RECORD *input;
+  DWORD cks, bs;
+  WORD code;
+  int i;
   CAMLparam1(val_job);
   CAMLlocal3(result, x, y);
   struct job_read_console_input *job = Job_read_console_input_val(val_job);
@@ -156,18 +163,17 @@ CAMLprim value lt_windows_read_console_input_result(value val_job)
     win32_maperr(job->error_code);
     uerror("ReadConsoleInput", Nothing);
   }
-  INPUT_RECORD *input = &(job->input);
+  input = &(job->input);
   switch (input->EventType) {
   case KEY_EVENT: {
     result = caml_alloc(1, 0);
     x = caml_alloc_tuple(4);
     Field(result, 0) = x;
-    DWORD cks = input->Event.KeyEvent.dwControlKeyState;
+    cks = input->Event.KeyEvent.dwControlKeyState;
     Field(x, 0) = Val_bool((cks & LEFT_CTRL_PRESSED) | (cks & RIGHT_CTRL_PRESSED));
     Field(x, 1) = Val_bool((cks & LEFT_ALT_PRESSED) | (cks & RIGHT_ALT_PRESSED));
     Field(x, 2) = Val_bool(cks & SHIFT_PRESSED);
-    WORD code = input->Event.KeyEvent.wVirtualKeyCode;
-    int i;
+    code = input->Event.KeyEvent.wVirtualKeyCode;
     for (i = 0; i < sizeof(code_table)/sizeof(code_table[0]); i++)
       if (code == code_table[i]) {
         Field(x, 3) = Val_int(i);
@@ -182,13 +188,13 @@ CAMLprim value lt_windows_read_console_input_result(value val_job)
     result = caml_alloc(1, 1);
     x = caml_alloc_tuple(6);
     Field(result, 0) = x;
-    DWORD cks = input->Event.MouseEvent.dwControlKeyState;
+    cks = input->Event.MouseEvent.dwControlKeyState;
     Field(x, 0) = Val_bool((cks & LEFT_CTRL_PRESSED) | (cks & RIGHT_CTRL_PRESSED));
     Field(x, 1) = Val_bool((cks & LEFT_ALT_PRESSED) | (cks & RIGHT_ALT_PRESSED));
     Field(x, 2) = Val_bool(cks & SHIFT_PRESSED);
     Field(x, 4) = Val_int(input->Event.MouseEvent.dwMousePosition.Y);
     Field(x, 5) = Val_int(input->Event.MouseEvent.dwMousePosition.X);
-    DWORD bs = input->Event.MouseEvent.dwButtonState;
+    bs = input->Event.MouseEvent.dwButtonState;
     if (bs & FROM_LEFT_1ST_BUTTON_PRESSED)
       Field(x, 3) = Val_int(0);
     else if (bs & FROM_LEFT_2ND_BUTTON_PRESSED)
@@ -223,6 +229,7 @@ CAMLprim value lt_windows_get_console_screen_buffer_info(value val_fd)
   CAMLlocal2(result, x);
 
   CONSOLE_SCREEN_BUFFER_INFO info;
+  int color;
 
   if (!GetConsoleScreenBufferInfo(Handle_val(val_fd), &info)) {
     win32_maperr(GetLastError());
@@ -242,7 +249,7 @@ CAMLprim value lt_windows_get_console_screen_buffer_info(value val_fd)
   Field(result, 1) = x;
 
   x = caml_alloc_tuple(2);
-  int color = 0;
+  color = 0;
   if (info.wAttributes & FOREGROUND_RED) color |= 1;
   if (info.wAttributes & FOREGROUND_GREEN) color |= 2;
   if (info.wAttributes & FOREGROUND_BLUE) color |= 4;
@@ -278,13 +285,14 @@ CAMLprim value lt_windows_get_console_screen_buffer_info(value val_fd)
 CAMLprim value lt_windows_get_console_mode(value val_fd)
 {
   DWORD mode;
+  value result;
 
   if (!GetConsoleMode(Handle_val(val_fd), &mode)) {
     win32_maperr(GetLastError());
     uerror("GetConsoleMode", Nothing);
   }
 
-  value result = caml_alloc_tuple(7);
+  result = caml_alloc_tuple(7);
   Field(result, 0) = Val_bool(mode & ENABLE_ECHO_INPUT);
   Field(result, 1) = Val_bool(mode & ENABLE_INSERT_MODE);
   Field(result, 2) = Val_bool(mode & ENABLE_LINE_INPUT);
@@ -321,11 +329,12 @@ CAMLprim value lt_windows_set_console_mode(value val_fd, value val_mode)
 CAMLprim value lt_windows_get_console_cursor_info(value val_fd)
 {
   CONSOLE_CURSOR_INFO info;
+  value result;
   if (!GetConsoleCursorInfo(Handle_val(val_fd), &info)) {
     win32_maperr(GetLastError());
     uerror("GetConsoleCursorInfo", Nothing);
   }
-  value result = caml_alloc_tuple(2);
+  result = caml_alloc_tuple(2);
   Field(result, 0) = Val_int(info.dwSize);
   Field(result, 1) = Val_bool(info.bVisible);
   return result;
@@ -391,21 +400,27 @@ CAMLprim value lt_windows_write_console_output(value val_fd, value val_chars, va
   CAMLparam5(val_fd, val_chars, val_size, val_coord, val_rect);
   CAMLlocal1(result);
 
+  value line, src;
+  int fg, bg;
+  WORD attrs;
   int lines = Int_val(Field(val_size, 0));
   int columns = Int_val(Field(val_size, 1));
+  COORD size;
+  COORD coord;
+  SMALL_RECT rect;
 
   /* Convert characters */
-  CHAR_INFO buffer[lines * columns];
+  CHAR_INFO *buffer = (CHAR_INFO*)lwt_unix_malloc(lines * columns * sizeof (CHAR_INFO));
   int l, c;
   CHAR_INFO *dst = buffer;
   for (l = 0; l < lines; l++) {
-    value line = Field(val_chars, l);
+    line = Field(val_chars, l);
     for (c = 0; c < columns; c++) {
-      value src = Field(line, c);
+      src = Field(line, c);
       dst->Char.UnicodeChar = Int_val(Field(src, 0));
-      int fg = Int_val(Field(src, 1));
-      int bg = Int_val(Field(src, 2));
-      WORD attrs = 0;
+      fg = Int_val(Field(src, 1));
+      bg = Int_val(Field(src, 2));
+      attrs = 0;
       if (fg & 1) attrs |= FOREGROUND_RED;
       if (fg & 2) attrs |= FOREGROUND_GREEN;
       if (fg & 4) attrs |= FOREGROUND_BLUE;
@@ -419,9 +434,6 @@ CAMLprim value lt_windows_write_console_output(value val_fd, value val_chars, va
     }
   }
 
-  COORD size;
-  COORD coord;
-  SMALL_RECT rect;
   size.X = Int_val(Field(val_size, 1));
   size.Y = Int_val(Field(val_size, 0));
   coord.X = Int_val(Field(val_coord, 1));
@@ -432,9 +444,11 @@ CAMLprim value lt_windows_write_console_output(value val_fd, value val_chars, va
   rect.Right = Int_val(Field(val_rect, 3)) - 1;
 
   if (!WriteConsoleOutput(Handle_val(val_fd), buffer, size, coord, &rect)) {
+    free(buffer);
     win32_maperr(GetLastError());
     uerror("WriteConsoleOutput", Nothing);
   }
+  free(buffer);
 
   result = caml_alloc_tuple(4);
   Field(result, 0) = Val_int(rect.Top);

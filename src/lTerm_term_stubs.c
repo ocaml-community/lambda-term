@@ -24,13 +24,14 @@
 CAMLprim value lt_term_get_size_from_fd(value fd)
 {
   CONSOLE_SCREEN_BUFFER_INFO info;
+  value result;
 
   if (!GetConsoleScreenBufferInfo(Handle_val(fd), &info)) {
     win32_maperr(GetLastError());
     uerror("GetConsoleScreenBufferInfo", Nothing);
   }
 
-  value result = caml_alloc_tuple(2);
+  result = caml_alloc_tuple(2);
   Field(result, 0) = Val_int(info.srWindow.Bottom - info.srWindow.Top + 1);
   Field(result, 1) = Val_int(info.srWindow.Right - info.srWindow.Left + 1);
   return result;
@@ -39,13 +40,14 @@ CAMLprim value lt_term_get_size_from_fd(value fd)
 CAMLprim value lt_term_set_size_from_fd(value fd, value val_size)
 {
   CONSOLE_SCREEN_BUFFER_INFO info;
+  SMALL_RECT rect;
 
   if (!GetConsoleScreenBufferInfo(Handle_val(fd), &info)) {
     win32_maperr(GetLastError());
     uerror("GetConsoleScreenBufferInfo", Nothing);
   }
 
-  SMALL_RECT rect;
+  rect;
   rect.Top = info.srWindow.Top;
   rect.Left = info.srWindow.Left;
   rect.Bottom = rect.Top + Int_val(Field(val_size, 0)) - 1;
