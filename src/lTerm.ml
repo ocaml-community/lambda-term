@@ -1060,6 +1060,7 @@ let render_windows term ?(delta = 0) kind matrix =
            line)
       matrix
   in
+  lwt () = Lwt_io.flush term.oc in
   let info = LTerm_windows.get_console_screen_buffer_info term.outgoing_fd in
   let window_rect = info.LTerm_windows.window in
   let rect =

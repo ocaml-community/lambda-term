@@ -795,6 +795,7 @@ object(self)
   method draw_update =
     let size = S.value size in
     if visible && size.cols > 0 then begin
+      let previous_height = height in
       let styled, position = self#stylise false in
       let prompt = S.value prompt in
       (* Compute the position of the cursor after displaying the
@@ -918,6 +919,15 @@ object(self)
       in
       lwt () =
         if LTerm.windows term then begin
+          (* Make sure there is enough space for displaying everything. *)
+          lwt () =
+            if height > previous_height then begin
+              lwt () = LTerm.fprint term (String.make (height - cursor.row) '\n') in
+              cursor <- { row = height; col = 0 };
+              return ()
+            end else
+              return ()
+          in
           (* Display everything. *)
           lwt () = LTerm.print_box term ~delta:(-cursor.row) matrix in
           (* Move the cursor. *)
