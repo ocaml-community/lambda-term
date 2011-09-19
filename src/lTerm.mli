@@ -258,10 +258,10 @@ val render_update : t -> LTerm_draw.matrix -> LTerm_draw.matrix -> unit Lwt.t
       It raises {!Not_a_tty} if the output of the given terminal is
       not a tty. *)
 
-val print_box : t -> LTerm_draw.matrix -> unit Lwt.t
+val print_box : t -> ?delta : int -> LTerm_draw.matrix -> unit Lwt.t
   (** [print_box term matrix] prints the contents of [matrix] starting
-      at current cursor row. Note that when you have the choice
-      between using {!fprints} and {!print_box} you should use
+      at current cursor row plus delta. Note that when you have the
+      choice between using {!fprints} and {!print_box} you should use
       {!print_box} because it works better under windows and is more
       efficient.
 

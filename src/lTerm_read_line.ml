@@ -916,32 +916,40 @@ object(self)
           matrix
         end
       in
-      lwt () = LTerm.hide_cursor term in
       lwt () =
-        if displayed then
-          (* Go back to the beginning of displayed text. *)
-          LTerm.move term (-cursor.row) (-cursor.col)
-        else
+        if LTerm.windows term then begin
+          (* Display everything. *)
+          lwt () = LTerm.print_box term ~delta:(-cursor.row) matrix in
+          (* Move the cursor. *)
+          lwt () = LTerm.move term (pos_after_before.row - cursor.row) (pos_after_before.col - cursor.col) in
+          (* Update the cursor. *)
+          cursor <- pos_after_before;
           return ()
+        end else begin
+          lwt () = LTerm.hide_cursor term in
+          lwt () =
+            if displayed then
+              (* Go back to the beginning of displayed text. *)
+              LTerm.move term (-cursor.row) (-cursor.col)
+            else
+              return ()
+          in
+          (* Display everything. *)
+          lwt () = LTerm.print_box term matrix in
+          (* Update the cursor. *)
+          cursor <- pos_after_before;
+          (* Move the cursor to the right position. *)
+          lwt () =
+            (* On Unix the cursor stay at the end of line. We put it
+               back to the beginning of the line immediatly because
+               all terminals do not respond the same way when the
+               cursor is at the end of line. *)
+            lwt () = LTerm.fprint term "\r" in
+            LTerm.move term (cursor.row - Array.length matrix + 1) cursor.col
+          in
+          LTerm.show_cursor term
+        end
       in
-      (* Display everything. *)
-      lwt () = LTerm.print_box term matrix in
-      (* Update the cursor. *)
-      cursor <- pos_after_before;
-      (* Move the cursor to the right position. *)
-      lwt () =
-        if LTerm.windows term then
-          (* On windows the cursor is not moved. *)
-          LTerm.move term cursor.row cursor.col
-        else
-          (* On Unix the cursor stay at the end of line. We put it
-             back to the beginning of the line immediatly because all
-             terminals do not respond the same way when the cursor is
-             at the end of line. *)
-          lwt () = LTerm.fprint term "\r" in
-          LTerm.move term (cursor.row - Array.length matrix + 1) cursor.col
-      in
-      lwt () = LTerm.show_cursor term in
       lwt () = LTerm.flush term in
       displayed <- true;
       return ()

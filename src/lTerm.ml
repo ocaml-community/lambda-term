@@ -1040,7 +1040,7 @@ let render_update_unix term kind old_matrix matrix =
   Buffer.add_string buf "\027[0m";
   fprint term (Buffer.contents buf)
 
-let render_windows term kind matrix =
+let render_windows term ?(delta = 0) kind matrix =
   let open LTerm_draw in
   (* Build the matrix of char infos *)
   let matrix =
@@ -1068,8 +1068,8 @@ let render_windows term kind matrix =
           window_rect
       | Render_box ->
           { window_rect with
-              row1 = info.LTerm_windows.cursor_position.row;
-              row2 = info.LTerm_windows.cursor_position.row + Array.length matrix }
+              row1 = info.LTerm_windows.cursor_position.row + delta;
+              row2 = info.LTerm_windows.cursor_position.row + delta + Array.length matrix }
   in
   ignore (
     LTerm_windows.write_console_output
@@ -1092,11 +1092,12 @@ let render_update term old_matrix matrix =
 
 let render term m = render_update term [||] m
 
-let print_box term matrix =
+let print_box term ?(delta = 0) matrix =
   if term.outgoing_is_a_tty then
     if term.windows then
-      render_windows term Render_box matrix
+      render_windows term ~delta Render_box matrix
     else
+      lwt () = if delta <> 0 then move term delta 0 else return () in
       render_update_unix term Render_box [||] matrix
   else
     raise_lwt Not_a_tty
