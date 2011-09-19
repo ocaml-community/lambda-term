@@ -916,6 +916,7 @@ object(self)
           matrix
         end
       in
+      lwt () = LTerm.hide_cursor term in
       lwt () =
         if displayed then
           (* Go back to the beginning of displayed text. *)
@@ -940,6 +941,7 @@ object(self)
           lwt () = LTerm.fprint term "\r" in
           LTerm.move term (cursor.row - Array.length matrix + 1) cursor.col
       in
+      lwt () = LTerm.show_cursor term in
       lwt () = LTerm.flush term in
       displayed <- true;
       return ()
