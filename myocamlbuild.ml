@@ -27,21 +27,7 @@ let () =
                ~dep:"src/gen_color_mappings.byte"
                ~prod:"src/lTerm_color_mappings.ml"
                (fun _ _ ->
-                  Cmd(S[P"src/gen_color_mappings.byte"; A"src/lTerm_color_mappings.ml"]));
-
-             let env = BaseEnvLight.load () in
-
-             if BaseEnvLight.var_get "need_liconv" env = "true" then begin
-               flag ["ocamlmklib"; "c"; "use_iconv"] & A"-liconv";
-               flag ["link"; "ocaml"; "use_iconv"] & S[A"-cclib"; A"-liconv"]
-             end;
-
-             let dir = BaseEnvLight.var_get "iconv_prefix" env in
-             if dir <> "" then begin
-               flag ["ocamlmklib"; "c"; "use_iconv"] & A("-L" ^ dir ^ "/lib");
-               flag ["c"; "compile"; "use_iconv"] & S[A"-ccopt"; A("-I" ^ dir ^ "/include")];
-               flag ["link"; "ocaml"; "use_iconv"] & S[A"-cclib"; A("-L" ^ dir ^ "/lib")]
-             end
+                  Cmd(S[P"src/gen_color_mappings.byte"; A"src/lTerm_color_mappings.ml"]))
 
          | _ ->
              ())

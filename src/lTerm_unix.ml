@@ -21,48 +21,30 @@ let system_encoding = get_system_encoding ()
    | Parsing of encoded characters                                   |
    +-----------------------------------------------------------------+ *)
 
-exception Fallback
+class output_single (cell : UChar.t option ref) = object
+  method put char = cell := Some char
+  method flush () = ()
+  method close_out () = ()
+end
 
-let parse_char cd st first_byte =
-  let open LTerm_iconv in
-  let src = {
-    bytes = String.create 128;
-    index = 0;
-    limit = 1;
-  }
-  and dst = {
-    bytes = String.create 4;
-    index = 0;
-    limit = 4;
-  } in
+let parse_char encoding st first_byte =
+  let cell = ref None in
+  let output = new CharEncoding.convert_uchar_output encoding (new output_single cell) in
   let rec loop st =
-    try
-      iconv cd ~src ~dst;
-      return
-        (UChar.of_int
-           ((Char.code dst.bytes.[0] lsl 24)
-            lor (Char.code dst.bytes.[1] lsl 16)
-            lor (Char.code dst.bytes.[2] lsl 8)
-            lor (Char.code dst.bytes.[3])))
-    with
-      | Invalid_sequence ->
-          raise_lwt Fallback
-      | Unterminated_sequence ->
-          Lwt_stream.get st >>= function
-            | Some ch ->
-                src.bytes.[src.limit] <- ch;
-                src.limit <- src.limit + 1;
-                loop st
-            | None ->
-                raise_lwt Fallback
+    match !cell with
+      | Some char ->
+          return char
+      | None ->
+          lwt byte = Lwt_stream.next st in
+          assert (output#output (String.make 1 byte) 0 1 = 1);
+          output#flush ();
+          loop st
   in
   try_lwt
-    src.bytes.[0] <- first_byte;
-    reset cd;
+    assert (output#output (String.make 1 first_byte) 0 1 = 1);
     Lwt_stream.parse st loop
-  with
-    | Fallback ->
-        return (UChar.of_char first_byte)
+  with CharEncoding.Malformed_code | Lwt_stream.Empty ->
+    return (UChar.of_char first_byte)
 
 (* +-----------------------------------------------------------------+
    | Input of escape sequence                                        |
@@ -551,7 +533,7 @@ let find_sequence seq =
   in
   loop 0 (Array.length sequences)
 
-let rec parse_event ?(escape_time = 0.1) cd stream =
+let rec parse_event ?(escape_time = 0.1) encoding stream =
   lwt byte = Lwt_stream.next stream in
   match byte with
     | '\x1b' -> begin
@@ -587,7 +569,7 @@ let rec parse_event ?(escape_time = 0.1) cd stream =
                                  | _ -> raise Exit);
                           })
                 with Exit ->
-                  parse_event cd stream
+                  parse_event encoding stream
               end
             | seq ->
                 match find_sequence seq with
@@ -638,7 +620,7 @@ let rec parse_event ?(escape_time = 0.1) cd stream =
                       return(LTerm_event.Key  { control = false; meta = true; shift = false; code = Char(UChar.of_char byte) })
                   | byte' ->
                       lwt () = Lwt_stream.junk stream in
-                      lwt code = parse_char cd stream byte' in
+                      lwt code = parse_char encoding stream byte' in
                       return (LTerm_event.Key { control = false; meta = true; shift = false; code = Char code })
       end
     | '\x00' .. '\x1f' ->
@@ -653,5 +635,5 @@ let rec parse_event ?(escape_time = 0.1) cd stream =
         return (LTerm_event.Key { control = false; meta = false; shift = false; code = Char(UChar.of_char byte) })
     | _ ->
         (* Encoded characters *)
-        lwt code = parse_char cd stream byte in
+        lwt code = parse_char encoding stream byte in
         return (LTerm_event.Key { control = false; meta = false; shift = false; code = Char code })

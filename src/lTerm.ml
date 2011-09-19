@@ -43,9 +43,12 @@ type t = {
   oc : Lwt_io.output_channel;
   (* Channels. *)
 
-  incoming_cd : LTerm_iconv.t;
-  outgoing_cd : LTerm_iconv.t;
-  (* Conversion descriptors. *)
+  incoming_encoding : CharEncoding.t;
+  outgoing_encoding : CharEncoding.t;
+  (* Characters encodings. *)
+
+  outgoing_is_utf8 : bool;
+  (* Whether the outgoing encoding is UTF-8. *)
 
   input_stream : char Lwt_stream.t;
   (* Stream of character input from the terminal. *)
@@ -129,18 +132,30 @@ let colors_of_term = function
   | _ -> 16
 
 let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding ?outgoing_encoding incoming_fd ic outgoing_fd oc =
-  let incoming_encoding, outgoing_encoding =
-    match windows with
-      | true ->
-          (Printf.sprintf "cp%d" (LTerm_windows.get_console_cp ()),
-           Printf.sprintf "cp%d" (LTerm_windows.get_console_output_cp ()))
-      | false ->
-          (LTerm_unix.system_encoding,
-           LTerm_unix.system_encoding)
+  let incoming_encoding =
+    match incoming_encoding with
+      | Some enc ->
+          enc
+      | None ->
+          if windows then
+            Printf.sprintf "CP%d" (LTerm_windows.get_console_cp ())
+          else
+            LTerm_unix.system_encoding
+  and outgoing_encoding =
+    match outgoing_encoding with
+      | Some enc ->
+          enc
+      | None ->
+          if windows then
+            Printf.sprintf "CP%d" (LTerm_windows.get_console_output_cp ())
+          else
+            LTerm_unix.system_encoding
   in
   let colors = colors_of_term model in
   lwt incoming_is_a_tty = Lwt_unix.isatty incoming_fd
   and outgoing_is_a_tty = Lwt_unix.isatty outgoing_fd in
+  let incoming_encoding = CharEncoding.of_name incoming_encoding
+  and outgoing_encoding = CharEncoding.of_name outgoing_encoding in
   let term = {
     model;
     colors;
@@ -163,8 +178,9 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
     outgoing_fd;
     ic;
     oc;
-    incoming_cd = LTerm_iconv.iconv_open ~to_code:"UCS-4BE" ~of_code:incoming_encoding;
-    outgoing_cd = LTerm_iconv.iconv_open ~to_code:(outgoing_encoding ^ "//TRANSLIT") ~of_code:"UTF-8";
+    incoming_encoding;
+    outgoing_encoding;
+    outgoing_is_utf8 = CharEncoding.name_of outgoing_encoding = "UTF-8";
     input_stream = Lwt_stream.from (fun () -> Lwt_io.read_char_opt ic);
     resize_received = false;
     suspend_received = false;
@@ -533,7 +549,7 @@ let read_event term =
     lwt size = get_size term in
     return (LTerm_event.Resize size)
   end else
-    pick [LTerm_unix.parse_event ~escape_time:term.escape_time term.incoming_cd term.input_stream >|= (fun ev -> `Event ev);
+    pick [LTerm_unix.parse_event ~escape_time:term.escape_time term.incoming_encoding term.input_stream >|= (fun ev -> `Event ev);
           Lwt_condition.wait term.event_cond] >>= function
       | `Event ev ->
           return ev
@@ -541,6 +557,162 @@ let read_event term =
           term.resize_received <- false;
           lwt size = get_size term in
           return (LTerm_event.Resize size)
+
+(* +-----------------------------------------------------------------+
+   | String recoding                                                 |
+   +-----------------------------------------------------------------+ *)
+
+let vline = UChar.of_char '|'
+let vlline = UChar.of_char '+'
+let dlcorner = UChar.of_char '+'
+let urcorner = UChar.of_char '+'
+let huline = UChar.of_char '+'
+let hdline = UChar.of_char '+'
+let vrline = UChar.of_char '+'
+let hline = UChar.of_char '-'
+let cross = UChar.of_char '+'
+let ulcorner = UChar.of_char '+'
+let drcorner = UChar.of_char '+'
+let question = UChar.of_char '?'
+
+module UNF = UNF.Make (UText)
+
+(* Map characters that cannot be encoded to ASCII ones. *)
+let map_char char =
+  match UChar.code char with
+    | 0x2500 -> hline
+    | 0x2501 -> hline
+    | 0x2502 -> vline
+    | 0x2503 -> vline
+    | 0x2504 -> hline
+    | 0x2505 -> hline
+    | 0x2506 -> vline
+    | 0x2507 -> vline
+    | 0x2508 -> hline
+    | 0x2509 -> hline
+    | 0x250a -> vline
+    | 0x250b -> vline
+    | 0x250c -> drcorner
+    | 0x250d -> drcorner
+    | 0x250e -> drcorner
+    | 0x250f -> drcorner
+    | 0x2510 -> dlcorner
+    | 0x2511 -> dlcorner
+    | 0x2512 -> dlcorner
+    | 0x2513 -> dlcorner
+    | 0x2514 -> urcorner
+    | 0x2515 -> urcorner
+    | 0x2516 -> urcorner
+    | 0x2517 -> urcorner
+    | 0x2518 -> ulcorner
+    | 0x2519 -> ulcorner
+    | 0x251a -> ulcorner
+    | 0x251b -> ulcorner
+    | 0x251c -> vrline
+    | 0x251d -> vrline
+    | 0x251e -> vrline
+    | 0x251f -> vrline
+    | 0x2520 -> vrline
+    | 0x2521 -> vrline
+    | 0x2522 -> vrline
+    | 0x2523 -> vrline
+    | 0x2524 -> vlline
+    | 0x2525 -> vlline
+    | 0x2526 -> vlline
+    | 0x2527 -> vlline
+    | 0x2528 -> vlline
+    | 0x2529 -> vlline
+    | 0x252a -> vlline
+    | 0x252b -> vlline
+    | 0x252c -> hdline
+    | 0x252d -> hdline
+    | 0x252e -> hdline
+    | 0x252f -> hdline
+    | 0x2530 -> hdline
+    | 0x2531 -> hdline
+    | 0x2532 -> hdline
+    | 0x2533 -> hdline
+    | 0x2534 -> huline
+    | 0x2535 -> huline
+    | 0x2536 -> huline
+    | 0x2537 -> huline
+    | 0x2538 -> huline
+    | 0x2539 -> huline
+    | 0x253a -> huline
+    | 0x253b -> huline
+    | 0x253c -> cross
+    | 0x253d -> cross
+    | 0x253e -> cross
+    | 0x253f -> cross
+    | 0x2540 -> cross
+    | 0x2541 -> cross
+    | 0x2542 -> cross
+    | 0x2543 -> cross
+    | 0x2544 -> cross
+    | 0x2545 -> cross
+    | 0x2546 -> cross
+    | 0x2547 -> cross
+    | 0x2548 -> cross
+    | 0x2549 -> cross
+    | 0x254a -> cross
+    | 0x254b -> cross
+    | 0x254c -> hline
+    | 0x254d -> hline
+    | 0x254e -> vline
+    | 0x254f -> vline
+    | 0x2550 -> hline
+    | 0x2551 -> vline
+    | _ ->
+        match UNF.nfd_decompose char with
+          | char :: _ ->
+              if UChar.code char <= 127 then
+                char
+              else
+                question
+          | [] ->
+              question
+
+class output_to_buffer buf res = object
+  method output str ofs len =
+    Buffer.add_substring buf str ofs len;
+    len
+  method flush () = ()
+  method close_out () =
+    res := Buffer.contents buf
+end
+
+let encode_string term str =
+  if term.outgoing_is_utf8 then
+    (* Do not recode [str] if the output is UTF-8. *)
+    str
+  else
+    let buf = Buffer.create (String.length str) in
+    let res = ref "" in
+    let output = new CharEncoding.uchar_output_channel_of term.outgoing_encoding (new output_to_buffer buf res) in
+    let rec loop ofs =
+      if ofs = String.length str then begin
+        output#close_out ();
+        !res
+      end else begin
+        let ch, ofs = Zed_utf8.unsafe_extract_next str ofs in
+        (try
+           output#put ch
+         with CharEncoding.Out_of_range ->
+           output#put (map_char ch));
+        loop ofs
+      end
+    in
+    loop 0
+
+let encode_char term ch =
+  let res = ref "" in
+  let output = new CharEncoding.uchar_output_channel_of term.outgoing_encoding (new output_to_buffer (Buffer.create 8) res) in
+  (try
+     output#put ch
+   with CharEncoding.Out_of_range ->
+     output#put (map_char ch));
+  output#close_out ();
+  !res
 
 (* +-----------------------------------------------------------------+
    | Styled printing                                                 |
@@ -655,7 +827,7 @@ let windows_map_char char =
     | _ -> char
 
 let fprint term str =
-  Lwt_io.fprint term.oc (LTerm_iconv.recode_with term.outgoing_cd str)
+  Lwt_io.fprint term.oc (encode_string term str)
 
 let fprintl term str =
   fprint term (str ^ "\n")
@@ -782,7 +954,7 @@ let fprints_windows term oc text =
         else
           return ()
       in
-      lwt () = Lwt_io.write oc (LTerm_iconv.recode_with term.outgoing_cd (Zed_utf8.singleton ch)) in
+      lwt () = Lwt_io.write oc (encode_char term ch) in
       loop (idx + 1) attr
     end
   in

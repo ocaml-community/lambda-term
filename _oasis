@@ -32,7 +32,6 @@ Library "lambda-term"
     LTerm_event,
     LTerm_unix,
     LTerm_windows,
-    LTerm_iconv,
     LTerm_style,
     LTerm_geom,
     LTerm_draw,
@@ -50,8 +49,7 @@ Library "lambda-term"
   CSources:
     lTerm_term_stubs.c,
     lTerm_unix_stubs.c,
-    lTerm_windows_stubs.c,
-    lTerm_iconv_stubs.c
+    lTerm_windows_stubs.c
 
 # +-------------------------------------------------------------------+
 # | Examples                                                          |
