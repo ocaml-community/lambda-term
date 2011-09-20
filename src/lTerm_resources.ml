@@ -7,6 +7,15 @@
  * This file is a part of Lambda-Term.
  *)
 
+let home =
+  try
+    Sys.getenv "HOME"
+  with Not_found ->
+    try
+      (Unix.getpwuid (Unix.getuid ())).Unix.pw_dir
+    with Unix.Unix_error _ ->
+      ""
+
 (* +-----------------------------------------------------------------+
    | Types                                                           |
    +-----------------------------------------------------------------+ *)

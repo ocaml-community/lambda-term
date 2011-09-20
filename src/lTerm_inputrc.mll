@@ -333,7 +333,7 @@ and comma_actions seq l = parse
 
 {
   let lambda_term_inputrc =
-    Filename.concat (try Sys.getenv "HOME" with Not_found -> "") ".lambda-term-inputrc"
+    Filename.concat LTerm_resources.home ".lambda-term-inputrc"
 
   let load ?(file = lambda_term_inputrc) () =
     try_lwt

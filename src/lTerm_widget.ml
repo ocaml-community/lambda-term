@@ -816,7 +816,7 @@ type 'a event =
       (* A event from the terminal. *)
 
 let lambda_termrc =
-  Filename.concat (try Sys.getenv "HOME" with Not_found -> "") ".lambda-termrc"
+  Filename.concat LTerm_resources.home ".lambda-termrc"
 
 let file_exists file =
   try_lwt

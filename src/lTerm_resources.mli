@@ -61,3 +61,6 @@ val parse : string -> t
 
 val load : string -> t Lwt.t
   (** Same as {!parse} but parses the contents of a file. *)
+
+val home : string
+  (** The home directory. *)
