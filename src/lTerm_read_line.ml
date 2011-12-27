@@ -985,7 +985,8 @@ object(self)
       LTerm.move term total_height 0
     else
       lwt () = LTerm.fprint term "\r" in
-      LTerm.move term (total_height - Array.length matrix + 1) 0
+      lwt () = LTerm.move term (total_height - Array.length matrix) 0 in
+      LTerm.fprint term "\n"
 
   method draw_failure =
     self#draw_success
