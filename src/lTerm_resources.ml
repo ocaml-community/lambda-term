@@ -14,7 +14,13 @@ let home =
     try
       (Unix.getpwuid (Unix.getuid ())).Unix.pw_dir
     with Unix.Unix_error _ | Not_found ->
-      ""
+      if Lwt_sys.windows then
+        try
+          Sys.getenv "AppData"
+        with Not_found ->
+          ""
+      else
+        ""
 
 (* +-----------------------------------------------------------------+
    | Types                                                           |
