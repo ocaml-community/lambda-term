@@ -13,7 +13,7 @@ let home =
   with Not_found ->
     try
       (Unix.getpwuid (Unix.getuid ())).Unix.pw_dir
-    with Unix.Unix_error _ ->
+    with Unix.Unix_error _ | Not_found ->
       ""
 
 (* +-----------------------------------------------------------------+
