@@ -102,6 +102,7 @@ let quit ui =
   lwt () = ui.drawer in
   lwt () = LTerm.leave_raw_mode ui.term ui.mode in
   if ui.restore_state then
+    lwt () = LTerm.show_cursor ui.term in
     LTerm.load_state ui.term
   else
     return ()
