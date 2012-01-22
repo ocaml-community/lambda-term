@@ -1082,28 +1082,32 @@ object(self)
         Zed_macro.cancel self#macro;
         self#exec (Zed_macro.contents macro @ actions)
     | Suspend :: actions ->
-        let is_visible = visible in
-        lwt () = self#hide in
-        lwt () = LTerm.flush term in
-        lwt () =
-          match mode with
-            | Some mode ->
-                LTerm.leave_raw_mode term mode
-            | None ->
-                return ()
-        in
-        Unix.kill (Unix.getpid ()) Sys.sigtstp;
-        lwt () =
-          match LTerm.is_a_tty term with
-            | true ->
-                lwt m = LTerm.enter_raw_mode term in
-                mode <- Some m;
-                return ()
-            | false ->
-                return ()
-        in
-        lwt () = if is_visible then self#show else return () in
-        self#exec actions
+        if Lwt_sys.windows then
+          self#exec actions
+        else begin
+          let is_visible = visible in
+          lwt () = self#hide in
+          lwt () = LTerm.flush term in
+          lwt () =
+            match mode with
+              | Some mode ->
+                  LTerm.leave_raw_mode term mode
+              | None ->
+                  return ()
+          in
+          Unix.kill (Unix.getpid ()) Sys.sigtstp;
+          lwt () =
+            match LTerm.is_a_tty term with
+              | true ->
+                  lwt m = LTerm.enter_raw_mode term in
+                  mode <- Some m;
+                  return ()
+              | false ->
+                  return ()
+          in
+          lwt () = if is_visible then self#show else return () in
+          self#exec actions
+        end
     | action :: actions ->
         self#send_action action;
         self#exec actions
