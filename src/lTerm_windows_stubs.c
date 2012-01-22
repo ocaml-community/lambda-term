@@ -107,7 +107,7 @@ static void worker_read_console_input(struct job_read_console_input *job)
   DWORD bs;
 
   for (;;) {
-    if (!ReadConsoleInput(job->handle, input, 1, &event_count)) {
+    if (!ReadConsoleInputW(job->handle, input, 1, &event_count)) {
       job->error_code = GetLastError();
       return;
     }
@@ -118,7 +118,6 @@ static void worker_read_console_input(struct job_read_console_input *job)
         if (input->Event.KeyEvent.uChar.UnicodeChar)
           return;
         code = input->Event.KeyEvent.wVirtualKeyCode;
-        i;
         for (i = 0; i < sizeof(code_table)/sizeof(code_table[0]); i++)
           if (code == code_table[i])
             return;
@@ -443,7 +442,7 @@ CAMLprim value lt_windows_write_console_output(value val_fd, value val_chars, va
   rect.Bottom = Int_val(Field(val_rect, 2)) - 1;
   rect.Right = Int_val(Field(val_rect, 3)) - 1;
 
-  if (!WriteConsoleOutput(Handle_val(val_fd), buffer, size, coord, &rect)) {
+  if (!WriteConsoleOutputW(Handle_val(val_fd), buffer, size, coord, &rect)) {
     free(buffer);
     win32_maperr(GetLastError());
     uerror("WriteConsoleOutput", Nothing);
