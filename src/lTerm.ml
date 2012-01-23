@@ -131,75 +131,89 @@ let colors_of_term = function
   | "xterm+88color" -> 88
   | _ -> 16
 
+exception No_such_encoding of string
+
+let char_encoding_of_name name =
+  try
+    CharEncoding.of_name name
+  with Not_found ->
+    raise (No_such_encoding name)
+
+(* UTF-8 in windows. *)
+let () = CharEncoding.alias "CP65001" "UTF-8"
+
 let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding ?outgoing_encoding incoming_fd ic outgoing_fd oc =
-  let incoming_encoding =
-    match incoming_encoding with
-      | Some enc ->
-          enc
-      | None ->
-          if windows then
-            Printf.sprintf "CP%d" (LTerm_windows.get_console_cp ())
-          else
-            LTerm_unix.system_encoding
-  and outgoing_encoding =
-    match outgoing_encoding with
-      | Some enc ->
-          enc
-      | None ->
-          if windows then
-            Printf.sprintf "CP%d" (LTerm_windows.get_console_output_cp ())
-          else
-            LTerm_unix.system_encoding
-  in
-  let colors = colors_of_term model in
-  lwt incoming_is_a_tty = Lwt_unix.isatty incoming_fd
-  and outgoing_is_a_tty = Lwt_unix.isatty outgoing_fd in
-  let incoming_encoding = CharEncoding.of_name incoming_encoding
-  and outgoing_encoding = CharEncoding.of_name outgoing_encoding in
-  let term = {
-    model;
-    colors;
-    windows;
-    bold_is_bright =
-      (match model with
-         | "linux" (* The linux frame buffer *)
-         | "xterm-color" (* The MacOS-X terminal *) ->
-             true
-         | _ ->
-             false);
-    color_map =
-      (match colors with
-         | 16 -> LTerm_color_mappings.colors_16
-         | 88 -> LTerm_color_mappings.colors_88
-         | 256 -> LTerm_color_mappings.colors_256
-         | n -> Printf.ksprintf failwith "LTerm.create: unknown number of colors (%d)" n);
-    raw_mode = false;
-    incoming_fd;
-    outgoing_fd;
-    ic;
-    oc;
-    incoming_encoding;
-    outgoing_encoding;
-    outgoing_is_utf8 = CharEncoding.name_of outgoing_encoding = "UTF-8";
-    input_stream = Lwt_stream.from (fun () -> Lwt_io.read_char_opt ic);
-    resize_received = false;
-    suspend_received = false;
-    break_received = false;
-    quit_received = false;
-    event_cond = Lwt_condition.create ();
-    event = E.never;
-    incoming_is_a_tty;
-    outgoing_is_a_tty;
-    escape_time = 0.1;
-  } in
-  term.event <- (
-    E.map
-      (fun _ ->
-         term.resize_received <- true;
-         Lwt_condition.signal term.event_cond `Resize)
-      resize_event
-  );
-  return term
+  try_lwt
+    let incoming_encoding =
+      match incoming_encoding with
+        | Some enc ->
+            enc
+        | None ->
+            if windows then
+              Printf.sprintf "CP%d" (LTerm_windows.get_console_cp ())
+            else
+              LTerm_unix.system_encoding
+    and outgoing_encoding =
+      match outgoing_encoding with
+        | Some enc ->
+            enc
+        | None ->
+            if windows then
+              Printf.sprintf "CP%d" (LTerm_windows.get_console_output_cp ())
+            else
+              LTerm_unix.system_encoding
+    in
+    let colors = colors_of_term model in
+    lwt incoming_is_a_tty = Lwt_unix.isatty incoming_fd
+    and outgoing_is_a_tty = Lwt_unix.isatty outgoing_fd in
+    let incoming_encoding = char_encoding_of_name incoming_encoding
+    and outgoing_encoding = char_encoding_of_name outgoing_encoding in
+    let term = {
+      model;
+      colors;
+      windows;
+      bold_is_bright =
+        (match model with
+           | "linux" (* The linux frame buffer *)
+           | "xterm-color" (* The MacOS-X terminal *) ->
+               true
+           | _ ->
+               false);
+      color_map =
+        (match colors with
+           | 16 -> LTerm_color_mappings.colors_16
+           | 88 -> LTerm_color_mappings.colors_88
+           | 256 -> LTerm_color_mappings.colors_256
+           | n -> Printf.ksprintf failwith "LTerm.create: unknown number of colors (%d)" n);
+      raw_mode = false;
+      incoming_fd;
+      outgoing_fd;
+      ic;
+      oc;
+      incoming_encoding;
+      outgoing_encoding;
+      outgoing_is_utf8 = CharEncoding.name_of outgoing_encoding = "UTF-8";
+      input_stream = Lwt_stream.from (fun () -> Lwt_io.read_char_opt ic);
+      resize_received = false;
+      suspend_received = false;
+      break_received = false;
+      quit_received = false;
+      event_cond = Lwt_condition.create ();
+      event = E.never;
+      incoming_is_a_tty;
+      outgoing_is_a_tty;
+      escape_time = 0.1;
+    } in
+    term.event <- (
+      E.map
+        (fun _ ->
+           term.resize_received <- true;
+           Lwt_condition.signal term.event_cond `Resize)
+        resize_event
+    );
+    return term
+  with exn ->
+    raise_lwt exn
 
 let model t = t.model
 let colors t = t.colors

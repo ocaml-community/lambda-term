@@ -14,6 +14,9 @@ type t
 
 (** {6 Creation} *)
 
+exception No_such_encoding of string
+  (** Exception raised when an encoding does not exist. *)
+
 val create :
   ?windows : bool ->
   ?model : string ->
@@ -43,7 +46,10 @@ val create :
       defaults to [LTerm_windows.get_console_output_cp] if [windows] is
       [true] and [LTerm_unix.system_encoding] otherwise. Note that
       transliteration is used so printing unicode character on the
-      terminal will never fail. *)
+      terminal will never fail.
+
+      If one of the two given encodings does not exist, it raises
+      [No_such_encoding]. *)
 
 (** {6 Informations} *)
 
