@@ -171,7 +171,7 @@ external spawn : string -> process = "lt_term_spawn"
 external windows_waitproc_job : Unix.file_descr -> [ `windows_waitproc ] Lwt_unix.job = "lt_term_waitproc_job"
 external windows_waitproc_free : [ `windows_waitproc ] Lwt_unix.job -> unit = "lt_term_waitproc_job"
 
-let mintty_launch term =
+let mintty_start term =
   let sock = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
   try_lwt
     Lwt_unix.setsockopt sock Unix.SO_REUSEADDR true;
@@ -199,7 +199,7 @@ let mintty_launch term =
     in
     match_lwt pick [wait_proc; Lwt_unix.accept sock >|= fun (fd, _) -> Some fd] with
       | None ->
-          raise Exit
+          raise_lwt (Failure "the perl helper exited")
       | Some fd ->
           try_lwt
             let ic = Lwt_io.of_fd ~close:return ~mode:Lwt_io.input fd
@@ -209,24 +209,41 @@ let mintty_launch term =
               | [incoming_is_a_tty; outgoing_is_a_tty; cols; rows] ->
                   term.incoming_is_a_tty <- incoming_is_a_tty = "1";
                   term.outgoing_is_a_tty <- outgoing_is_a_tty = "1";
-                  term.size <- { rows = int_of_string rows; cols = int_of_string cols };
-                  term.last_reported_size <- term.size;
+                  let size =
+                    try
+                      { rows = int_of_string rows; cols = int_of_string cols }
+                    with Failure _ ->
+                      Printf.ksprintf failwith "invalid initial status from the perl helper: %S" line
+                  in
+                  term.size <- size;
+                  term.last_reported_size <- size;
                   term.mintty_oc <- oc;
                   ignore (try_lwt
                             mintty_dispatch term ic 0
                           finally
                             Lwt_unix.close fd);
                   Gc.finalise (close_fd fd) term;
-                  return true
+                  return ()
               | _ ->
-                  return false
-          with exn ->
-            lwt () = Lwt_unix.close fd in
-            return false
-  with exn ->
-    return false
+                  raise_lwt (Failure (Printf.sprintf "invalid initial status from the perl helper: %S" line))
+          with
+            | Unix.Unix_error (error, _, _) ->
+                lwt () = Lwt_unix.close fd in
+                raise_lwt (Failure ("cannot read initial status from the perl helper: " ^ Unix.error_message error))
+            | exn ->
+                lwt () = Lwt_unix.close fd in
+                raise_lwt exn
+  with Unix.Unix_error (error, _, _) ->
+    raise_lwt (Failure ("cannot spawn the perl helper: " ^ Unix.error_message error))
   finally
     Lwt_unix.close sock
+
+let mintty_try term =
+  try_lwt
+    lwt () = mintty_start term in
+    return true
+  with _ ->
+    return false
 
 let mintty_call term request =
   let n = term.mintty_next_serial in
@@ -282,16 +299,6 @@ let char_encoding_of_name name =
 (* UTF-8 in windows. *)
 let () = CharEncoding.alias "CP65001" "UTF-8"
 
-let mintty_maybe term mintty =
-  if mintty then
-    lwt mintty = mintty_launch term in
-    if mintty then
-      return (false, true)
-    else
-      failwith "LTerm.create: cannot use mintty mode"
-  else
-    return (true, false)
-
 let create ?windows ?mintty ?(force_mintty=false) ?(model=default_model) ?incoming_encoding ?outgoing_encoding incoming_fd ic outgoing_fd oc =
   try_lwt
     (* Check if fds are ttys using the OS dependent API. *)
@@ -329,7 +336,8 @@ let create ?windows ?mintty ?(force_mintty=false) ?(model=default_model) ?incomi
     (* Determine the kind of the terminal. *)
     lwt windows, mintty =
       if force_mintty then
-        mintty_maybe term true
+        lwt () = mintty_start term in
+        return (false, true)
       else
         match windows, mintty, Lwt_sys.windows with
           | Some true, Some true, _ ->
@@ -345,16 +353,17 @@ let create ?windows ?mintty ?(force_mintty=false) ?(model=default_model) ?incomi
               if incoming_is_a_tty || outgoing_is_a_tty then
                 return (true, false)
               else
-                lwt mintty = mintty_launch term in
+                lwt mintty = mintty_try term in
                 return (not mintty, mintty)
-          | Some x, None, true ->
-              mintty_maybe term (not x)
-          | None, Some x, true ->
-              mintty_maybe term x
+          | Some true, None, true
+          | None, Some false, true
           | Some true, Some false, true ->
               return (true, false)
+          | Some false, None, true
+          | None, Some true, true
           | Some false, Some true, true ->
-              mintty_maybe term true
+              lwt () = mintty_start term in
+              return (false, true)
     in
     term.windows <- windows;
     term.mintty <- mintty;
@@ -546,12 +555,12 @@ let read_event term =
               return (LTerm_event.Resize size)
           | ev ->
               return ev
-  else
-    wrap_next_event read_char term
-  finally
-    term.read_event <- false;
-    return ()
- end
+      else
+        wrap_next_event read_char term
+    finally
+      term.read_event <- false;
+      return ()
+  end
 
 (* +-----------------------------------------------------------------+
    | Modes                                                           |
