@@ -210,6 +210,7 @@ let mintty_launch term =
                   term.incoming_is_a_tty <- incoming_is_a_tty = "1";
                   term.outgoing_is_a_tty <- outgoing_is_a_tty = "1";
                   term.size <- { rows = int_of_string rows; cols = int_of_string cols };
+                  term.last_reported_size <- term.size;
                   term.mintty_oc <- oc;
                   ignore (try_lwt
                             mintty_dispatch term ic 0
@@ -409,6 +410,7 @@ let create ?windows ?mintty ?(force_mintty=false) ?(model=default_model) ?incomi
         end
       in
       term.size <- get_size_from_fd outgoing_fd;
+      term.last_reported_size <- term.size;
       term.event <- E.map check_size resize_event
     end;
     return term
