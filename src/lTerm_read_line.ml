@@ -719,7 +719,7 @@ let draw_styled ctx row col str =
   loop row col 0
 
 class virtual ['a] term term =
-  let size, set_size = S.create { cols = 80; rows = 25 } in
+  let size, set_size = S.create (LTerm.size term) in
   let event, set_prompt = E.create () in
   let prompt = S.switch (S.const default_prompt) event in
   let key_sequence, set_key_sequence = S.create [] in
@@ -1115,9 +1115,8 @@ object(self)
         self#loop
 
   method run =
-    (* Get the initial size of the terminal. *)
-    lwt initial_size = LTerm.get_size term in
-    set_size initial_size;
+    (* Update the size with the current size. *)
+    set_size (LTerm.size term);
 
     let running = ref true in
 

@@ -8,9 +8,24 @@
  *)
 
 open CamomileLibraryDyn.Camomile
-open React
+open Lwt_react
 open Lwt
 open LTerm_geom
+
+(* +-----------------------------------------------------------------+
+   | TTYs sizes                                                      |
+   +-----------------------------------------------------------------+ *)
+
+external get_size_from_fd : Unix.file_descr -> size = "lt_term_get_size_from_fd"
+external set_size_from_fd : Unix.file_descr -> size -> unit = "lt_term_set_size_from_fd"
+
+let get_size_from_fd fd =
+  Lwt_unix.check_descriptor fd;
+  get_size_from_fd (Lwt_unix.unix_file_descr fd)
+
+let set_size_from_fd fd size =
+  Lwt_unix.check_descriptor fd;
+  set_size_from_fd (Lwt_unix.unix_file_descr fd) size
 
 (* +-----------------------------------------------------------------+
    | The terminal type                                               |
@@ -24,12 +39,15 @@ let () =
        | Not_a_tty -> Some "terminal is not a tty"
        | _ -> None)
 
+module Int_map = Map.Make(struct type t = int let compare a b = a - b end)
+
 type t = {
-  model : string;
-  colors : int;
-  windows : bool;
-  bold_is_bright : bool;
-  color_map : LTerm_color_mappings.map;
+  mutable model : string;
+  mutable colors : int;
+  mutable windows : bool;
+  mutable mintty : bool;
+  mutable bold_is_bright : bool;
+  mutable color_map : LTerm_color_mappings.map;
   (* Informations. *)
 
   mutable raw_mode : bool;
@@ -39,44 +57,50 @@ type t = {
   outgoing_fd : Lwt_unix.file_descr;
   (* File descriptors. *)
 
-  ic : Lwt_io.input_channel;
   oc : Lwt_io.output_channel;
-  (* Channels. *)
-
-  incoming_encoding : CharEncoding.t;
-  outgoing_encoding : CharEncoding.t;
-  (* Characters encodings. *)
-
-  outgoing_is_utf8 : bool;
-  (* Whether the outgoing encoding is UTF-8. *)
+  (* Output channels. *)
 
   input_stream : char Lwt_stream.t;
-  (* Stream of character input from the terminal. *)
+  (* Stream of characters read from the terminal. *)
 
-  mutable resize_received : bool;
-  (* Whether a SIGWINCH signal have been received and have not yet
-     been reported. *)
+  mutable mintty_oc : Lwt_io.output_channel;
+  (* The channel used to send commands to the perl wrapper. *)
 
-  mutable break_received : bool;
-  (* Whether a SIGINT signal have been received and have not yet been
-     reported. *)
+  mutable mintty_next_serial : int;
+  (* Next serial for sending commands to the perl script. *)
 
-  mutable suspend_received : bool;
-  (* Whether a SIGTSTP signal have been received and have not yet been
-     reported. *)
+  mutable mintty_waiters : unit Lwt.u Int_map.t;
+  (* Thread waiting for a reply from mintty. *)
 
-  mutable quit_received : bool;
-  (* Whether a SIGQUIT signal have been received and have not yet been
-     reported. *)
+  mutable next_event : LTerm_event.t Lwt.t option;
+  (* Thread reading the next event from the terminal. We cannot cancel
+     the reading of an event, so we keep the last thread to reuse it
+     in case the user cancels [read_event]. *)
 
-  event_cond : [ `Resize | `Event of LTerm_event.t ] Lwt_condition.t;
-  (* Condition used to wakeup the read_event thread on unix. *)
+  mutable read_event : bool;
+  (* Whether a thread is currently reading an event. *)
+
+  mutable last_reported_size : size;
+  (* The last size reported by [read_event]. *)
+
+  mutable size : size;
+  (* The current size of the terminal. *)
+
+  mutable incoming_encoding : CharEncoding.t;
+  mutable outgoing_encoding : CharEncoding.t;
+  (* Characters encodings. *)
+
+  mutable outgoing_is_utf8 : bool;
+  (* Whether the outgoing encoding is UTF-8. *)
+
+  notify : LTerm_event.t Lwt_condition.t;
+  (* Condition used to send a spontaneous event. *)
 
   mutable event : unit event;
-  (* Event which handle POSIX signals. *)
+  (* Event which handles SIGWINCH. *)
 
-  incoming_is_a_tty : bool;
-  outgoing_is_a_tty : bool;
+  mutable incoming_is_a_tty : bool;
+  mutable outgoing_is_a_tty : bool;
   (* Whether input/output are tty devices. *)
 
   mutable escape_time : float;
@@ -89,22 +113,137 @@ type t = {
 
 let resize_event, send_resize = E.create ()
 
-let ()=
+let () =
   match LTerm_unix.sigwinch with
-    | Some signum ->
-        ignore (Lwt_unix.on_signal signum send_resize)
     | None ->
-        ()
+        (* Check for size when something happen. *)
+        ignore (Lwt_sequence.add_r send_resize Lwt_main.enter_iter_hooks)
+    | Some signum ->
+        try
+          ignore (Lwt_unix.on_signal signum (fun _ -> send_resize ()))
+        with Not_found ->
+          ignore (Lwt_sequence.add_r send_resize Lwt_main.enter_iter_hooks)
+
+(* +-----------------------------------------------------------------+
+   | Mintty perl wrapper communication                               |
+   +-----------------------------------------------------------------+ *)
+
+let split_at_colon str =
+  let len = String.length str in
+  let rec aux i =
+    if i >= len then
+      []
+    else
+      let j = try String.index_from str i ':' with Not_found -> String.length str in
+      String.sub str i (j - i) :: aux (j + 1)
+  in
+  aux 0
+
+let rec mintty_dispatch term ic serial =
+  lwt line = Lwt_io.read_line ic in
+  match split_at_colon line with
+    | ["size"; cols; rows] ->
+        term.size <- { rows = int_of_string rows; cols = int_of_string cols };
+        Lwt_condition.signal term.notify (LTerm_event.Resize term.size);
+        mintty_dispatch term ic serial
+    | ["done"] ->
+        begin
+          try
+            let wakener = Int_map.find serial term.mintty_waiters in
+            term.mintty_waiters <- Int_map.remove serial term.mintty_waiters;
+            wakeup wakener ()
+          with _ ->
+            ()
+        end;
+        mintty_dispatch term ic (serial + 1)
+    | _ ->
+        mintty_dispatch term ic serial
+
+let close_fd fd _ =
+  ignore (Lwt_unix.close fd)
+
+type process =
+  | Proc_unix of int
+  | Proc_windows of Unix.file_descr
+
+external spawn : string -> process = "lt_term_spawn"
+
+external windows_waitproc_job : Unix.file_descr -> [ `windows_waitproc ] Lwt_unix.job = "lt_term_waitproc_job"
+external windows_waitproc_free : [ `windows_waitproc ] Lwt_unix.job -> unit = "lt_term_waitproc_job"
+
+let mintty_launch term =
+  let sock = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+  try_lwt
+    Lwt_unix.setsockopt sock Unix.SO_REUSEADDR true;
+    Lwt_unix.bind sock (Unix.ADDR_INET (Unix.inet_addr_loopback, 0));
+    Lwt_unix.listen sock 1;
+    let port =
+      match Lwt_unix.getsockname sock with
+        | Unix.ADDR_UNIX _ ->
+            assert false
+        | Unix.ADDR_INET (_, port) ->
+            port
+    in
+    let wait_proc =
+      match spawn (Printf.sprintf "perl -e '$port=%d;' -e %s" port (Filename.quote LTerm_mintty_helper.code)) with
+        | Proc_unix pid ->
+            lwt _ = Lwt_unix.waitpid [] pid in
+            return None
+        | Proc_windows handle ->
+            try_lwt
+              lwt () = Lwt_unix.execute_job (windows_waitproc_job handle) ignore windows_waitproc_free in
+              return None
+            finally
+              Unix.close handle;
+              return ()
+    in
+    match_lwt pick [wait_proc; Lwt_unix.accept sock >|= fun (fd, _) -> Some fd] with
+      | None ->
+          raise Exit
+      | Some fd ->
+          try_lwt
+            let ic = Lwt_io.of_fd ~close:return ~mode:Lwt_io.input fd
+            and oc = Lwt_io.of_fd ~close:return ~mode:Lwt_io.output fd in
+            lwt line = Lwt_io.read_line ic in
+            match split_at_colon line with
+              | [incoming_is_a_tty; outgoing_is_a_tty; cols; rows] ->
+                  term.incoming_is_a_tty <- incoming_is_a_tty = "1";
+                  term.outgoing_is_a_tty <- outgoing_is_a_tty = "1";
+                  term.size <- { rows = int_of_string rows; cols = int_of_string cols };
+                  term.mintty_oc <- oc;
+                  ignore (try_lwt
+                            mintty_dispatch term ic 0
+                          finally
+                            Lwt_unix.close fd);
+                  Gc.finalise (close_fd fd) term;
+                  return true
+              | _ ->
+                  return false
+          with exn ->
+            lwt () = Lwt_unix.close fd in
+            return false
+  with exn ->
+    return false
+  finally
+    Lwt_unix.close sock
+
+let mintty_call term request =
+  let n = term.mintty_next_serial in
+  term.mintty_next_serial <- n + 1;
+  let waiter, wakener = task () in
+  term.mintty_waiters <- Int_map.add n wakener term.mintty_waiters;
+  lwt () = Lwt_io.write_line term.mintty_oc request in
+  waiter
 
 (* +-----------------------------------------------------------------+
    | Creation                                                        |
    +-----------------------------------------------------------------+ *)
 
-let default_model =
+let default_model, term_defined =
   try
-    Sys.getenv "TERM"
+    (Sys.getenv "TERM", true)
   with Not_found ->
-    "dumb"
+    ("dumb", false)
 
 let colors_of_term = function
   | "Eterm-256color" -> 256
@@ -142,75 +281,136 @@ let char_encoding_of_name name =
 (* UTF-8 in windows. *)
 let () = CharEncoding.alias "CP65001" "UTF-8"
 
-let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding ?outgoing_encoding incoming_fd ic outgoing_fd oc =
+let mintty_maybe term mintty =
+  if mintty then
+    lwt mintty = mintty_launch term in
+    if mintty then
+      return (false, true)
+    else
+      failwith "LTerm.create: cannot use mintty mode"
+  else
+    return (true, false)
+
+let create ?windows ?mintty ?(force_mintty=false) ?(model=default_model) ?incoming_encoding ?outgoing_encoding incoming_fd ic outgoing_fd oc =
   try_lwt
-    let incoming_encoding =
-      match incoming_encoding with
-        | Some enc ->
-            enc
-        | None ->
-            if windows then
-              Printf.sprintf "CP%d" (LTerm_windows.get_console_cp ())
-            else
-              LTerm_unix.system_encoding
-    and outgoing_encoding =
-      match outgoing_encoding with
-        | Some enc ->
-            enc
-        | None ->
-            if windows then
-              Printf.sprintf "CP%d" (LTerm_windows.get_console_output_cp ())
-            else
-              LTerm_unix.system_encoding
-    in
-    let colors = colors_of_term model in
+    (* Check if fds are ttys using the OS dependent API. *)
     lwt incoming_is_a_tty = Lwt_unix.isatty incoming_fd
     and outgoing_is_a_tty = Lwt_unix.isatty outgoing_fd in
-    let incoming_encoding = char_encoding_of_name incoming_encoding
-    and outgoing_encoding = char_encoding_of_name outgoing_encoding in
+    (* Create the terminal. *)
     let term = {
-      model;
-      colors;
-      windows;
-      bold_is_bright =
+      model = "";
+      colors = 16;
+      windows = false;
+      mintty = false;
+      mintty_oc = Lwt_io.null;
+      mintty_next_serial = 0;
+      mintty_waiters = Int_map.empty;
+      bold_is_bright = false;
+      color_map = LTerm_color_mappings.colors_16;
+      raw_mode = false;
+      incoming_fd;
+      outgoing_fd;
+      oc;
+      input_stream = Lwt_stream.from (fun () -> Lwt_io.read_char_opt ic);
+      next_event = None;
+      read_event = false;
+      incoming_encoding = CharEncoding.ascii;
+      outgoing_encoding = CharEncoding.ascii;
+      outgoing_is_utf8 = false;
+      notify = Lwt_condition.create ();
+      event = E.never;
+      incoming_is_a_tty;
+      outgoing_is_a_tty;
+      escape_time = 0.1;
+      size = { rows = 0; cols = 0 };
+      last_reported_size = { rows = 0; cols = 0 };
+    } in
+    (* Determine the kind of the terminal. *)
+    lwt windows, mintty =
+      if force_mintty then
+        mintty_maybe term true
+      else
+        match windows, mintty, Lwt_sys.windows with
+          | Some true, Some true, _ ->
+              failwith "LTerm.create: windows and mintty cannot be both true"
+          | Some true, _, false
+          | _, Some true, false ->
+              failwith "LTerm.create: windows and mintty can only be set under Windows"
+          | Some false, Some false, true ->
+              failwith "LTerm.create: windows or mintty must be set under Windows"
+          | (None | Some false), (None | Some false), false ->
+              return (false, false)
+          | None, None, true ->
+              if incoming_is_a_tty || outgoing_is_a_tty then
+                return (true, false)
+              else
+                lwt mintty = mintty_launch term in
+                return (not mintty, mintty)
+          | Some x, None, true ->
+              mintty_maybe term (not x)
+          | None, Some x, true ->
+              mintty_maybe term x
+          | Some true, Some false, true ->
+              return (true, false)
+          | Some false, Some true, true ->
+              mintty_maybe term true
+    in
+    term.windows <- windows;
+    term.mintty <- mintty;
+    (* Setup model and colors. *)
+    if term.windows then
+      term.model <- "windows-console"
+    else begin
+      term.model <- model;
+      term.colors <- colors_of_term model;
+      term.bold_is_bright <-
         (match model with
            | "linux" (* The linux frame buffer *)
            | "xterm-color" (* The MacOS-X terminal *) ->
                true
            | _ ->
                false);
-      color_map =
-        (match colors with
+      term.color_map <-
+        (match term.colors with
            | 16 -> LTerm_color_mappings.colors_16
            | 88 -> LTerm_color_mappings.colors_88
            | 256 -> LTerm_color_mappings.colors_256
-           | n -> Printf.ksprintf failwith "LTerm.create: unknown number of colors (%d)" n);
-      raw_mode = false;
-      incoming_fd;
-      outgoing_fd;
-      ic;
-      oc;
-      incoming_encoding;
-      outgoing_encoding;
-      outgoing_is_utf8 = CharEncoding.name_of outgoing_encoding = "UTF-8";
-      input_stream = Lwt_stream.from (fun () -> Lwt_io.read_char_opt ic);
-      resize_received = false;
-      suspend_received = false;
-      break_received = false;
-      quit_received = false;
-      event_cond = Lwt_condition.create ();
-      event = E.never;
-      incoming_is_a_tty;
-      outgoing_is_a_tty;
-      escape_time = 0.1;
-    } in
-    term.event <- (
-      E.map
-        (fun _ ->
-           term.resize_received <- true;
-           Lwt_condition.signal term.event_cond `Resize)
-        resize_event
-    );
+           | n -> Printf.ksprintf failwith "LTerm.create: unknown number of colors (%d)" n)
+    end;
+    (* Setup encodings. *)
+    term.incoming_encoding <-
+      (char_encoding_of_name
+         (match incoming_encoding with
+            | Some enc ->
+                enc
+            | None ->
+                if term.windows then
+                  Printf.sprintf "CP%d" (LTerm_windows.get_console_cp ())
+                else
+                  LTerm_unix.system_encoding));
+    term.outgoing_encoding <-
+      (char_encoding_of_name
+         (match outgoing_encoding with
+            | Some enc ->
+                enc
+            | None ->
+                if term.windows then
+                  Printf.sprintf "CP%d" (LTerm_windows.get_console_output_cp ())
+                else
+                  LTerm_unix.system_encoding));
+    term.outgoing_is_utf8 <- CharEncoding.name_of term.outgoing_encoding = "UTF-8";
+    (* Setup initial size and size updater. *)
+    if not mintty && term.outgoing_is_a_tty then begin
+      let check_size () =
+        let size = get_size_from_fd outgoing_fd in
+        if size <> term.size then begin
+          term.size <- size;
+          Lwt_condition.signal term.notify (LTerm_event.Resize size)
+        end
+      in
+      term.size <- get_size_from_fd outgoing_fd;
+      term.event <- E.map check_size resize_event
+    end;
     return term
   with exn ->
     raise_lwt exn
@@ -218,38 +418,138 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
 let model t = t.model
 let colors t = t.colors
 let windows t = t.windows
+let mintty t = t.mintty
 let is_a_tty t = t.incoming_is_a_tty && t.outgoing_is_a_tty
 let incoming_is_a_tty t = t.incoming_is_a_tty
 let outgoing_is_a_tty t = t.outgoing_is_a_tty
 let escape_time t = t.escape_time
 let set_escape_time t time = t.escape_time <- time
 
-(* +-----------------------------------------------------------------+
-   | Sizes                                                           |
-   +-----------------------------------------------------------------+ *)
-
-external get_size_from_fd : Unix.file_descr -> size = "lt_term_get_size_from_fd"
-external set_size_from_fd : Unix.file_descr -> size -> unit = "lt_term_set_size_from_fd"
-
-let get_size_from_fd fd =
-  Lwt_unix.check_descriptor fd;
-  return (get_size_from_fd (Lwt_unix.unix_file_descr fd))
-
-let set_size_from_fd fd size =
-  Lwt_unix.check_descriptor fd;
-  return (set_size_from_fd (Lwt_unix.unix_file_descr fd) size)
+let size term =
+  if term.outgoing_is_a_tty then
+    term.size
+  else
+    raise Not_a_tty
 
 let get_size term =
-  if term.outgoing_is_a_tty then
-    get_size_from_fd term.outgoing_fd
-  else
-    raise_lwt Not_a_tty
+  try
+    return (size term)
+  with exn ->
+    raise_lwt exn
 
-let set_size term size =
-  if term.outgoing_is_a_tty then
-    set_size_from_fd term.outgoing_fd size
+let set_size term size = raise_lwt (Failure "LTerm.set_size is deprecated")
+
+(* +-----------------------------------------------------------------+
+   | Events                                                          |
+   +-----------------------------------------------------------------+ *)
+
+class output_single (cell : UChar.t option ref) = object
+  method put char = cell := Some char
+  method flush () = ()
+  method close_out () = ()
+end
+
+let read_char term =
+  lwt first_byte =
+    match_lwt Lwt_stream.get term.input_stream with
+      | Some byte -> return byte
+      | None -> raise_lwt End_of_file
+  in
+  let cell = ref None in
+  let output = new CharEncoding.convert_uchar_output term.incoming_encoding (new output_single cell) in
+  let rec loop st =
+    match !cell with
+      | Some char ->
+          return char
+      | None ->
+          lwt byte = Lwt_stream.next st in
+          assert (output#output (String.make 1 byte) 0 1 = 1);
+          output#flush ();
+          loop st
+  in
+  lwt char =
+    try_lwt
+      assert (output#output (String.make 1 first_byte) 0 1 = 1);
+      Lwt_stream.parse term.input_stream loop
+    with CharEncoding.Malformed_code | Lwt_stream.Empty ->
+      return (UChar.of_char first_byte)
+  in
+  return (LTerm_event.Key {
+            LTerm_key.control = false;
+            LTerm_key.meta = false;
+            LTerm_key.shift = false;
+            LTerm_key.code = LTerm_key.Char char;
+          })
+
+let rec next_event term =
+  if term.windows then
+    match_lwt LTerm_windows.read_console_input term.incoming_fd with
+      | LTerm_windows.Resize ->
+          if term.outgoing_is_a_tty then
+            let size = get_size_from_fd term.outgoing_fd in
+            if size <> term.size then begin
+              term.size <- size;
+              return (LTerm_event.Resize size)
+            end else
+              next_event term
+          else
+            next_event term
+      | LTerm_windows.Key key ->
+          return (LTerm_event.Key key)
+      | LTerm_windows.Mouse mouse ->
+          let window = (LTerm_windows.get_console_screen_buffer_info term.outgoing_fd).LTerm_windows.window in
+          return (LTerm_event.Mouse {
+                    mouse with
+                      LTerm_mouse.row = mouse.LTerm_mouse.row - window.row1;
+                      LTerm_mouse.col = mouse.LTerm_mouse.col - window.col1;
+                  })
   else
-    raise_lwt Not_a_tty
+    LTerm_unix.parse_event ~escape_time:term.escape_time term.incoming_encoding term.input_stream
+
+let wrap_next_event next_event term =
+  match term.next_event with
+    | Some thread ->
+        thread
+    | None ->
+        (* Create a non-cancelable thread. *)
+        let waiter, wakener = wait () in
+        term.next_event <- Some waiter;
+        (* Connect the [next_event term] thread to [waiter]. *)
+        ignore
+          (try_bind
+             (fun () -> next_event term)
+             (fun v ->
+                term.next_event <- None;
+                wakeup wakener v;
+                return ())
+             (fun e ->
+                term.next_event <- None;
+                wakeup_exn wakener e;
+                return ()));
+        waiter
+
+let read_event term =
+  if term.read_event then
+    raise_lwt (Failure "LTerm.read_event: cannot read events from two thread at the same time")
+  else if term.size <> term.last_reported_size then begin
+    term.last_reported_size <- term.size;
+    return (LTerm_event.Resize term.last_reported_size)
+  end else begin
+    term.read_event <- true;
+    try_lwt
+      if term.incoming_is_a_tty then
+        match_lwt pick [wrap_next_event next_event term; Lwt_condition.wait term.notify] with
+          | LTerm_event.Resize size ->
+              term.last_reported_size <- size;
+              return (LTerm_event.Resize size)
+          | ev ->
+              return ev
+  else
+    wrap_next_event read_char term
+  finally
+    term.read_event <- false;
+    return ()
+ end
 
 (* +-----------------------------------------------------------------+
    | Modes                                                           |
@@ -259,6 +559,7 @@ type mode =
   | Mode_fake
   | Mode_unix of Unix.terminal_io
   | Mode_windows of LTerm_windows.console_mode
+  | Mode_mintty
 
 let enter_raw_mode term =
   if term.incoming_is_a_tty then
@@ -276,6 +577,10 @@ let enter_raw_mode term =
       };
       term.raw_mode <- true;
       return (Mode_windows mode)
+    end else if term.mintty then begin
+      lwt () = mintty_call term "enter-raw-mode" in
+      term.raw_mode <- true;
+      return Mode_mintty
     end else begin
       lwt attr = Lwt_unix.tcgetattr term.incoming_fd in
       lwt () = Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH {
@@ -311,6 +616,9 @@ let leave_raw_mode term mode =
           term.raw_mode <- false;
           LTerm_windows.set_console_mode term.incoming_fd mode;
           return ()
+      | Mode_mintty ->
+          term.raw_mode <- false;
+          mintty_call term "leave-raw-mode"
   else
     raise_lwt Not_a_tty
 
@@ -538,39 +846,6 @@ let load_state term =
       Lwt_io.write term.oc "\027[?1049l"
   else
     raise_lwt Not_a_tty
-
-(* +-----------------------------------------------------------------+
-   | Events                                                          |
-   +-----------------------------------------------------------------+ *)
-
-let read_event term =
-  if term.windows then
-    LTerm_windows.read_console_input term.incoming_fd >>= function
-      | LTerm_windows.Resize ->
-          lwt size = get_size term in
-          return (LTerm_event.Resize size)
-      | LTerm_windows.Key key ->
-          return (LTerm_event.Key key)
-      | LTerm_windows.Mouse mouse ->
-          let window = (LTerm_windows.get_console_screen_buffer_info term.outgoing_fd).LTerm_windows.window in
-          return (LTerm_event.Mouse {
-                    mouse with
-                      LTerm_mouse.row = mouse.LTerm_mouse.row - window.row1;
-                      LTerm_mouse.col = mouse.LTerm_mouse.col - window.col1;
-                  })
-  else if term.resize_received then begin
-    term.resize_received <- false;
-    lwt size = get_size term in
-    return (LTerm_event.Resize size)
-  end else
-    pick [LTerm_unix.parse_event ~escape_time:term.escape_time term.incoming_encoding term.input_stream >|= (fun ev -> `Event ev);
-          Lwt_condition.wait term.event_cond] >>= function
-      | `Event ev ->
-          return ev
-      | `Resize ->
-          term.resize_received <- false;
-          lwt size = get_size term in
-          return (LTerm_event.Resize size)
 
 (* +-----------------------------------------------------------------+
    | String recoding                                                 |
@@ -1023,6 +1298,9 @@ let print_box term ?(delta = 0) matrix =
    +-----------------------------------------------------------------+ *)
 
 let flush term = Lwt_io.flush term.oc
+
+let get_size_from_fd fd = return (get_size_from_fd fd)
+let set_size_from_fd fd size = return (set_size_from_fd fd size)
 
 (* +-----------------------------------------------------------------+
    | Standard terminals                                              |

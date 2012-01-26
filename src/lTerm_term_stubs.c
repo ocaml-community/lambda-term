@@ -7,10 +7,10 @@
  * This file is a part of Lambda-Term.
  */
 
-#include <caml/mlvalues.h>
-#include <caml/unixsupport.h>
+#include <lwt_unix.h>
 #include <caml/alloc.h>
 #include <caml/fail.h>
+#include <caml/memory.h>
 
 #if defined(_WIN32) || defined(_WIN64)
 
@@ -61,12 +61,67 @@ CAMLprim value lt_term_set_size_from_fd(value fd, value val_size)
   return Val_unit;
 }
 
+/* +-----------------------------------------------------------------+
+   | Spawning a process on windows                                   |
+   +-----------------------------------------------------------------+ */
+
+CAMLprim value lt_term_spawn(value cmdline)
+{
+  CAMLparam1(cmdline);
+  CAMLlocal1(result);
+
+  STARTUPINFO si;
+  PROCESS_INFORMATION pi;
+
+  ZeroMemory(&si, sizeof(si));
+  ZeroMemory(&pi, sizeof(pi));
+  si.cb = sizeof(si);
+
+  if (!CreateProcess(NULL, String_val(cmdline), NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
+    win32_maperr(GetLastError());
+    uerror("CreateProcess", Nothing);
+  }
+
+  CloseHandle(pi.hThread);
+
+  result = caml_alloc(1, 1);
+  Store_field(result, 0, win_alloc_handle(pi.hProcess));
+  CAMLreturn(result);
+}
+
+struct job_waitproc {
+  struct lwt_unix_job job;
+  HANDLE handle;
+};
+
+#define Job_waitproc_val(v) *(struct job_waitproc**)Data_custom_val(v)
+
+static void worker_waitproc(struct job_waitproc *job)
+{
+  WaitForSingleObject(job->handle, INFINITE);
+}
+
+CAMLprim value lt_term_waitproc_job(value handle)
+{
+  struct job_waitproc *job = lwt_unix_new(struct job_waitproc);
+  job->job.worker = (lwt_unix_job_worker)worker_waitproc;
+  job->handle = Handle_val(handle);
+  return lwt_unix_alloc_job(&(job->job));
+}
+
+CAMLprim value lt_term_waitproc_free(value val_job)
+{
+  lwt_unix_free_job(&(Job_waitproc_val(val_job))->job);
+  return Val_unit;
+}
+
 #else
 
 /* +-----------------------------------------------------------------+
    | Terminal sizes on Unix                                          |
    +-----------------------------------------------------------------+ */
 
+#include <unistd.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <errno.h>
@@ -104,5 +159,38 @@ CAMLprim value lt_term_set_size_from_fd(value fd, value val_size)
 
   return Val_unit;
 }
+
+/* +-----------------------------------------------------------------+
+   | Spawning a process on unix                                      |
+   +-----------------------------------------------------------------+ */
+
+CAMLprim value lt_term_spawn(value cmdline)
+{
+  CAMLparam1(cmdline);
+  CAMLlocal1(result);
+
+  int pid = fork();
+
+  if (pid == 0) {
+    execl("/bin/sh", "/bin/sh", "-c", String_val(cmdline), NULL);
+    exit(127);
+  }
+
+  if (pid < 0) uerror("fork", Nothing);
+
+  result = caml_alloc(1, 0);
+  Field(result, 0) = Val_int(pid);
+  CAMLreturn(result);
+}
+
+#define NA(name, feature)                       \
+  CAMLprim value lt_term_##name()               \
+  {                                             \
+    lwt_unix_not_available(feature);            \
+    return Val_unit;                            \
+  }
+
+NA(waitproc_job, "WaitForSingleObject")
+NA(waitproc_free, "WaitForSingleObject")
 
 #endif

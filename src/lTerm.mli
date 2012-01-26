@@ -19,6 +19,8 @@ exception No_such_encoding of string
 
 val create :
   ?windows : bool ->
+  ?mintty : bool ->
+  ?force_mintty : bool ->
   ?model : string ->
   ?incoming_encoding : string ->
   ?outgoing_encoding : string ->
@@ -29,8 +31,14 @@ val create :
       terminal using [input_fd] and [input_channel] for inputs and
       [output_fd] and [output_channel] for outputs.
 
-      - [windows] is a flag telling whether windows hack should be
-      used. It defaults to [Lwt_sys.windows].
+      - [windows] indicates whether the terminal is a windows console
+      (not mintty).
+
+      - [mintty] indicates whether the terminal is mintty (i.e. a
+      terminal using escape sequences running on windows).
+
+      - [force_mintty] is for testing the mintty mode, even on Unix
+      (for debugging purpose).
 
       - [model] is the type of the terminal, such as "rxvt" or
       "xterm". It defaults to the contents of the "TERM" environment
@@ -48,8 +56,25 @@ val create :
       transliteration is used so printing unicode character on the
       terminal will never fail.
 
+      It raises [Failure] if:
+
+      - [windows] is [true] and the current operating system is not windows,
+      - [mintty] is [true] and the current operating system is not windows,
+      - [windows] and [mintty] are both [true],
+      - the current operation system is windows and [windows] and [mintty] are both [false].
+
       If one of the two given encodings does not exist, it raises
-      [No_such_encoding]. *)
+      [No_such_encoding].
+
+      Note about terminal resize: in the windows console resizes are
+      not automatically detected. Lambda-term will only check for
+      resize only when something happens. If you want it to poll just
+      write somewhere in your program:
+
+      {[
+      Lwt_engine.on_timer 1.0 true ignore
+      ]}
+  *)
 
 (** {6 Informations} *)
 
@@ -60,7 +85,10 @@ val colors : t -> int
   (** Number of colors of the terminal. *)
 
 val windows : t -> bool
-  (** Whether the terminal is in windows mode or not. *)
+  (** Whether the terminal is a windows console or not. *)
+
+val mintty : t -> bool
+  (** Whether the terminal is a mintty or not. *)
 
 val is_a_tty : t -> bool
   (** [is_a_tty term] whether the intput and output of the given
@@ -85,16 +113,8 @@ exception Not_a_tty
   (** Exception raised when trying to use a function that can only be
       used on terminals. *)
 
-(** {6 Sizes} *)
-
-val get_size : t -> LTerm_geom.size Lwt.t
-  (** Returns the current size of the terminal.
-
-      It raises {!Not_a_tty} if the output of the given terminal is
-      not a tty. *)
-
-val set_size : t -> LTerm_geom.size -> unit Lwt.t
-  (** Sets the current size of the terminal.
+val size : t -> LTerm_geom.size
+  (** Returns the curent size of the terminal.
 
       It raises {!Not_a_tty} if the output of the given terminal is
       not a tty. *)
@@ -204,7 +224,10 @@ val read_event : t -> LTerm_event.t Lwt.t
   (** Reads and returns one event. The terminal should be in raw mode
       before calling this function, otherwise event will not be
       reported as they happen. It does not fail if the terminal is not
-      a tty. *)
+      a tty.
+
+      Note: you must not call {!read_event} from multiple thread at
+      the same time, it will raise {!Failure} if you try to do so. *)
 
 (** {6 Printing} *)
 
@@ -298,3 +321,7 @@ val get_size_from_fd : Lwt_unix.file_descr -> LTerm_geom.size Lwt.t
 val set_size_from_fd : Lwt_unix.file_descr -> LTerm_geom.size -> unit Lwt.t
   (** [set_size_from_fd fd size] tries to set the size of the terminal
       accessible via the given file descriptor. *)
+
+(**/**)
+val get_size : t -> LTerm_geom.size Lwt.t
+val set_size : t -> LTerm_geom.size -> unit Lwt.t

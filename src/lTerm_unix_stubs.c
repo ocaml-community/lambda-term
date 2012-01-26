@@ -22,9 +22,7 @@ CAMLprim value lt_unix_get_sigwinch()
 
 CAMLprim value lt_unix_get_system_encoding()
 {
-  char codeset[128];
-  sprintf(codeset, "CP%d", GetACP());
-  return caml_copy_string(codeset);
+  return caml_copy_string("");
 }
 
 #else

@@ -74,7 +74,6 @@ let check ui =
    +-----------------------------------------------------------------+ *)
 
 let create term ?(save_state = true) draw =
-  lwt size = LTerm.get_size term in
   lwt mode = LTerm.enter_raw_mode term in
   lwt () = if save_state then LTerm.save_state term else return () in
   let stream, push = Lwt_stream.create () in
@@ -84,7 +83,7 @@ let create term ?(save_state = true) draw =
     mode = mode;
     state = Init;
     restore_state = save_state;
-    size = size;
+    size = LTerm.size term;
     matrix_a = [||];
     matrix_b = [||];
     cursor_visible = false;
@@ -193,7 +192,7 @@ let set_cursor_position ui coord =
    | Loop                                                            |
    +-----------------------------------------------------------------+ *)
 
-let wait ui =
+let rec wait ui =
   check ui;
   if ui.state = Init then draw ui;
   lwt ev = pick [LTerm.read_event ui.term; Lwt_stream.next ui.draw_error_stream >>= fail] in
