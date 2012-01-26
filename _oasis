@@ -43,10 +43,10 @@ Library "lambda-term"
     LTerm_text,
     LTerm_ui,
     LTerm_resources,
-    LTerm_inputrc,
-    LTerm_mintty_helper
+    LTerm_inputrc
   InternalModules:
-    LTerm_resource_lexer
+    LTerm_resource_lexer,
+    LTerm_mintty_helper
   CSources:
     lTerm_term_stubs.c,
     lTerm_unix_stubs.c,
