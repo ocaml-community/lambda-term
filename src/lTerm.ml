@@ -229,6 +229,10 @@ let mintty_start term =
                             Lwt_unix.close fd);
                   Gc.finalise (close_fd fd) term;
                   return ()
+              | ["notty"] ->
+                  term.incoming_is_a_tty <- false;
+                  term.outgoing_is_a_tty <- false;
+                  Lwt_unix.close fd
               | _ ->
                   raise_lwt (Failure (Printf.sprintf "invalid initial status from the perl helper: %S" line))
           with

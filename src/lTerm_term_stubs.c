@@ -173,7 +173,7 @@ CAMLprim value lt_term_set_size_from_fd(value fd, value val_size)
    | Spawning a process on unix                                      |
    +-----------------------------------------------------------------+ */
 
-CAMLprim value lt_term_spawn(value cmdline, value fdin, value fdout)
+CAMLprim value lt_term_spawn(value cmdline, value val_fdin, value val_fdout)
 {
   CAMLparam1(cmdline);
   CAMLlocal1(result);
@@ -181,10 +181,16 @@ CAMLprim value lt_term_spawn(value cmdline, value fdin, value fdout)
   int pid = fork();
 
   if (pid == 0) {
-    dup2(Int_val(fdin), STDIN_FILENO);
-    dup2(Int_val(fdout), STDOUT_FILENO);
-    close(Int_val(fdin));
-    close(Int_val(fdout));
+    int fdin = Int_val(val_fdin);
+    int fdout = Int_val(val_fdout);
+    if (fdin != STDIN_FILENO) {
+      dup2(fdin, STDIN_FILENO);
+      close(fdin);
+    }
+    if (fdout != STDOUT_FILENO) {
+      dup2(fdout, STDOUT_FILENO);
+      close(fdout);
+    }
     execl("/bin/sh", "/bin/sh", "-c", String_val(cmdline), NULL);
     exit(127);
   }
