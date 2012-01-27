@@ -65,7 +65,7 @@ CAMLprim value lt_term_set_size_from_fd(value fd, value val_size)
    | Spawning a process on windows                                   |
    +-----------------------------------------------------------------+ */
 
-CAMLprim value lt_term_spawn(value cmdline)
+CAMLprim value lt_term_spawn(value cmdline, value hstdin, value hstdout)
 {
   CAMLparam1(cmdline);
   CAMLlocal1(result);
@@ -73,9 +73,18 @@ CAMLprim value lt_term_spawn(value cmdline)
   STARTUPINFO si;
   PROCESS_INFORMATION pi;
 
+  if (Descr_kind_val(hstdin) == KIND_SOCKET || Descr_kind_val(hstdout) == KIND_SOCKET)  {
+    win32_maperr(ERROR_INVALID_HANDLE);
+    uerror("CreateProcess", Nothing);
+  }
+
   ZeroMemory(&si, sizeof(si));
   ZeroMemory(&pi, sizeof(pi));
   si.cb = sizeof(si);
+  si.dwFlags = STARTF_USESTDHANDLES;
+  si.hStdInput = Handle_val(hstdin);
+  si.hStdOutput = Handle_val(hstdout);
+  si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
 
   if (!CreateProcess(NULL, String_val(cmdline), NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
     win32_maperr(GetLastError());
@@ -164,7 +173,7 @@ CAMLprim value lt_term_set_size_from_fd(value fd, value val_size)
    | Spawning a process on unix                                      |
    +-----------------------------------------------------------------+ */
 
-CAMLprim value lt_term_spawn(value cmdline)
+CAMLprim value lt_term_spawn(value cmdline, value fdin, value fdout)
 {
   CAMLparam1(cmdline);
   CAMLlocal1(result);
@@ -172,6 +181,10 @@ CAMLprim value lt_term_spawn(value cmdline)
   int pid = fork();
 
   if (pid == 0) {
+    dup2(Int_val(fdin), STDIN_FILENO);
+    dup2(Int_val(fdout), STDOUT_FILENO);
+    close(Int_val(fdin));
+    close(Int_val(fdout));
     execl("/bin/sh", "/bin/sh", "-c", String_val(cmdline), NULL);
     exit(127);
   }

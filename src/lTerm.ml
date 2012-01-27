@@ -166,7 +166,7 @@ type process =
   | Proc_unix of int
   | Proc_windows of Unix.file_descr
 
-external spawn : string -> process = "lt_term_spawn"
+external spawn : string -> Unix.file_descr -> Unix.file_descr -> process = "lt_term_spawn"
 
 external windows_waitproc_job : Unix.file_descr -> [ `windows_waitproc ] Lwt_unix.job = "lt_term_waitproc_job"
 external windows_waitproc_free : [ `windows_waitproc ] Lwt_unix.job -> unit = "lt_term_waitproc_job"
@@ -185,7 +185,12 @@ let mintty_start term =
             port
     in
     let wait_proc =
-      match spawn (Printf.sprintf "perl -e '$port=%d;' -e %s" port (Filename.quote LTerm_mintty_helper.code)) with
+      match
+        spawn
+          (Printf.sprintf "perl -e '$port=%d;' -e %s" port (Filename.quote LTerm_mintty_helper.code))
+          (Lwt_unix.unix_file_descr term.incoming_fd)
+          (Lwt_unix.unix_file_descr term.outgoing_fd)
+      with
         | Proc_unix pid ->
             lwt _ = Lwt_unix.waitpid [] pid in
             return None
