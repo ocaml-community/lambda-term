@@ -151,7 +151,13 @@ let rec loop term history exit_code =
       return None
   with
     | Some command ->
-        lwt status = Lwt_process.exec (Lwt_process.shell command) in
+        lwt status =
+          try_lwt
+            Lwt_process.exec (Lwt_process.shell command)
+          with Unix.Unix_error (Unix.ENOENT, _, _) ->
+            lwt () = LTerm.fprintls term (eval [B_fg lred; S "command not found"]) in
+            return (Unix.WEXITED 127)
+        in
         loop
           term
           (LTerm_read_line.add_entry command history)
