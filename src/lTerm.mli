@@ -19,8 +19,6 @@ exception No_such_encoding of string
 
 val create :
   ?windows : bool ->
-  ?mintty : bool ->
-  ?force_mintty : bool ->
   ?model : string ->
   ?incoming_encoding : string ->
   ?outgoing_encoding : string ->
@@ -32,13 +30,7 @@ val create :
       [output_fd] and [output_channel] for outputs.
 
       - [windows] indicates whether the terminal is a windows console
-      (not mintty).
-
-      - [mintty] indicates whether the terminal is mintty (i.e. a
-      terminal using escape sequences running on windows).
-
-      - [force_mintty] is for testing the mintty mode, even on Unix
-      (for debugging purpose).
+      (not mintty, rxvt, ...). It defaults to [Lwt_sys.windows].
 
       - [model] is the type of the terminal, such as "rxvt" or
       "xterm". It defaults to the contents of the "TERM" environment
@@ -55,13 +47,6 @@ val create :
       [true] and [LTerm_unix.system_encoding] otherwise. Note that
       transliteration is used so printing unicode character on the
       terminal will never fail.
-
-      It raises [Failure] if:
-
-      - [windows] is [true] and the current operating system is not windows,
-      - [mintty] is [true] and the current operating system is not windows,
-      - [windows] and [mintty] are both [true],
-      - the current operation system is windows and [windows] and [mintty] are both [false].
 
       If one of the two given encodings does not exist, it raises
       [No_such_encoding].
@@ -86,9 +71,6 @@ val colors : t -> int
 
 val windows : t -> bool
   (** Whether the terminal is a windows console or not. *)
-
-val mintty : t -> bool
-  (** Whether the terminal is a mintty or not. *)
 
 val is_a_tty : t -> bool
   (** [is_a_tty term] whether the intput and output of the given

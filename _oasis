@@ -45,8 +45,7 @@ Library "lambda-term"
     LTerm_resources,
     LTerm_inputrc
   InternalModules:
-    LTerm_resource_lexer,
-    LTerm_mintty_helper
+    LTerm_resource_lexer
   CSources:
     lTerm_term_stubs.c,
     lTerm_unix_stubs.c,
@@ -61,13 +60,6 @@ Executable events
   Install: false
   CompiledObject: best
   MainIs: events.ml
-  BuildDepends: lambda-term
-
-Executable mintty
-  Path: examples
-  Install: false
-  CompiledObject: best
-  MainIs: mintty.ml
   BuildDepends: lambda-term
 
 Executable colors
