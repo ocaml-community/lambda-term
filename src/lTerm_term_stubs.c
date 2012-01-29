@@ -61,69 +61,6 @@ CAMLprim value lt_term_set_size_from_fd(value fd, value val_size)
   return Val_unit;
 }
 
-/* +-----------------------------------------------------------------+
-   | Spawning a process on windows                                   |
-   +-----------------------------------------------------------------+ */
-
-CAMLprim value lt_term_spawn(value cmdline, value hstdin, value hstdout)
-{
-  CAMLparam1(cmdline);
-  CAMLlocal1(result);
-
-  STARTUPINFO si;
-  PROCESS_INFORMATION pi;
-
-  if (Descr_kind_val(hstdin) == KIND_SOCKET || Descr_kind_val(hstdout) == KIND_SOCKET)  {
-    win32_maperr(ERROR_INVALID_HANDLE);
-    uerror("CreateProcess", Nothing);
-  }
-
-  ZeroMemory(&si, sizeof(si));
-  ZeroMemory(&pi, sizeof(pi));
-  si.cb = sizeof(si);
-  si.dwFlags = STARTF_USESTDHANDLES;
-  si.hStdInput = Handle_val(hstdin);
-  si.hStdOutput = Handle_val(hstdout);
-  si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
-
-  if (!CreateProcess(NULL, String_val(cmdline), NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
-    win32_maperr(GetLastError());
-    uerror("CreateProcess", Nothing);
-  }
-
-  CloseHandle(pi.hThread);
-
-  result = caml_alloc(1, 1);
-  Store_field(result, 0, win_alloc_handle(pi.hProcess));
-  CAMLreturn(result);
-}
-
-struct job_waitproc {
-  struct lwt_unix_job job;
-  HANDLE handle;
-};
-
-#define Job_waitproc_val(v) *(struct job_waitproc**)Data_custom_val(v)
-
-static void worker_waitproc(struct job_waitproc *job)
-{
-  WaitForSingleObject(job->handle, INFINITE);
-}
-
-CAMLprim value lt_term_waitproc_job(value handle)
-{
-  struct job_waitproc *job = lwt_unix_new(struct job_waitproc);
-  job->job.worker = (lwt_unix_job_worker)worker_waitproc;
-  job->handle = Handle_val(handle);
-  return lwt_unix_alloc_job(&(job->job));
-}
-
-CAMLprim value lt_term_waitproc_free(value val_job)
-{
-  lwt_unix_free_job(&(Job_waitproc_val(val_job))->job);
-  return Val_unit;
-}
-
 #else
 
 /* +-----------------------------------------------------------------+
@@ -168,48 +105,5 @@ CAMLprim value lt_term_set_size_from_fd(value fd, value val_size)
 
   return Val_unit;
 }
-
-/* +-----------------------------------------------------------------+
-   | Spawning a process on unix                                      |
-   +-----------------------------------------------------------------+ */
-
-CAMLprim value lt_term_spawn(value cmdline, value val_fdin, value val_fdout)
-{
-  CAMLparam1(cmdline);
-  CAMLlocal1(result);
-
-  int pid = fork();
-
-  if (pid == 0) {
-    int fdin = Int_val(val_fdin);
-    int fdout = Int_val(val_fdout);
-    if (fdin != STDIN_FILENO) {
-      dup2(fdin, STDIN_FILENO);
-      close(fdin);
-    }
-    if (fdout != STDOUT_FILENO) {
-      dup2(fdout, STDOUT_FILENO);
-      close(fdout);
-    }
-    execl("/bin/sh", "/bin/sh", "-c", String_val(cmdline), NULL);
-    exit(127);
-  }
-
-  if (pid < 0) uerror("fork", Nothing);
-
-  result = caml_alloc(1, 0);
-  Field(result, 0) = Val_int(pid);
-  CAMLreturn(result);
-}
-
-#define NA(name, feature)                       \
-  CAMLprim value lt_term_##name()               \
-  {                                             \
-    lwt_unix_not_available(feature);            \
-    return Val_unit;                            \
-  }
-
-NA(waitproc_job, "WaitForSingleObject")
-NA(waitproc_free, "WaitForSingleObject")
 
 #endif
