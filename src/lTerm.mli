@@ -252,6 +252,12 @@ val eprints : LTerm_text.t -> unit Lwt.t
 val eprintlf : ('a, unit, string, unit Lwt.t) format4 -> 'a
 val eprintls : LTerm_text.t -> unit Lwt.t
 
+(** {6 Styles} *)
+
+val set_style : t -> LTerm_style.t -> unit Lwt.t
+  (** Change the style of the termina for subsequent unstyled
+      output. It does nothing if the output is not a tty. *)
+
 (** {6 Rendering} *)
 
 val render : t -> LTerm_draw.matrix -> unit Lwt.t

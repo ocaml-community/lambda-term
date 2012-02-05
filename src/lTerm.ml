@@ -897,11 +897,21 @@ let add_color term buf base = function
   | LTerm_style.RGB(r, g, b) ->
       add_index term buf base (map_color term  r g b)
 
+let add_style term buf style =
+  let open LTerm_style in
+  Buffer.add_string buf "\027[0";
+  (match style.bold with Some true -> Buffer.add_string buf Codes.bold | _ -> ());
+  (match style.underline with Some true -> Buffer.add_string buf Codes.underline | _ -> ());
+  (match style.blink with Some true -> Buffer.add_string buf Codes.blink | _ -> ());
+  (match style.reverse with Some true -> Buffer.add_string buf Codes.reverse | _ -> ());
+  (match style.foreground with Some color -> add_color term buf Codes.foreground color | None -> ());
+  (match style.background with Some color -> add_color term buf Codes.background color | None -> ());
+  Buffer.add_char buf 'm'
+
 let expand term text =
   if Array.length text = 0 then
     ""
   else begin
-    let open LTerm_style in
     let buf = Buffer.create 256 in
     Buffer.add_string buf "\027[0m";
     let rec loop idx prev_style =
@@ -910,21 +920,12 @@ let expand term text =
         Buffer.contents buf
       end else begin
         let ch, style = Array.unsafe_get text idx in
-        if not (LTerm_style.equal style prev_style) then begin
-          Buffer.add_string buf "\027[0";
-          (match style.bold with Some true -> Buffer.add_string buf Codes.bold | _ -> ());
-          (match style.underline with Some true -> Buffer.add_string buf Codes.underline | _ -> ());
-          (match style.blink with Some true -> Buffer.add_string buf Codes.blink | _ -> ());
-          (match style.reverse with Some true -> Buffer.add_string buf Codes.reverse | _ -> ());
-          (match style.foreground with Some color -> add_color term buf Codes.foreground color | None -> ());
-          (match style.background with Some color -> add_color term buf Codes.background color | None -> ());
-          Buffer.add_char buf 'm';
-        end;
+        if not (LTerm_style.equal style prev_style) then add_style term buf style;
         Buffer.add_string buf (Zed_utf8.singleton ch);
         loop (idx + 1) style
       end
     in
-    loop 0 none
+    loop 0 LTerm_style.none
   end
 
 let windows_fg_color term = function
@@ -984,6 +985,37 @@ let fprints term text =
 
 let fprintls term text =
   fprints term (Array.append text (LTerm_text.of_string "\n"))
+
+(* +-----------------------------------------------------------------+
+   | Styles setting                                                  |
+   +-----------------------------------------------------------------+ *)
+
+let set_style term style =
+  if term.outgoing_is_a_tty then
+    if term.windows then begin
+      let open LTerm_style in
+      let attr =
+        if style.reverse = Some true then {
+          LTerm_windows.foreground = (match style.background with Some color -> windows_bg_color term color | None -> 0);
+          LTerm_windows.background = (match style.foreground with Some color -> windows_fg_color term color | None -> 7);
+        } else {
+          LTerm_windows.foreground = (match style.foreground with Some color -> windows_fg_color term color | None -> 7);
+          LTerm_windows.background = (match style.background with Some color -> windows_bg_color term color | None -> 0);
+        }
+      in
+      Lwt_io.atomic
+        (fun oc ->
+           lwt () = Lwt_io.flush oc in
+           LTerm_windows.set_console_text_attribute term.outgoing_fd attr;
+           return ())
+        term.oc
+    end else begin
+      let buf = Buffer.create 16 in
+      add_style term buf style;
+      Lwt_io.fprint term.oc (Buffer.contents buf)
+    end
+  else
+    return ()
 
 (* +-----------------------------------------------------------------+
    | Rendering                                                       |
