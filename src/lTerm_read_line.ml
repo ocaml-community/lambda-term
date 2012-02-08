@@ -673,7 +673,13 @@ let rec drop count l =
     | e :: l -> drop (count - 1) l
 
 (* Computes the position of the cursor after printing the given styled
-   string. *)
+   string:
+   - [pos] is the current cursor position
+     (it may be at column [max-column + 1])
+   - [text] is the text to display
+   - [start] is the start of the chunk to display in [text]
+   - [stop] is the end of the chunk to display in [text]
+*)
 let rec compute_position cols pos text start stop =
   if start = stop then
     pos
@@ -681,10 +687,17 @@ let rec compute_position cols pos text start stop =
     let ch, style = text.(start) in
     if ch = newline then
       compute_position cols { row = pos.row + 1; col = 0 } text (start + 1) stop
-    else if pos.col + 1 = cols then
-      compute_position cols { row = pos.row + 1; col = 0 } text (start + 1) stop
+    else if pos.col = cols then
+      compute_position cols { row = pos.row + 1; col = 1 } text (start + 1) stop
     else
       compute_position cols { pos with col = pos.col + 1 } text (start + 1) stop
+
+(* Return the "real" position of the cursor, i.e. on the screen. *)
+let real_pos cols pos =
+  if pos.col = cols then
+    { row = pos.row + 1; col = 0 }
+  else
+    pos
 
 let rec get_index_of_last_displayed_word column columns index words =
   match words with
@@ -717,6 +730,34 @@ let draw_styled ctx row col str =
     end
   in
   loop row col 0
+
+let unsafe_get matrix row col =
+  Array.unsafe_get (Array.unsafe_get matrix row) col
+
+let draw_styled_with_newlines matrix cols row col str =
+  let rec loop row col idx =
+    if idx < Array.length str then begin
+      let ch, style = Array.unsafe_get str idx in
+      if ch = newline then begin
+        (unsafe_get matrix row col).LTerm_draw.char <- newline;
+        loop (row + 1) 0 (idx + 1)
+      end else begin
+        let row, col =
+          if col = cols then
+            (row + 1, 0)
+          else
+            (row, col)
+        in
+        let point = unsafe_get matrix row col in
+        point.LTerm_draw.char <- ch;
+        LTerm_draw.set_style point style;
+        loop row (col + 1) (idx + 1)
+      end
+    end
+  in
+  loop row col 0
+
+let styled_newline = [|(newline, LTerm_style.none)|]
 
 class virtual ['a] term term =
   let size, set_size = S.create (LTerm.size term) in
@@ -807,41 +848,55 @@ object(self)
       (* Compute the position of the cursor after displaying the
          input. *)
       let pos_after_styled = compute_position size.cols pos_after_before styled position (Array.length styled) in
+      (* Compute the position of the cursor after displaying the
+         newline used to end the input. *)
+      let pos_after_newline = compute_position size.cols pos_after_styled styled_newline 0 1 in
+      (* The real position of the cursor on the screen. *)
+      let pos_cursor = real_pos size.cols pos_after_before in
+      (* Height of prompt+input. *)
+      let prompt_input_height = max (pos_cursor.row + 1) pos_after_newline.row in
       let matrix =
         if self#show_box && size.cols > 2 then
-          (* Compute the position of the cursor after displaying the
-             newline to separate the input and the box. *)
-          let pos_after_newline = compute_position size.cols pos_after_styled [|(newline, LTerm_style.none)|] 0 1 in
           match S.value self#message with
             | Some msg ->
                 (* Compute the height of the message. *)
                 let message_height = (compute_position (size.cols - 2) { row = 0; col = 0 } msg 0 (Array.length msg)).row + 1 in
                 (* The total height of the displayed text. *)
-                let total_height = pos_after_newline.row + message_height + 2 in
+                let total_height = prompt_input_height + message_height + 2 in
 
                 (* Create the matrix for the rendering. *)
-                let matrix_size = { size with rows = if displayed then max total_height height else total_height } in
+                let matrix_size = { cols = size.cols + 1; rows = if displayed then max total_height height else total_height } in
                 let matrix = LTerm_draw.make_matrix matrix_size in
-                let ctx = LTerm_draw.context matrix matrix_size in
 
                 (* Update the height parameter. *)
                 height <- total_height;
 
                 (* Draw the prompt and the input. *)
-                draw_styled ctx 0 0 prompt;
-                draw_styled ctx pos_after_prompt.row pos_after_prompt.col styled;
+                draw_styled_with_newlines matrix size.cols 0 0 prompt;
+                draw_styled_with_newlines matrix size.cols pos_after_prompt.row pos_after_prompt.col styled;
+                draw_styled_with_newlines matrix size.cols pos_after_styled.row pos_after_styled.col styled_newline;
+
+                let ctx = LTerm_draw.sub (LTerm_draw.context matrix matrix_size) {
+                  row1 = 0;
+                  col1 = 0;
+                  row2 = matrix_size.rows;
+                  col2 = size.cols;
+                } in
 
                 (* Draw a frame for the message. *)
                 LTerm_draw.draw_frame ctx {
-                  row1 = pos_after_newline.row;
+                  row1 = prompt_input_height;
                   col1 = 0;
                   row2 = total_height;
                   col2 = size.cols;
                 } LTerm_draw.Light;
+                for row = prompt_input_height to total_height - 1 do
+                  (unsafe_get matrix row size.cols).LTerm_draw.char <- newline
+                done;
 
                 (* Draw the message. *)
                 let ctx = LTerm_draw.sub ctx {
-                  row1 = pos_after_newline.row + 1;
+                  row1 = prompt_input_height + 1;
                   col1 = 1;
                   row2 = total_height - 1;
                   col2 = size.cols - 1;
@@ -856,31 +911,41 @@ object(self)
                 let comp_words = drop comp_start (S.value self#completion_words) in
 
                 (* The total height of the displayed text. *)
-                let total_height = pos_after_newline.row + 3 in
+                let total_height = prompt_input_height + 3 in
 
                 (* Create the matrix for the rendering. *)
-                let matrix_size = { size with rows = if displayed then max total_height height else total_height } in
+                let matrix_size = { cols = size.cols + 1; rows = if displayed then max total_height height else total_height } in
                 let matrix = LTerm_draw.make_matrix matrix_size in
-                let ctx = LTerm_draw.context matrix matrix_size in
 
                 (* Update the height parameter. *)
                 height <- total_height;
 
                 (* Draw the prompt and the input. *)
-                draw_styled ctx 0 0 prompt;
-                draw_styled ctx pos_after_prompt.row pos_after_prompt.col styled;
+                draw_styled_with_newlines matrix size.cols 0 0 prompt;
+                draw_styled_with_newlines matrix size.cols pos_after_prompt.row pos_after_prompt.col styled;
+                draw_styled_with_newlines matrix size.cols pos_after_styled.row pos_after_styled.col styled_newline;
+
+                let ctx = LTerm_draw.sub (LTerm_draw.context matrix matrix_size) {
+                  row1 = 0;
+                  col1 = 0;
+                  row2 = matrix_size.rows;
+                  col2 = size.cols;
+                } in
 
                 (* Draw a frame for the completion. *)
                 LTerm_draw.draw_frame ctx {
-                  row1 = pos_after_newline.row;
+                  row1 = prompt_input_height;
                   col1 = 0;
                   row2 = total_height;
                   col2 = size.cols;
                 } LTerm_draw.Light;
+                for row = prompt_input_height to total_height - 1 do
+                  (unsafe_get matrix row size.cols).LTerm_draw.char <- newline
+                done;
 
                 (* Draw the completion. *)
                 let ctx = LTerm_draw.sub ctx {
-                  row1 = pos_after_newline.row + 1;
+                  row1 = prompt_input_height + 1;
                   col1 = 1;
                   row2 = total_height - 1;
                   col2 = size.cols - 1;
@@ -907,13 +972,12 @@ object(self)
                 matrix
 
         else begin
-          let total_height = pos_after_styled.row + 1 in
-          let matrix_size = { size with rows = if displayed then max total_height height else total_height } in
+          let total_height = prompt_input_height in
+          let matrix_size = { cols = size.cols + 1; rows = if displayed then max total_height height else total_height } in
           let matrix = LTerm_draw.make_matrix matrix_size in
-          let ctx = LTerm_draw.context matrix matrix_size in
           height <- total_height;
-          draw_styled ctx 0 0 prompt;
-          draw_styled ctx pos_after_prompt.row pos_after_prompt.col styled;
+          draw_styled_with_newlines matrix size.cols 0 0 prompt;
+          draw_styled_with_newlines matrix size.cols pos_after_prompt.row pos_after_prompt.col styled;
           matrix
         end
       in
@@ -929,11 +993,11 @@ object(self)
               return ()
           in
           (* Display everything. *)
-          lwt () = LTerm.print_box term ~delta:(-cursor.row) matrix in
+          lwt () = LTerm.print_box_with_newlines term ~delta:(-cursor.row) matrix in
           (* Move the cursor. *)
-          lwt () = LTerm.move term (pos_after_before.row - cursor.row) (pos_after_before.col - cursor.col) in
+          lwt () = LTerm.move term (pos_cursor.row - cursor.row) (pos_cursor.col - cursor.col) in
           (* Update the cursor. *)
-          cursor <- pos_after_before;
+          cursor <- pos_cursor;
           return ()
         end else begin
           lwt () = LTerm.hide_cursor term in
@@ -945,9 +1009,9 @@ object(self)
               return ()
           in
           (* Display everything. *)
-          lwt () = LTerm.print_box term matrix in
+          lwt () = LTerm.print_box_with_newlines term matrix in
           (* Update the cursor. *)
-          cursor <- pos_after_before;
+          cursor <- pos_cursor;
           (* Move the cursor to the right position. *)
           lwt () =
             (* On Unix the cursor stay at the end of line. We put it
@@ -974,13 +1038,13 @@ object(self)
     let pos_after_before = compute_position size.cols pos_after_prompt styled 0 position in
     let pos_after_styled = compute_position size.cols pos_after_before styled position (Array.length styled) in
     let total_height = pos_after_styled.row + 1 in
-    let matrix_size = { size with rows = if displayed then max total_height height else total_height } in
+    let matrix_size = { cols = size.cols + 1; rows = if displayed then max total_height height else total_height } in
     let matrix = LTerm_draw.make_matrix matrix_size in
-    let ctx = LTerm_draw.context matrix matrix_size in
-    draw_styled ctx 0 0 prompt;
-    draw_styled ctx pos_after_prompt.row pos_after_prompt.col styled;
+    draw_styled_with_newlines matrix size.cols 0 0 prompt;
+    draw_styled_with_newlines matrix size.cols pos_after_prompt.row pos_after_prompt.col styled;
+    draw_styled_with_newlines matrix size.cols pos_after_styled.row pos_after_styled.col styled_newline;
     lwt () = if displayed then LTerm.move term (-cursor.row) (-cursor.col) else return () in
-    lwt () = LTerm.print_box term matrix in
+    lwt () = LTerm.print_box_with_newlines term matrix in
     if LTerm.windows term then
       LTerm.move term total_height 0
     else
@@ -994,25 +1058,32 @@ object(self)
   method hide =
     if visible then begin
       visible <- false;
-      Lwt_mutex.with_lock draw_mutex (fun () ->
-                                        if displayed then
-                                          let matrix_size = { S.value size with rows = height } in
-                                          let matrix = LTerm_draw.make_matrix matrix_size in
-                                          lwt () = LTerm.move term (-cursor.row) (-cursor.col) in
-                                          lwt () = LTerm.print_box term matrix in
-                                          lwt () =
-                                            if LTerm.windows term then
-                                              return ()
-                                            else
-                                              lwt () = LTerm.fprint term "\r" in
-                                              LTerm.move term (1 - Array.length matrix) 0
-                                          in
-                                          cursor <- { row = 0; col = 0 };
-                                          height <- 0;
-                                          displayed <- false;
-                                          return ()
-                                        else
-                                          return ())
+      lwt () = Lwt_mutex.lock draw_mutex in
+      try_lwt
+        if displayed then
+          let matrix_size = { cols = (S.value size).cols + 1; rows = height } in
+          let matrix = LTerm_draw.make_matrix matrix_size in
+          for row = 0 to height - 1 do
+            (unsafe_get matrix row 0).LTerm_draw.char <- newline
+          done;
+          lwt () = LTerm.move term (-cursor.row) (-cursor.col) in
+          lwt () = LTerm.print_box_with_newlines term matrix in
+          lwt () =
+            if LTerm.windows term then
+              return ()
+            else
+              lwt () = LTerm.fprint term "\r" in
+              LTerm.move term (1 - Array.length matrix) 0
+          in
+          cursor <- { row = 0; col = 0 };
+          height <- 0;
+          displayed <- false;
+          return ()
+        else
+          return ()
+      finally
+        Lwt_mutex.unlock draw_mutex;
+        return ()
     end else
       return ()
 

@@ -72,6 +72,7 @@ let make_prompt size exit_code time =
     B_fg(if exit_code = 0 then lwhite else lred); S code; E_fg;
     S" ]─";
     E_fg;
+    S"\n";
 
     B_fg lred; S(try Sys.getenv "USER" with Not_found -> ""); E_fg;
     B_fg lgreen; S"@"; E_fg;

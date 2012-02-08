@@ -276,14 +276,28 @@ val render_update : t -> LTerm_draw.matrix -> LTerm_draw.matrix -> unit Lwt.t
       not a tty. *)
 
 val print_box : t -> ?delta : int -> LTerm_draw.matrix -> unit Lwt.t
-  (** [print_box term matrix] prints the contents of [matrix] starting
-      at current cursor row plus delta. Note that when you have the
-      choice between using {!fprints} and {!print_box} you should use
-      {!print_box} because it works better under windows and is more
-      efficient.
+  (** [print_box term ?delta matrix] prints the contents of [matrix]
+      starting at current cursor row plus delta. Note that when you
+      have the choice between using {!fprints} and {!print_box} you
+      should use {!print_box} because it works better under windows
+      and is more efficient.
 
-      Note: on windows this does not move the cursor.
-  *)
+      Note: on windows this does not move the cursor. *)
+
+val print_box_with_newlines : t -> ?delta : int -> LTerm_draw.matrix -> unit Lwt.t
+  (** [print_box term ?delta matrix] Same as {!print_box} but [matrix]
+      may contains newline characters. It must contain one more column
+      that the terminal (in case a line of the length of the terminal
+      ends with a newline).
+
+      The difference between {!print_box} and
+      {!print_box_with_newlines} is that when the text is selected in
+      the terminal, with {!print_box} it will always be a box with the
+      dimensions of [matrix]. With {!print_box_with_newlines} it may
+      contains lines longer than the width of the terminal.
+
+      The contents of a line after the first newline character (if
+      any) in a row of [matrix] is ignored. *)
 
 (** {6 Misc} *)
 

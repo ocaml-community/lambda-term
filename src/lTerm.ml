@@ -1030,6 +1030,9 @@ let same_style p1 p2 =
       p1.foreground = p2.foreground &&
       p1.background = p2.background
 
+let unknown_char = UChar.of_int 0xfffd
+let unknown_utf8 = Zed_utf8.singleton unknown_char
+
 let render_point term buf old_point new_point =
   let open LTerm_draw in
   if not (same_style new_point old_point) then begin
@@ -1043,7 +1046,11 @@ let render_point term buf old_point new_point =
     add_color term buf Codes.background new_point.background;
     Buffer.add_char buf 'm';
   end;
-  Buffer.add_string buf (Zed_utf8.singleton new_point.char)
+  (* Skip control characters, otherwise output will be messy. *)
+  if UChar.code new_point.char < 32 then
+    Buffer.add_string buf unknown_utf8
+  else
+    Buffer.add_string buf (Zed_utf8.singleton new_point.char)
 
 type render_kind = Render_screen | Render_box
 
@@ -1078,29 +1085,53 @@ let render_update_unix term kind old_matrix matrix =
         last_point := point
       done
     end;
-    if y < Array.length matrix - 1 then  Buffer.add_char buf '\n'
+    if y < Array.length matrix - 1 then
+      Buffer.add_char buf '\n'
   done;
   Buffer.add_string buf "\027[0m";
   fprint term (Buffer.contents buf)
 
-let render_windows term ?(delta = 0) kind matrix =
+let blank_windows = {
+  LTerm_windows.ci_char = UChar.of_char ' ';
+  LTerm_windows.ci_foreground = 7;
+  LTerm_windows.ci_background = 0;
+}
+
+let render_windows term ?(delta = 0) kind handle_newlines matrix =
   let open LTerm_draw in
   (* Build the matrix of char infos *)
   let matrix =
     Array.map
       (fun line ->
-         Array.map
-           (fun point ->
-              if point.reverse then {
-                LTerm_windows.ci_char = point.char;
-                LTerm_windows.ci_foreground = windows_bg_color term point.background;
-                LTerm_windows.ci_background = windows_fg_color term point.foreground;
-              } else {
-                LTerm_windows.ci_char = point.char;
-                LTerm_windows.ci_foreground = windows_fg_color term point.foreground;
-                LTerm_windows.ci_background = windows_bg_color term point.background;
-              })
-           line)
+         let len = Array.length line - (if handle_newlines then 1 else 0) in
+         if len < 0 then invalid_arg "LTerm.print_box_with_newlines";
+         let res = Array.make len blank_windows in
+         let rec loop i =
+           if i = len then
+             res
+           else begin
+             let point = Array.unsafe_get line i in
+             let code = UChar.code point.char in
+             if handle_newlines && code <> 10 then
+               res
+             else begin
+               let char = if code < 32 then unknown_char else point.char in
+               Array.unsafe_set res i (
+                 if point.reverse then {
+                   LTerm_windows.ci_char = char;
+                   LTerm_windows.ci_foreground = windows_bg_color term point.background;
+                   LTerm_windows.ci_background = windows_fg_color term point.foreground;
+                 } else {
+                   LTerm_windows.ci_char = char;
+                   LTerm_windows.ci_foreground = windows_fg_color term point.foreground;
+                   LTerm_windows.ci_background = windows_bg_color term point.background;
+                 }
+               );
+               loop (i + 1)
+             end
+           end
+         in
+         loop 0)
       matrix
   in
   lwt () = Lwt_io.flush term.oc in
@@ -1128,7 +1159,7 @@ let render_windows term ?(delta = 0) kind matrix =
 let render_update term old_matrix matrix =
   if term.outgoing_is_a_tty then
     if term.windows then
-      render_windows term Render_screen matrix
+      render_windows term Render_screen false matrix
     else
       render_update_unix term Render_screen old_matrix matrix
   else
@@ -1139,10 +1170,60 @@ let render term m = render_update term [||] m
 let print_box term ?(delta = 0) matrix =
   if term.outgoing_is_a_tty then
     if term.windows then
-      render_windows term ~delta Render_box matrix
+      render_windows term ~delta Render_box false matrix
     else
       lwt () = if delta <> 0 then move term delta 0 else return () in
       render_update_unix term Render_box [||] matrix
+  else
+    raise_lwt Not_a_tty
+
+let print_box_with_newlines_unix term matrix =
+  let open LTerm_draw in
+  let buf = Buffer.create 16 in
+  (* Go the the beginnig of line and reset attributes *)
+  Buffer.add_string buf "\r\027[0m";
+  (* The last displayed point. *)
+  let last_point = ref {
+    char = UChar.of_char ' ';
+    bold = false;
+    underline = false;
+    blink = false;
+    reverse = false;
+    foreground = LTerm_style.default;
+    background = LTerm_style.default;
+  } in
+  for y = 0 to Array.length matrix - 1 do
+    let line = Array.unsafe_get matrix y in
+    let cols = Array.length line - 1 in
+    if cols < 0 then invalid_arg "LTerm.print_box_with_newlines";
+    let rec loop x =
+      let point = Array.unsafe_get line x in
+      let code = UChar.code point.char in
+      if x = cols then begin
+        if code = 10 && y < Array.length matrix - 1 then
+          Buffer.add_char buf '\n'
+      end else if code = 10 then
+        (* Erase everything until the end of line and print a
+           newline. *)
+        Buffer.add_string buf "\027[K\n"
+      else begin
+        render_point term buf !last_point point;
+        last_point := point;
+        loop (x + 1)
+      end
+    in
+    loop 0
+  done;
+  Buffer.add_string buf "\027[0m";
+  fprint term (Buffer.contents buf)
+
+let print_box_with_newlines term ?(delta = 0) matrix =
+  if term.outgoing_is_a_tty then
+    if term.windows then
+      render_windows term ~delta Render_box true matrix
+    else
+      lwt () = if delta <> 0 then move term delta 0 else return () in
+      print_box_with_newlines_unix term matrix
   else
     raise_lwt Not_a_tty
 
