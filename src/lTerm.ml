@@ -1075,20 +1075,22 @@ let render_update_unix term kind old_matrix matrix =
     foreground = LTerm_style.default;
     background = LTerm_style.default;
   } in
-  for y = 0 to Array.length matrix - 1 do
+  let rows = Array.length matrix and old_rows = Array.length old_matrix in
+  for y = 0 to rows - 1 do
     let line = Array.unsafe_get matrix y in
     (* If the current line is equal to the displayed one, skip it *)
-    if y >= Array.length old_matrix || line <> Array.unsafe_get old_matrix y then begin
+    if y >= old_rows || line <> Array.unsafe_get old_matrix y then begin
       for x = 0 to Array.length line - 1 do
         let point = Array.unsafe_get line x in
         render_point term buf !last_point point;
         last_point := point
       done
     end;
-    if y < Array.length matrix - 1 then
-      Buffer.add_char buf '\n'
+    if y < rows - 1 then Buffer.add_char buf '\n'
   done;
   Buffer.add_string buf "\027[0m";
+  (* Go to the beginning of the line if rendering a box. *)
+  if kind = Render_box then Buffer.add_char buf '\r';
   fprint term (Buffer.contents buf)
 
 let blank_windows = {
@@ -1097,7 +1099,7 @@ let blank_windows = {
   LTerm_windows.ci_background = 0;
 }
 
-let render_windows term ?(delta = 0) kind handle_newlines matrix =
+let render_windows term kind handle_newlines matrix =
   let open LTerm_draw in
   (* Build the matrix of char infos *)
   let matrix =
@@ -1112,7 +1114,7 @@ let render_windows term ?(delta = 0) kind handle_newlines matrix =
            else begin
              let point = Array.unsafe_get line i in
              let code = UChar.code point.char in
-             if handle_newlines && code <> 10 then
+             if handle_newlines && code = 10 then
                res
              else begin
                let char = if code < 32 then unknown_char else point.char in
@@ -1134,7 +1136,17 @@ let render_windows term ?(delta = 0) kind handle_newlines matrix =
          loop 0)
       matrix
   in
-  lwt () = Lwt_io.flush term.oc in
+  let rows = Array.length matrix in
+  lwt () =
+    match kind with
+      | Render_screen ->
+          return ()
+      | Render_box ->
+          (* Ensure that there is enough place to display the box. *)
+          lwt () = fprint term "\r" in
+          lwt () = fprint term (String.make (rows - 1) '\n') in
+          Lwt_io.flush term.oc
+  in
   let info = LTerm_windows.get_console_screen_buffer_info term.outgoing_fd in
   let window_rect = info.LTerm_windows.window in
   let rect =
@@ -1143,8 +1155,8 @@ let render_windows term ?(delta = 0) kind handle_newlines matrix =
           window_rect
       | Render_box ->
           { window_rect with
-              row1 = info.LTerm_windows.cursor_position.row + delta;
-              row2 = info.LTerm_windows.cursor_position.row + delta + Array.length matrix }
+              row1 = info.LTerm_windows.cursor_position.row - (rows - 1);
+              row2 = info.LTerm_windows.cursor_position.row + 1 }
   in
   ignore (
     LTerm_windows.write_console_output
@@ -1167,14 +1179,16 @@ let render_update term old_matrix matrix =
 
 let render term m = render_update term [||] m
 
-let print_box term ?(delta = 0) matrix =
-  if term.outgoing_is_a_tty then
-    if term.windows then
-      render_windows term ~delta Render_box false matrix
-    else
-      lwt () = if delta <> 0 then move term delta 0 else return () in
-      render_update_unix term Render_box [||] matrix
-  else
+let print_box term matrix =
+  if term.outgoing_is_a_tty then begin
+    if Array.length matrix > 0 then begin
+      if term.windows then
+        render_windows term Render_box false matrix
+      else
+        render_update_unix term Render_box [||] matrix
+    end else
+      fprint term "\r"
+  end else
     raise_lwt Not_a_tty
 
 let print_box_with_newlines_unix term matrix =
@@ -1192,7 +1206,8 @@ let print_box_with_newlines_unix term matrix =
     foreground = LTerm_style.default;
     background = LTerm_style.default;
   } in
-  for y = 0 to Array.length matrix - 1 do
+  let rows = Array.length matrix in
+  for y = 0 to rows - 1 do
     let line = Array.unsafe_get matrix y in
     let cols = Array.length line - 1 in
     if cols < 0 then invalid_arg "LTerm.print_box_with_newlines";
@@ -1200,13 +1215,13 @@ let print_box_with_newlines_unix term matrix =
       let point = Array.unsafe_get line x in
       let code = UChar.code point.char in
       if x = cols then begin
-        if code = 10 && y < Array.length matrix - 1 then
+        if code = 10 && y < rows - 1 then
           Buffer.add_char buf '\n'
-      end else if code = 10 then
-        (* Erase everything until the end of line and print a
-           newline. *)
-        Buffer.add_string buf "\027[K\n"
-      else begin
+      end else if code = 10 then begin
+        (* Erase everything until the end of line. *)
+        Buffer.add_string buf "\027[K";
+        if y < rows - 1 then Buffer.add_char buf '\n'
+      end else begin
         render_point term buf !last_point point;
         last_point := point;
         loop (x + 1)
@@ -1214,17 +1229,19 @@ let print_box_with_newlines_unix term matrix =
     in
     loop 0
   done;
-  Buffer.add_string buf "\027[0m";
+  Buffer.add_string buf "\027[0m\r";
   fprint term (Buffer.contents buf)
 
-let print_box_with_newlines term ?(delta = 0) matrix =
-  if term.outgoing_is_a_tty then
-    if term.windows then
-      render_windows term ~delta Render_box true matrix
-    else
-      lwt () = if delta <> 0 then move term delta 0 else return () in
-      print_box_with_newlines_unix term matrix
-  else
+let print_box_with_newlines term matrix =
+  if term.outgoing_is_a_tty then begin
+    if Array.length matrix > 0 then begin
+      if term.windows then
+        render_windows term Render_box true matrix
+      else
+        print_box_with_newlines_unix term matrix
+    end else
+      fprint term "\r"
+  end else
     raise_lwt Not_a_tty
 
 (* +-----------------------------------------------------------------+

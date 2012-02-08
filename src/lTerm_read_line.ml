@@ -836,7 +836,6 @@ object(self)
   method draw_update =
     let size = S.value size in
     if visible && size.cols > 0 then begin
-      let previous_height = height in
       let styled, position = self#stylise false in
       let prompt = S.value prompt in
       (* Compute the position of the cursor after displaying the
@@ -981,49 +980,21 @@ object(self)
           matrix
         end
       in
+      lwt () = LTerm.hide_cursor term in
       lwt () =
-        if LTerm.windows term then begin
-          (* Make sure there is enough space for displaying everything. *)
-          lwt () =
-            if height > previous_height then begin
-              lwt () = LTerm.fprint term (String.make (height - cursor.row) '\n') in
-              cursor <- { row = height; col = 0 };
-              return ()
-            end else
-              return ()
-          in
-          (* Display everything. *)
-          lwt () = LTerm.print_box_with_newlines term ~delta:(-cursor.row) matrix in
-          (* Move the cursor. *)
-          lwt () = LTerm.move term (pos_cursor.row - cursor.row) (pos_cursor.col - cursor.col) in
-          (* Update the cursor. *)
-          cursor <- pos_cursor;
+        if displayed then
+          (* Go back to the beginning of displayed text. *)
+          LTerm.move term (-cursor.row) (-cursor.col)
+        else
           return ()
-        end else begin
-          lwt () = LTerm.hide_cursor term in
-          lwt () =
-            if displayed then
-              (* Go back to the beginning of displayed text. *)
-              LTerm.move term (-cursor.row) (-cursor.col)
-            else
-              return ()
-          in
-          (* Display everything. *)
-          lwt () = LTerm.print_box_with_newlines term matrix in
-          (* Update the cursor. *)
-          cursor <- pos_cursor;
-          (* Move the cursor to the right position. *)
-          lwt () =
-            (* On Unix the cursor stay at the end of line. We put it
-               back to the beginning of the line immediatly because
-               all terminals do not respond the same way when the
-               cursor is at the end of line. *)
-            lwt () = LTerm.fprint term "\r" in
-            LTerm.move term (cursor.row - Array.length matrix + 1) cursor.col
-          in
-          LTerm.show_cursor term
-        end
       in
+      (* Display everything. *)
+      lwt () = LTerm.print_box_with_newlines term matrix in
+      (* Update the cursor. *)
+      cursor <- pos_cursor;
+      (* Move the cursor to the right position. *)
+      lwt () = LTerm.move term (cursor.row - Array.length matrix + 1) cursor.col in
+      lwt () = LTerm.show_cursor term in
       lwt () = LTerm.flush term in
       displayed <- true;
       return ()
@@ -1045,12 +1016,10 @@ object(self)
     draw_styled_with_newlines matrix size.cols pos_after_styled.row pos_after_styled.col styled_newline;
     lwt () = if displayed then LTerm.move term (-cursor.row) (-cursor.col) else return () in
     lwt () = LTerm.print_box_with_newlines term matrix in
-    if LTerm.windows term then
-      LTerm.move term total_height 0
-    else
-      lwt () = LTerm.fprint term "\r" in
-      lwt () = LTerm.move term (total_height - Array.length matrix) 0 in
-      LTerm.fprint term "\n"
+    lwt () = LTerm.move term (total_height - Array.length matrix) 0 in
+    (* Print a newline instead of a movement to ensure scrolling when
+       at the end of screen. *)
+    LTerm.fprint term "\n"
 
   method draw_failure =
     self#draw_success
@@ -1068,13 +1037,7 @@ object(self)
           done;
           lwt () = LTerm.move term (-cursor.row) (-cursor.col) in
           lwt () = LTerm.print_box_with_newlines term matrix in
-          lwt () =
-            if LTerm.windows term then
-              return ()
-            else
-              lwt () = LTerm.fprint term "\r" in
-              LTerm.move term (1 - Array.length matrix) 0
-          in
+          lwt () = LTerm.move term (1 - Array.length matrix) 0 in
           cursor <- { row = 0; col = 0 };
           height <- 0;
           displayed <- false;

@@ -275,17 +275,18 @@ val render_update : t -> LTerm_draw.matrix -> LTerm_draw.matrix -> unit Lwt.t
       It raises {!Not_a_tty} if the output of the given terminal is
       not a tty. *)
 
-val print_box : t -> ?delta : int -> LTerm_draw.matrix -> unit Lwt.t
-  (** [print_box term ?delta matrix] prints the contents of [matrix]
-      starting at current cursor row plus delta. Note that when you
-      have the choice between using {!fprints} and {!print_box} you
-      should use {!print_box} because it works better under windows
-      and is more efficient.
+val print_box : t -> LTerm_draw.matrix -> unit Lwt.t
+  (** [print_box term matrix] prints the contents of [matrix] starting
+      at current cursor row. Note that when you have the choice
+      between using {!fprints} and {!print_box} you should use
+      {!print_box} because it works better under windows and is more
+      efficient.
 
-      Note: on windows this does not move the cursor. *)
+      The cursor is moved to the beginning of the last displayed
+      line. *)
 
-val print_box_with_newlines : t -> ?delta : int -> LTerm_draw.matrix -> unit Lwt.t
-  (** [print_box term ?delta matrix] Same as {!print_box} but [matrix]
+val print_box_with_newlines : t -> LTerm_draw.matrix -> unit Lwt.t
+  (** [print_box term matrix] Same as {!print_box} but [matrix]
       may contains newline characters. It must contain one more column
       that the terminal (in case a line of the length of the terminal
       ends with a newline).
