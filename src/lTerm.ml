@@ -12,6 +12,8 @@ open Lwt_react
 open Lwt
 open LTerm_geom
 
+let uspace = UChar.of_char ' '
+
 (* +-----------------------------------------------------------------+
    | TTYs sizes                                                      |
    +-----------------------------------------------------------------+ *)
@@ -549,7 +551,7 @@ let clear_screen term =
       let _ =
         LTerm_windows.fill_console_output_character
           term.outgoing_fd
-          (UChar.of_char ' ')
+          uspace
           (info.LTerm_windows.size.cols * info.LTerm_windows.size.rows)
           { row = 0; col = 0 }
       in
@@ -566,7 +568,7 @@ let clear_screen_next term =
       let _ =
         LTerm_windows.fill_console_output_character
           term.outgoing_fd
-          (UChar.of_char ' ')
+          uspace
           (info.LTerm_windows.size.cols * (info.LTerm_windows.size.rows - info.LTerm_windows.cursor_position.row)
            + info.LTerm_windows.size.cols - info.LTerm_windows.cursor_position.col)
           info.LTerm_windows.cursor_position
@@ -584,7 +586,7 @@ let clear_screen_prev term =
       let _ =
         LTerm_windows.fill_console_output_character
           term.outgoing_fd
-          (UChar.of_char ' ')
+          uspace
           (info.LTerm_windows.size.cols * info.LTerm_windows.cursor_position.row
            + info.LTerm_windows.cursor_position.col)
           { row = 0; col = 0 }
@@ -602,7 +604,7 @@ let clear_line term =
       let _ =
         LTerm_windows.fill_console_output_character
           term.outgoing_fd
-          (UChar.of_char ' ')
+          uspace
           info.LTerm_windows.size.cols
           { row = info.LTerm_windows.cursor_position.row; col = 0 }
       in
@@ -619,7 +621,7 @@ let clear_line_next term =
       let _ =
         LTerm_windows.fill_console_output_character
           term.outgoing_fd
-          (UChar.of_char ' ')
+          uspace
           (info.LTerm_windows.size.cols - info.LTerm_windows.cursor_position.col)
           info.LTerm_windows.cursor_position
       in
@@ -636,7 +638,7 @@ let clear_line_prev term =
       let _ =
         LTerm_windows.fill_console_output_character
           term.outgoing_fd
-          (UChar.of_char ' ')
+          uspace
           info.LTerm_windows.cursor_position.col
           { row = info.LTerm_windows.cursor_position.row; col = 0 }
       in
@@ -1033,7 +1035,7 @@ let same_style p1 p2 =
 let unknown_char = UChar.of_int 0xfffd
 let unknown_utf8 = Zed_utf8.singleton unknown_char
 
-let render_point term buf old_point new_point =
+let render_style term buf old_point new_point =
   let open LTerm_draw in
   if not (same_style new_point old_point) then begin
     (* Reset styles if they are different from the previous point. *)
@@ -1045,12 +1047,15 @@ let render_point term buf old_point new_point =
     add_color term buf Codes.foreground new_point.foreground;
     add_color term buf Codes.background new_point.background;
     Buffer.add_char buf 'm';
-  end;
+  end
+
+let render_point term buf old_point new_point =
+  render_style term buf old_point new_point;
   (* Skip control characters, otherwise output will be messy. *)
-  if UChar.code new_point.char < 32 then
+  if UChar.code new_point.LTerm_draw.char < 32 then
     Buffer.add_string buf unknown_utf8
   else
-    Buffer.add_string buf (Zed_utf8.singleton new_point.char)
+    Buffer.add_string buf (Zed_utf8.singleton new_point.LTerm_draw.char)
 
 type render_kind = Render_screen | Render_box
 
@@ -1067,7 +1072,7 @@ let render_update_unix term kind old_matrix matrix =
            "\r\027[0m");
   (* The last displayed point. *)
   let last_point = ref {
-    char = UChar.of_char ' ';
+    char = uspace;
     bold = false;
     underline = false;
     blink = false;
@@ -1094,13 +1099,23 @@ let render_update_unix term kind old_matrix matrix =
   fprint term (Buffer.contents buf)
 
 let blank_windows = {
-  LTerm_windows.ci_char = UChar.of_char ' ';
+  LTerm_windows.ci_char = uspace;
   LTerm_windows.ci_foreground = 7;
   LTerm_windows.ci_background = 0;
 }
 
+let windows_char_info term point char =
+  if point.LTerm_draw.reverse then {
+    LTerm_windows.ci_char = char;
+    LTerm_windows.ci_foreground = windows_bg_color term point.LTerm_draw.background;
+    LTerm_windows.ci_background = windows_fg_color term point.LTerm_draw.foreground;
+  } else {
+    LTerm_windows.ci_char = char;
+    LTerm_windows.ci_foreground = windows_fg_color term point.LTerm_draw.foreground;
+    LTerm_windows.ci_background = windows_bg_color term point.LTerm_draw.background;
+  }
+
 let render_windows term kind handle_newlines matrix =
-  let open LTerm_draw in
   (* Build the matrix of char infos *)
   let matrix =
     Array.map
@@ -1113,22 +1128,18 @@ let render_windows term kind handle_newlines matrix =
              res
            else begin
              let point = Array.unsafe_get line i in
-             let code = UChar.code point.char in
-             if handle_newlines && code = 10 then
+             let code = UChar.code point.LTerm_draw.char in
+             if handle_newlines && code = 10 then begin
+               (* Copy styles. *)
+               Array.unsafe_set res i (windows_char_info term point uspace);
+               for i = i + 1 to len - 1 do
+                 let point = Array.unsafe_get line i in
+                 Array.unsafe_set res i (windows_char_info term point uspace)
+               done;
                res
-             else begin
-               let char = if code < 32 then unknown_char else point.char in
-               Array.unsafe_set res i (
-                 if point.reverse then {
-                   LTerm_windows.ci_char = char;
-                   LTerm_windows.ci_foreground = windows_bg_color term point.background;
-                   LTerm_windows.ci_background = windows_fg_color term point.foreground;
-                 } else {
-                   LTerm_windows.ci_char = char;
-                   LTerm_windows.ci_foreground = windows_fg_color term point.foreground;
-                   LTerm_windows.ci_background = windows_bg_color term point.background;
-                 }
-               );
+             end else begin
+               let char = if code < 32 then unknown_char else point.LTerm_draw.char in
+               Array.unsafe_set res i (windows_char_info term point char);
                loop (i + 1)
              end
            end
@@ -1198,7 +1209,7 @@ let print_box_with_newlines_unix term matrix =
   Buffer.add_string buf "\r\027[0m";
   (* The last displayed point. *)
   let last_point = ref {
-    char = UChar.of_char ' ';
+    char = uspace;
     bold = false;
     underline = false;
     blink = false;
@@ -1218,6 +1229,9 @@ let print_box_with_newlines_unix term matrix =
         if code = 10 && y < rows - 1 then
           Buffer.add_char buf '\n'
       end else if code = 10 then begin
+        (* Use the style of the newline for the rest of the line. *)
+        render_style term buf !last_point point;
+        last_point := point;
         (* Erase everything until the end of line. *)
         Buffer.add_string buf "\027[K";
         if y < rows - 1 then Buffer.add_char buf '\n'

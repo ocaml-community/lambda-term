@@ -298,7 +298,8 @@ val print_box_with_newlines : t -> LTerm_draw.matrix -> unit Lwt.t
       contains lines longer than the width of the terminal.
 
       The contents of a line after the first newline character (if
-      any) in a row of [matrix] is ignored. *)
+      any) in a row of [matrix] is ignored. The rest of the line get
+      the style of the newline character. *)
 
 (** {6 Misc} *)
 
