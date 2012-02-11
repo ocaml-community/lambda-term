@@ -54,14 +54,15 @@ type t = {
   mutable raw_mode : bool;
   (* Whether the terminal is currently in raw mode. *)
 
-  incoming_fd : Lwt_unix.file_descr;
-  outgoing_fd : Lwt_unix.file_descr;
+  mutable incoming_fd : Lwt_unix.file_descr;
+  mutable outgoing_fd : Lwt_unix.file_descr;
   (* File descriptors. *)
 
-  oc : Lwt_io.output_channel;
-  (* Output channels. *)
+  mutable ic : Lwt_io.input_channel;
+  mutable oc : Lwt_io.output_channel;
+  (* Channels. *)
 
-  input_stream : char Lwt_stream.t;
+  mutable input_stream : char Lwt_stream.t;
   (* Stream of characters read from the terminal. *)
 
   mutable next_event : LTerm_event.t Lwt.t option;
@@ -91,8 +92,8 @@ type t = {
   mutable event : unit event;
   (* Event which handles SIGWINCH. *)
 
-  incoming_is_a_tty : bool;
-  outgoing_is_a_tty : bool;
+  mutable incoming_is_a_tty : bool;
+  mutable outgoing_is_a_tty : bool;
   (* Whether input/output are tty devices. *)
 
   mutable escape_time : float;
@@ -159,19 +160,36 @@ let char_encoding_of_name name =
   with Not_found ->
     raise (No_such_encoding name)
 
-(* UTF-8 in windows. *)
+(* UTF-8 on windows. *)
 let () = CharEncoding.alias "CP65001" "UTF-8"
 
-let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding ?outgoing_encoding incoming_fd ic outgoing_fd oc =
+let empty_stream = Lwt_stream.from (fun () -> return None)
+
+let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding ?outgoing_encoding incoming_fd incoming_channel outgoing_fd outgoing_channel =
   try_lwt
-    (* Select number of colors. *)
+    (* Colors stuff. *)
     let colors = if windows then 16 else colors_of_term model in
-    (* Get encodings. *)
+    let bold_is_bright =
+      match model with
+        | "linux" (* The linux frame buffer *)
+        | "xterm-color" (* The MacOS-X terminal *) ->
+            true
+        | _ ->
+            false
+    in
+    let color_map =
+      match colors with
+        | 16 -> LTerm_color_mappings.colors_16
+        | 88 -> LTerm_color_mappings.colors_88
+        | 256 -> LTerm_color_mappings.colors_256
+        | n -> Printf.ksprintf failwith "LTerm.create: unknown number of colors (%d)" n
+    in
+    (* Encodings. *)
     let incoming_encoding =
       char_encoding_of_name
         (match incoming_encoding with
-           | Some enc ->
-               enc
+           | Some name ->
+               name
            | None ->
                if windows then
                  Printf.sprintf "CP%d" (LTerm_windows.get_console_cp ())
@@ -180,15 +198,14 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
     and outgoing_encoding =
       char_encoding_of_name
         (match outgoing_encoding with
-           | Some enc ->
-               enc
+           | Some name ->
+               name
            | None ->
                if windows then
                  Printf.sprintf "CP%d" (LTerm_windows.get_console_output_cp ())
                else
-                 LTerm_unix.system_encoding)
-    in
-    (* Check if fds are ttys using the OS dependent API. *)
+                 LTerm_unix.system_encoding) in
+    (* Check if fds are ttys. *)
     lwt incoming_is_a_tty = Lwt_unix.isatty incoming_fd
     and outgoing_is_a_tty = Lwt_unix.isatty outgoing_fd in
     (* Create the terminal. *)
@@ -196,22 +213,14 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
       model;
       colors;
       windows;
-      bold_is_bright = (match model with
-                          | "linux" (* The linux frame buffer *)
-                          | "xterm-color" (* The MacOS-X terminal *) ->
-                              true
-                          | _ ->
-                              false);
-      color_map = (match colors with
-                     | 16 -> LTerm_color_mappings.colors_16
-                     | 88 -> LTerm_color_mappings.colors_88
-                     | 256 -> LTerm_color_mappings.colors_256
-                     | n -> Printf.ksprintf failwith "LTerm.create: unknown number of colors (%d)" n);
+      bold_is_bright;
+      color_map;
       raw_mode = false;
       incoming_fd;
       outgoing_fd;
-      oc;
-      input_stream = Lwt_stream.from (fun () -> Lwt_io.read_char_opt ic);
+      ic = incoming_channel;
+      oc = outgoing_channel;
+      input_stream = empty_stream;
       next_event = None;
       read_event = false;
       incoming_encoding;
@@ -225,22 +234,45 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
       size = { rows = 0; cols = 0 };
       last_reported_size = { rows = 0; cols = 0 };
     } in
+    term.input_stream <- Lwt_stream.from (fun () -> Lwt_io.read_char_opt term.ic);
     (* Setup initial size and size updater. *)
     if term.outgoing_is_a_tty then begin
       let check_size () =
-        let size = get_size_from_fd outgoing_fd in
+        let size = get_size_from_fd term.outgoing_fd in
         if size <> term.size then begin
           term.size <- size;
           Lwt_condition.signal term.notify (LTerm_event.Resize size)
         end
       in
-      term.size <- get_size_from_fd outgoing_fd;
+      term.size <- get_size_from_fd term.outgoing_fd;
       term.last_reported_size <- term.size;
       term.event <- E.map check_size resize_event
     end;
     return term
   with exn ->
     raise_lwt exn
+
+let set_io ?incoming_fd ?incoming_channel ?outgoing_fd ?outgoing_channel term =
+  let get opt x =
+    match opt with
+      | Some x -> x
+      | None -> x
+  in
+  let incoming_fd = get incoming_fd term.incoming_fd
+  and outgoing_fd = get outgoing_fd term.outgoing_fd
+  and incoming_channel = get incoming_channel term.ic
+  and outgoing_channel = get outgoing_channel term.oc in
+  (* Check if fds are ttys. *)
+  lwt incoming_is_a_tty = Lwt_unix.isatty incoming_fd
+  and outgoing_is_a_tty = Lwt_unix.isatty outgoing_fd in
+  (* Apply changes. *)
+  term.incoming_fd <- incoming_fd;
+  term.outgoing_fd <- outgoing_fd;
+  term.ic <- incoming_channel;
+  term.oc <- outgoing_channel;
+  term.incoming_is_a_tty <- incoming_is_a_tty;
+  term.outgoing_is_a_tty <- outgoing_is_a_tty;
+  return ()
 
 let model t = t.model
 let colors t = t.colors

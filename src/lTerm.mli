@@ -326,6 +326,17 @@ val set_size_from_fd : Lwt_unix.file_descr -> LTerm_geom.size -> unit Lwt.t
   (** [set_size_from_fd fd size] tries to set the size of the terminal
       accessible via the given file descriptor. *)
 
+(** {6 Modification} *)
+
+val set_io :
+  ?incoming_fd : Lwt_unix.file_descr -> ?incoming_channel : Lwt_io.input_channel ->
+  ?outgoing_fd : Lwt_unix.file_descr -> ?outgoing_channel : Lwt_io.output_channel -> t -> unit Lwt.t
+  (** Modifies file descriptors/channels of a terminal. Unspecified
+      arguments are kept unchanged.
+
+      Note: before modifying a terminal you should ensure that no
+      operation is pending on it. *)
+
 (**/**)
 val get_size : t -> LTerm_geom.size Lwt.t
 val set_size : t -> LTerm_geom.size -> unit Lwt.t
