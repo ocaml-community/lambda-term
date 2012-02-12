@@ -329,7 +329,16 @@ let rec save oc marker node =
   end
 
 let save history ?max_size ?max_entries ?(skip_empty=true) ?(skip_dup=true) ?(append=true) ?(perm=0o666) fn =
-  let history_save = create ?max_size ?max_entries [] in
+  let max_size =
+    match max_size with
+      | Some m -> m
+      | None -> history.max_size
+  and max_entries =
+    match max_entries with
+      | Some m -> m
+      | None -> history.max_entries
+  in
+  let history_save = create ~max_size ~max_entries [] in
   if history_save.max_size = 0 || history_save.max_entries = 0 then
     (* Just empty the history. *)
     Lwt_unix.openfile fn [Unix.O_CREAT; Unix.O_TRUNC] perm >>= Lwt_unix.close

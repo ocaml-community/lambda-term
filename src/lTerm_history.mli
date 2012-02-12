@@ -100,7 +100,10 @@ val save : t ->
       filename] saves [history] to [filename]. If [append] is [false]
       then the file is truncated. If it is [true] (the default) then
       new entries are added at the end. [perm] are the file
-      permissions in case it is created. *)
+      permissions in case it is created.
+
+      If [max_size] and/or [max_entries] are not specified, the ones
+      of [history] are used. *)
 
 val entry_size : Zed_utf8.t -> int
   (** [entry_size entry] returns the size taken by an entry in the
