@@ -22,6 +22,10 @@ exception Interrupt
 type prompt = LTerm_text.t
     (** Type of prompts. *)
 
+type history = Zed_utf8.t list
+    (** Type of histories. It is a list of entries from the most
+        recent to the oldest. *)
+
 (** {6 Completion} *)
 
 val common_prefix : string list -> string
@@ -34,27 +38,6 @@ val lookup : Zed_utf8.t -> Zed_utf8.t list -> Zed_utf8.t list
 val lookup_assoc : Zed_utf8.t -> (Zed_utf8.t * 'a) list -> (Zed_utf8.t * 'a) list
   (** [lookup_assoc word words] does the same as {!lookup} but works
       on associative list. *)
-
-(** {8 History} *)
-
-type history = string list
-    (** Type of an history *)
-
-val add_entry : string -> history -> history
-  (** [add_entry line history] returns the history [history] plus
-      [line] at the beginning. If [line] already appears at the
-      beginning or contains only spaces, it is discarded. *)
-
-val save_history : string -> history -> unit Lwt.t
-  (** [save_history filename history] saves [history] to
-      [filename]. The contents of [filename] is merged with [history]
-      before saving. *)
-
-val load_history : string -> history Lwt.t
-  (** [load_history filename] loads history from [filename]. Returns
-      the empty history if the the file does not exit. It fails with
-      [Zed_utf8.Invalid] if one of the line of the history is not
-      correctly UTF-8 encoded. *)
 
 (** {6 Actions} *)
 

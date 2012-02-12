@@ -146,7 +146,7 @@ let rec loop term history exit_code =
   lwt binaries = get_binaries () in
   match_lwt
     try_lwt
-      lwt command = (new read_line ~term ~history ~exit_code ~binaries)#run in
+      lwt command = (new read_line ~term ~history:(LTerm_history.contents history) ~exit_code ~binaries)#run in
       return (Some command)
     with Sys.Break ->
       return None
@@ -159,9 +159,10 @@ let rec loop term history exit_code =
             lwt () = LTerm.fprintls term (eval [B_fg lred; S "command not found"]) in
             return (Unix.WEXITED 127)
         in
+        LTerm_history.add history command;
         loop
           term
-          (LTerm_read_line.add_entry command history)
+          history
           (match status with
              | Unix.WEXITED code -> code
              | Unix.WSIGNALED code -> code
@@ -177,6 +178,6 @@ lwt () =
   lwt () = LTerm_inputrc.load () in
   try_lwt
     lwt term = Lazy.force LTerm.stdout in
-    loop term [] 0
+    loop term (LTerm_history.create []) 0
   with LTerm_read_line.Interrupt ->
     return ()

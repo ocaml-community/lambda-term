@@ -17,6 +17,7 @@ open LTerm_key
 
 exception Interrupt
 type prompt = LTerm_text.t
+type history = Zed_utf8.t list
 
 (* +-----------------------------------------------------------------+
    | Completion                                                      |
@@ -42,94 +43,6 @@ let common_prefix = function
 
 let lookup word words = List.filter (fun word' -> Zed_utf8.starts_with word' word) words
 let lookup_assoc word words = List.filter (fun (word', x) -> Zed_utf8.starts_with word' word) words
-
-(* +-----------------------------------------------------------------+
-   | History                                                         |
-   +-----------------------------------------------------------------+ *)
-
-type history = string list
-
-let add_entry line history =
-  if Zed_utf8.strip line = "" then
-    history
-  else
-    if (match history with [] -> false | x :: _ -> x = line) then
-      history
-    else
-      line :: history
-
-let newline = UChar.of_char '\n'
-let backslash = UChar.of_char '\\'
-let letter_n = UChar.of_char 'n'
-
-let escape line =
-  let buf = Buffer.create (String.length line) in
-  Zed_utf8.iter
-    (fun ch ->
-       if ch = newline then
-         Buffer.add_string buf "\\n"
-       else if ch =  backslash then
-         Buffer.add_string buf "\\\\"
-       else
-         Buffer.add_string buf (Zed_utf8.singleton ch))
-    line;
-  Buffer.contents buf
-
-let unescape line =
-  let buf = Buffer.create (String.length line) in
-  let rec loop ofs =
-    if ofs = String.length line then
-      Buffer.contents buf
-    else begin
-      let ch, ofs = Zed_utf8.unsafe_extract_next line ofs in
-      if ch = backslash then begin
-        if ofs = String.length line then begin
-          Buffer.add_char buf '\\';
-          Buffer.contents buf
-        end else begin
-          let ch, ofs = Zed_utf8.unsafe_extract_next line ofs in
-          if ch = backslash then
-            Buffer.add_char buf '\\'
-          else if ch = letter_n then
-            Buffer.add_char buf '\n'
-          else begin
-            Buffer.add_char buf '\\';
-            Buffer.add_string buf (Zed_utf8.singleton ch)
-          end;
-          loop ofs
-        end
-      end else begin
-        Buffer.add_string buf (Zed_utf8.singleton ch);
-        loop ofs
-      end
-    end
-  in
-  loop 0
-
-let rec load_lines ic acc =
-  Lwt_io.read_line_opt ic >>= function
-    | Some l ->
-        ignore (Zed_utf8.validate l);
-        load_lines ic (unescape l :: acc)
-    | None ->
-        return acc
-
-let load_history name =
-  if Sys.file_exists name then
-    Lwt_io.with_file ~mode:Lwt_io.input name (fun ic -> load_lines ic [])
-  else
-    return []
-
-let rec merge h1 h2 =
-  match h1, h2 with
-    | l1 :: h1, l2 :: h2 when l1 = l2 ->
-        l1 :: merge h1 h2
-    | _ ->
-        h1 @ h2
-
-let save_history name history =
-  lwt on_disk_history = load_history name in
-  Lwt_io.lines_to_file name (Lwt_stream.map escape (Lwt_stream.of_list (merge (List.rev on_disk_history) (List.rev history))))
 
 (* +-----------------------------------------------------------------+
    | Actions                                                         |
@@ -661,6 +574,7 @@ end
    | Running in a terminal                                           |
    +-----------------------------------------------------------------+ *)
 
+let newline = UChar.of_char '\n'
 let vline = LTerm_draw.({ top = Light; bottom = Light; left = Blank; right = Blank })
 let reverse_style = { LTerm_style.none with LTerm_style.reverse = Some true }
 let default_prompt = LTerm_text.of_string "# "

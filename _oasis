@@ -54,7 +54,8 @@ Library "lambda-term"
     LTerm_text,
     LTerm_ui,
     LTerm_resources,
-    LTerm_inputrc
+    LTerm_inputrc,
+    LTerm_history
   InternalModules:
     LTerm_resource_lexer
   CSources:
