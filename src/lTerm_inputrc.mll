@@ -332,10 +332,10 @@ and comma_actions seq l = parse
       { Error "parsing error in actions" }
 
 {
-  let lambda_term_inputrc =
+  let default =
     Filename.concat LTerm_resources.home ".lambda-term-inputrc"
 
-  let load ?(file = lambda_term_inputrc) () =
+  let load ?(file = default) () =
     try_lwt
       lwt ic = Lwt_io.open_file ~mode:Lwt_io.input file in
       let rec loop num handler =

@@ -16,3 +16,7 @@ exception Parse_error of string * int * string
 val load : ?file : string -> unit -> unit Lwt.t
   (** [load ?file ()] loads key bindings from [file], which defaults
       to ~/.lambda-term-inputrc, if it exists. *)
+
+val default : string
+  (** The name of the default key bindings file,
+      i.e. ~/.lambda-term-inputrc. *)

@@ -204,7 +204,7 @@ let escape entry =
       Buffer.contents buf
     else
       match String.unsafe_get entry ofs with
-        | 'n' ->
+        | '\n' ->
             Buffer.add_string buf "\\n";
             loop (ofs + 1)
         | '\\' ->
@@ -349,7 +349,7 @@ let save history ?max_size ?max_entries ?(skip_empty=true) ?(skip_dup=true) ?(ap
               | Some line ->
                   (* Do not bother unescaping. Tests remain the same
                      on the unescaped version. *)
-                  if not (skip_empty && is_empty line) && not (skip_dup && is_dup history line) then
+                  if not (skip_empty && is_empty line) && not (skip_dup && is_dup history_save line) then
                     add_aux history_save line (String.length line + 1);
                   aux ()
           in
