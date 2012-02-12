@@ -346,28 +346,26 @@ let save history ?max_size ?max_entries ?(skip_empty=true) ?(skip_dup=true) ?(ap
     lwt fd = Lwt_unix.openfile fn [Unix.O_RDWR; Unix.O_CREAT] perm in
     lwt () = safe_lockf fd Unix.F_LOCK 0 in
     try_lwt
-      lwt () =
+      lwt old_count =
         if append then begin
           (* Load existing entries. *)
           let ic = Lwt_io.of_fd ~mode:Lwt_io.input fd in
-          let rec aux () =
+          let rec aux count =
             match_lwt Lwt_io.read_line_opt ic with
               | None ->
                   history_save.old_count <- history_save.length;
-                  return ()
+                  return count
               | Some line ->
                   (* Do not bother unescaping. Tests remain the same
                      on the unescaped version. *)
                   if not (skip_empty && is_empty line) && not (skip_dup && is_dup history_save line) then
                     add_aux history_save line (String.length line + 1);
-                  aux ()
+                  aux (count + 1)
           in
-          aux ()
+          aux 0
         end else
-          return ()
+          return 0
       in
-      (* Save the old number of entries. *)
-      let old_count = history_save.length in
       let marker = history.entries.prev in
       (* Copy new entries into the saving history. *)
       copy history_save marker (skip_nodes marker.prev history.old_count) skip_empty skip_dup;
