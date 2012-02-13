@@ -384,7 +384,9 @@ let save history ?max_size ?max_entries ?(skip_empty=true) ?(skip_dup=true) ?(ap
       let oc = Lwt_io.of_fd ~mode:Lwt_io.output fd in
       let marker = history_save.entries.prev in
       lwt () = save oc marker (skip_nodes marker.prev to_skip) in
-      Lwt_io.flush oc
+      lwt () = Lwt_io.flush oc in
+      history.old_count <- history.length;
+      return ()
     finally
       lwt () = safe_lockf fd Unix.F_ULOCK 0 in
       Lwt_unix.close fd

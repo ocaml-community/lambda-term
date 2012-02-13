@@ -103,10 +103,13 @@ val save : t ->
       permissions in case it is created.
 
       If [max_size] and/or [max_entries] are not specified, the ones
-      of [history] are used. *)
+      of [history] are used.
+
+      After the history is saved, all entries of [history] are marked
+      as old, i.e. [old_count history = length history]. *)
 
 val entry_size : Zed_utf8.t -> int
   (** [entry_size entry] returns the size taken by an entry in the
-      history file in bytes. This is not exactly the [String.length
-      entry] since some characters are escaped and the entry is
-      terminated by a newline character. *)
+      history file in bytes. This is not exactly [String.length entry]
+      since some characters are escaped and the entry is terminated by
+      a newline character. *)
