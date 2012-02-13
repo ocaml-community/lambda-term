@@ -117,9 +117,8 @@ val save : t ->
       - it is OK for two processes to try to save to the same history
         file at the same time, one will have to wait for the other to
         terminate ({save} locks the history file)
-      - if the process crashes while writing history then a truncated
-        history will have been saved
-  *)
+      - if the process crashes while writing history the history
+        file is not modified. *)
 
 val entry_size : Zed_utf8.t -> int
   (** [entry_size entry] returns the size taken by an entry in the
