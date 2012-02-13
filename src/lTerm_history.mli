@@ -97,16 +97,29 @@ val save : t ->
   ?perm : int ->
   string -> unit Lwt.t
   (** [save history ?max_size ?max_entries ?skip_empty ?sjip_dup ?perm
-      filename] saves [history] to [filename]. If [append] is [false]
-      then the file is truncated. If it is [true] (the default) then
-      new entries are added at the end. [perm] are the file
-      permissions in case it is created.
+      filename] saves [history] to [filename].
 
-      If [max_size] and/or [max_entries] are not specified, the ones
-      of [history] are used.
+      If [append] is [false] then the file is truncated and new
+      entries are saved. If it is [true] (the default) then new
+      entries are added at the end. [perm] are the file permissions in
+      case it is created.
 
-      After the history is saved, all entries of [history] are marked
-      as old, i.e. [old_count history = length history]. *)
+      In any case, limits are honored and the resulting file will
+      never contains more bytes than [max_size] or more entries than
+      [max_entries]. If [max_size] and/or [max_entries] are not
+      specified, the ones of [history] are used.
+
+      After the history is successfully saved, all entries of
+      [history] are marked as old, i.e. [old_count history = length
+      history].
+
+      Notes:
+      - it is OK for two processes to try to save to the same history
+        file at the same time, one will have to wait for the other to
+        terminate ({save} locks the history file)
+      - if the process crashes while writing history then a truncated
+        history will have been saved
+  *)
 
 val entry_size : Zed_utf8.t -> int
   (** [entry_size entry] returns the size taken by an entry in the
