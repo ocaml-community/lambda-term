@@ -36,11 +36,11 @@ let rec start_procs name fn nproc count k =
 
 let () =
   match Sys.argv with
-    | [|name; s1; s2|] ->
+    | [|name; fn; s1; s2|] ->
         Lwt_main.run (
+          if Sys.file_exists fn then Sys.remove fn;
           let nproc = int_of_string s1
           and count = int_of_string s2 in
-          let fn = Filename.temp_file "lambda-term" "history-test" in
           lwt () = join (start_procs name fn nproc count 0) in
           let history = LTerm_history.create [] in
           lwt () = LTerm_history.load history fn in
@@ -66,5 +66,5 @@ let () =
           done
         )
     | _ ->
-        Printf.eprintf "usage: %s <nproc> <count>\n" Sys.argv.(0);
+        Printf.eprintf "usage: %s <file> <nproc> <count>\n" Sys.argv.(0);
         exit 2
