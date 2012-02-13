@@ -163,6 +163,17 @@ Executable "lambda-term-actions"
   BuildDepends: lambda-term
 
 # +-------------------------------------------------------------------+
+# | Tests                                                             |
+# +-------------------------------------------------------------------+
+
+Executable "history-stress-test"
+  Path: tests
+  Install: false
+  CompiledObject: best
+  MainIs: history_stress_test.ml
+  BuildDepends: lambda-term
+
+# +-------------------------------------------------------------------+
 # | Doc                                                               |
 # +-------------------------------------------------------------------+
 
