@@ -105,10 +105,11 @@ val save : t ->
       entries are added at the end. [perm] are the file permissions in
       case it is created.
 
-      In any case, limits are honored and the resulting file will
-      never contains more bytes than [max_size] or more entries than
-      [max_entries]. If [max_size] and/or [max_entries] are not
-      specified, the ones of [history] are used.
+      If [append] is [true] and there is no new entries, the file is
+      not touched. In any other case, limits are honored and the
+      resulting file will never contains more bytes than [max_size] or
+      more entries than [max_entries]. If [max_size] and/or
+      [max_entries] are not specified, the ones of [history] are used.
 
       After the history is successfully saved, all entries of
       [history] are marked as old, i.e. [old_count history = length

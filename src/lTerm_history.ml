@@ -337,9 +337,12 @@ let save history ?max_size ?max_entries ?(skip_empty=true) ?(skip_dup=true) ?(ap
       | None -> history.max_entries
   in
   let history_save = create ~max_size ~max_entries [] in
-  if history_save.max_size = 0 || history_save.max_entries = 0 then
+  if history_save.max_size = 0 || history_save.max_entries = 0 || (not append && history.old_count = history.length) then
     (* Just empty the history. *)
     Lwt_unix.openfile fn [Unix.O_CREAT; Unix.O_TRUNC] perm >>= Lwt_unix.close
+  else if append && history.old_count = history.length then
+    (* Do not touch the file. *)
+    return ()
   else begin
     lwt fd = Lwt_unix.openfile fn [Unix.O_CREAT; Unix.O_RDWR] perm in
     (* Lock the entire file. *)
