@@ -23,6 +23,12 @@ val of_string : Zed_utf8.t -> t
 val to_string : t -> Zed_utf8.t
   (** Returns the string part of a styled string. *)
 
+val of_string_maybe_invalid : string -> t
+  (** Creates a styled string from a string. All characters of the
+      string have no style. The string may contain invalid UTF-8
+      sequences, in which case invalid bytes are escaped with the
+      syntax [\yXX]. *)
+
 val of_rope : Zed_rope.t -> t
   (** Creates a styled string from a rope. *)
 

@@ -32,6 +32,49 @@ let of_string str =
   in
   loop 0 0
 
+let rec invalid_length str ofs acc =
+  if ofs = String.length str then
+    acc
+  else
+    let ofs, acc =
+      try
+        (Zed_utf8.unsafe_next str ofs, acc + 1)
+      with Zed_utf8.Invalid _ ->
+        (ofs + 1, acc + 4)
+    in
+    invalid_length str ofs acc
+
+let uchar_of_hex x =
+  if x < 10 then
+    UChar.of_int (Char.code '0' + x)
+  else
+    UChar.of_int (Char.code 'a' + x - 10)
+
+let of_string_maybe_invalid str =
+  let len = invalid_length str 0 0 in
+  let arr = Array.create len dummy in
+  let rec loop ofs idx =
+    if idx = len then
+      arr
+    else begin
+      let ofs, idx =
+        try
+          let chr, ofs = Zed_utf8.unsafe_extract_next str ofs in
+          Array.unsafe_set arr idx (chr, LTerm_style.none);
+          (ofs, idx + 1)
+        with Zed_utf8.Invalid _ ->
+          let code = Char.code (String.unsafe_get str ofs) in
+          Array.unsafe_set arr (idx + 0) (UChar.of_char '\\', LTerm_style.none);
+          Array.unsafe_set arr (idx + 1) (UChar.of_char 'y', LTerm_style.none);
+          Array.unsafe_set arr (idx + 2) (uchar_of_hex (code lsr 4), LTerm_style.none);
+          Array.unsafe_set arr (idx + 3) (uchar_of_hex (code land 15), LTerm_style.none);
+          (ofs + 1, idx + 4)
+      in
+      loop ofs idx
+    end
+  in
+  loop 0 0
+
 let to_string txt =
   let buf = Buffer.create (Array.length txt) in
   Array.iter (fun (ch, style) -> Buffer.add_string buf (Zed_utf8.singleton ch)) txt;
