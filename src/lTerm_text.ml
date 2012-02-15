@@ -33,16 +33,11 @@ let of_string str =
   loop 0 0
 
 let rec invalid_length str ofs acc =
+  let ofs, len, _ = Zed_utf8.next_error str ofs in
   if ofs = String.length str then
-    acc
+    acc + len
   else
-    let ofs, acc =
-      try
-        (Zed_utf8.unsafe_next str ofs, acc + 1)
-      with Zed_utf8.Invalid _ ->
-        (ofs + 1, acc + 4)
-    in
-    invalid_length str ofs acc
+    invalid_length str (ofs + 1) (acc + len + 4)
 
 let uchar_of_hex x =
   if x < 10 then
