@@ -316,23 +316,15 @@ let rec dump_entries oc marker node =
     dump_entries oc marker node.prev
   end
 
-let safe_lockf fd cmd ofs =
+let rec safe_lockf fd cmd ofs =
   try_lwt
     Lwt_unix.lockf fd cmd ofs
-  with exn ->
-    lwt () = try_lwt Lwt_unix.close fd with _ -> return () in
-    raise_lwt exn
-
-let rec acquire_history_file fn perm =
-  lwt fd = Lwt_unix.openfile fn [Unix.O_RDWR; Unix.O_CREAT] perm in
-  lwt () = safe_lockf fd Unix.F_LOCK 0 in
-  lwt stat1 = Lwt_unix.fstat fd and stat2 = Lwt_unix.stat fn in
-  if stat1.Unix.st_dev = stat2.Unix.st_dev && stat1.Unix.st_ino = stat2.Unix.st_ino then
-    return fd
-  else
-    lwt () = safe_lockf fd Unix.F_ULOCK 0 in
-    lwt () = Lwt_unix.close fd in
-    acquire_history_file fn perm
+  with
+    | Unix.Unix_error (Unix.EINTR, _, _) ->
+        safe_lockf fd cmd ofs
+    | exn ->
+        lwt () = try_lwt Lwt_unix.close fd with _ -> return () in
+        raise_lwt exn
 
 let save history ?max_size ?max_entries ?(skip_empty=true) ?(skip_dup=true) ?(append=true) ?(perm=0o666) fn =
   let max_size =
@@ -349,63 +341,60 @@ let save history ?max_size ?max_entries ?(skip_empty=true) ?(skip_dup=true) ?(ap
     (* Just empty the history. *)
     Lwt_unix.openfile fn [Unix.O_CREAT; Unix.O_TRUNC] perm >>= Lwt_unix.close
   else begin
-    (* In order to ensure that writes to the history file are
-       serialized and that the history file is preserved if the process
-       crash we proceed as follow:
-
-       - we open and lock the history file
-       - we check that the fd we have correspond to the real history
-       file (by comparing stats)
-       - if they are different close the file and try again
-       - if they are equal:
-       - read the file (if append is true) and stores the result
-       in a fn.new
-       - rename fn.new to fn
-       - unlock and close the fd of the old history file
-    *)
-    lwt fd = acquire_history_file fn perm in
+    lwt fd = Lwt_unix.openfile fn [Unix.O_CREAT; Unix.O_RDWR] perm in
+    (* Lock the entire file. *)
+    lwt () = safe_lockf fd Unix.F_LOCK 0 in
     try_lwt
-      lwt () =
+      lwt count =
         if append then begin
-          (* Load existing entries. *)
+          (* Load existing entries into [history_save].
+
+             We return the number of entries read. This may be greater
+             than the number of entries stored in [history_save]:
+             - because of limits
+             - because the history files contains duplicated lines
+               and/or empty lines and [skip_dup] and/or [skip_empty]
+               have been specified. *)
           let ic = Lwt_io.of_fd ~mode:Lwt_io.input fd in
-          let rec aux () =
+          let rec aux count =
             match_lwt Lwt_io.read_line_opt ic with
               | None ->
-                  return ()
+                  history_save.old_count <- history_save.length;
+                  return count
               | Some line ->
                   (* Do not bother unescaping. Tests remain the same
                      on the unescaped version. *)
                   if not (skip_empty && is_empty line) && not (skip_dup && is_dup history_save line) then
                     add_aux history_save line (String.length line + 1);
-                  aux ()
+                  aux (count + 1)
           in
-          aux ()
+          aux 0
         end else
-          return ()
+          return 0
       in
       let marker = history.entries.prev in
       (* Copy new entries into the saving history. *)
       copy history_save marker (skip_nodes marker.prev history.old_count) skip_empty skip_dup;
+      lwt to_skip =
+        if append && history_save.old_count = count then
+          (* We are in append mode and no old entries were removed: do
+             not modify the file and append new entries at the end of
+             the file. *)
+          return count
+        else
+          (* Otherwise truncate the file and save everything. *)
+          lwt _ = Lwt_unix.lseek fd 0 Unix.SEEK_SET in
+          lwt () = Lwt_unix.ftruncate fd 0 in
+          return 0
+      in
       (* Save entries to the temporary file. *)
-      let fn_new = fn ^ ".new" in
-      (try_lwt
-         lwt () =
-           Lwt_io.with_file ~mode:Lwt_io.output ~perm fn_new
-             (fun oc ->
-                let marker = history_save.entries.prev in
-                dump_entries oc marker marker.prev)
-         in
-         (* Rename the temporary file. *)
-         lwt () = Lwt_unix.rename fn_new fn in
-         (* Done! *)
-         history.old_count <- history.length;
-         return ()
-       with exn ->
-         (* Remove the temporary file if anything happen. *)
-         lwt () = try_lwt Lwt_unix.unlink fn_new with _ -> return () in
-         raise_lwt exn)
+      let oc = Lwt_io.of_fd ~mode:Lwt_io.output fd in
+      let marker = history_save.entries.prev in
+      lwt () = dump_entries oc marker (skip_nodes marker.prev to_skip) in
+      lwt () = Lwt_io.flush oc in
+      (* Done! *)
+      history.old_count <- history.length;
+      return ()
     finally
-      lwt () = safe_lockf fd Unix.F_ULOCK 0 in
       Lwt_unix.close fd
   end

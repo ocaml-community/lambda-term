@@ -81,9 +81,10 @@ val load : t ->
       [history] is not modified.
 
       [log] is the function used to log errors contained in the
-      history file. Arguments are a line number and an error
-      message. The default is to use the default logger (of
-      [Lwt_log]). Entries containing errors are skipped.
+      history file (errors are because of non-UTF8 data). Arguments
+      are a line number and an error message. The default is to use
+      the default logger (of [Lwt_log]). Entries containing errors are
+      skipped.
 
       Note: all entries are marked as old, i.e. [old_count history =
       length history]. *)
@@ -111,14 +112,7 @@ val save : t ->
 
       After the history is successfully saved, all entries of
       [history] are marked as old, i.e. [old_count history = length
-      history].
-
-      Notes:
-      - it is OK for two processes to try to save to the same history
-        file at the same time, one will have to wait for the other to
-        terminate ({save} locks the history file)
-      - if the process crashes while writing history the history
-        file is not modified. *)
+      history]. *)
 
 val entry_size : Zed_utf8.t -> int
   (** [entry_size entry] returns the size taken by an entry in the
