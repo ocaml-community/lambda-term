@@ -9,6 +9,8 @@
 
 (** Terminal definitions *)
 
+open CamomileLibrary
+
 type t
   (** Type of terminals. *)
 
@@ -213,7 +215,12 @@ val read_event : t -> LTerm_event.t Lwt.t
 
 (** {6 Printing} *)
 
-(** The general name of a printing function is [<prefix>print<suffixes>].
+(** All these functions accept only valid UTF-8 strings (or unicode
+    styled text). Strings are recoded on the fly using the terminal
+    output encoding (except if the terminal output encoding is already
+    UTF-8, in which case the string is just printed as-it).
+
+    The general name of a printing function is [<prefix>print<suffixes>].
 
     Where [<prefix>] is one of:
     - ['f'], which means that the function takes as argument a terminal
@@ -223,34 +230,67 @@ val read_event : t -> LTerm_event.t Lwt.t
     and [<suffixes>] is a combination of:
     - ['l'] which means that a new-line character is printed after the message
     - ['f'] which means that the function takes as argument a {b format} instead
-    of a string
+      of a string
     - ['s'] which means that the function takes as argument a styled
-    string instead of a string
+      string instead of a string
 
-    Notes:
-    - if the terminal is not a tty, styles are stripped.
-    - non-ascii characters are recoded on the fly using the terminal
-    encoding
+    Note that if the terminal is not a tty, styles are stripped.
 *)
 
-val fprint : t -> string -> unit Lwt.t
-val fprintl : t -> string -> unit Lwt.t
-val fprintf : t -> ('a, unit, string, unit Lwt.t) format4 -> 'a
+val fprint : t -> Zed_utf8.t -> unit Lwt.t
+val fprintl : t -> Zed_utf8.t -> unit Lwt.t
+val fprintf : t -> ('a, unit, Zed_utf8.t, unit Lwt.t) format4 -> 'a
 val fprints : t -> LTerm_text.t -> unit Lwt.t
-val fprintlf : t -> ('a, unit, string, unit Lwt.t) format4 -> 'a
+val fprintlf : t -> ('a, unit, Zed_utf8.t, unit Lwt.t) format4 -> 'a
 val fprintls : t -> LTerm_text.t -> unit Lwt.t
-val print : string -> unit Lwt.t
-val printl : string -> unit Lwt.t
-val printf : ('a, unit, string, unit Lwt.t) format4 -> 'a
+val print : Zed_utf8.t -> unit Lwt.t
+val printl : Zed_utf8.t -> unit Lwt.t
+val printf : ('a, unit, Zed_utf8.t, unit Lwt.t) format4 -> 'a
 val prints : LTerm_text.t -> unit Lwt.t
-val printlf : ('a, unit, string, unit Lwt.t) format4 -> 'a
+val printlf : ('a, unit, Zed_utf8.t, unit Lwt.t) format4 -> 'a
 val printls : LTerm_text.t -> unit Lwt.t
-val eprint : string -> unit Lwt.t
-val eprintl : string -> unit Lwt.t
-val eprintf : ('a, unit, string, unit Lwt.t) format4 -> 'a
+val eprint : Zed_utf8.t -> unit Lwt.t
+val eprintl : Zed_utf8.t -> unit Lwt.t
+val eprintf : ('a, unit, Zed_utf8.t, unit Lwt.t) format4 -> 'a
 val eprints : LTerm_text.t -> unit Lwt.t
-val eprintlf : ('a, unit, string, unit Lwt.t) format4 -> 'a
+val eprintlf : ('a, unit, Zed_utf8.t, unit Lwt.t) format4 -> 'a
 val eprintls : LTerm_text.t -> unit Lwt.t
+
+(** {8 Printing contexts} *)
+
+(** You shoud use these functions when you to print a lot of styled
+    text that does not entirely fit in a single {!LTerm_text.t}
+    value.
+
+    This is more efficient than calling manually {!set_style} since
+    styles will be modified only when needed. *)
+
+type context
+  (** A context for styled printing. *)
+
+val with_context : t -> (context -> 'a Lwt.t) -> 'a Lwt.t
+  (** [with_context term f] creates a new printing context and pass it
+      to [f]. Note that calls to [with_context] are serialized. *)
+
+val update_style : context -> LTerm_style.t -> unit Lwt.t
+  (** [update_style ctx style] updates the style of the context with
+      [style]. If needed styles of the terminal are modified. *)
+
+val context_term : context -> t
+  (** Returns the terminal used by the given context. *)
+
+val context_oc : context -> Lwt_io.output_channel
+  (** Returns the output channel used by the given context. Note that
+      this channel cannot be used after {!with_context} has
+      terminated. *)
+
+val encode_string : t -> Zed_utf8.t -> string
+  (** [encode_string term str] encodes an UTF-8 string using the
+      terminal encoding. *)
+
+val encode_char : t -> UChar.t -> string
+  (** [encode_char term ch] encodes an unicode character using the
+      terminal encoding. *)
 
 (** {6 Styles} *)
 

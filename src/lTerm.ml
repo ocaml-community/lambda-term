@@ -849,14 +849,18 @@ let encode_string term str =
     loop 0
 
 let encode_char term ch =
-  let res = ref "" in
-  let output = new CharEncoding.uchar_output_channel_of term.outgoing_encoding (new output_to_buffer (Buffer.create 8) res) in
-  (try
-     output#put ch
-   with CharEncoding.Out_of_range ->
-     output#put (map_char ch));
-  output#close_out ();
-  !res
+  if term.outgoing_is_utf8 then
+    Zed_utf8.singleton ch
+  else begin
+    let res = ref "" in
+    let output = new CharEncoding.uchar_output_channel_of term.outgoing_encoding (new output_to_buffer (Buffer.create 8) res) in
+    (try
+       output#put ch
+     with CharEncoding.Out_of_range ->
+       output#put (map_char ch));
+    output#close_out ();
+    !res
+  end
 
 (* +-----------------------------------------------------------------+
    | Styled printing                                                 |
@@ -974,8 +978,17 @@ let windows_bg_color term = function
 
 let windows_default_attributes = { LTerm_windows.foreground = 7; LTerm_windows.background = 0 }
 
-let fprints_windows term oc text =
+let windows_attributes_of_style term style =
   let open LTerm_style in
+  if style.reverse = Some true then {
+    LTerm_windows.foreground = (match style.background with Some color -> windows_bg_color term color | None -> 0);
+    LTerm_windows.background = (match style.foreground with Some color -> windows_fg_color term color | None -> 7);
+  } else {
+    LTerm_windows.foreground = (match style.foreground with Some color -> windows_fg_color term color | None -> 7);
+    LTerm_windows.background = (match style.background with Some color -> windows_bg_color term color | None -> 0);
+  }
+
+let fprints_windows term oc text =
   let rec loop idx prev_attr =
     if idx = Array.length text then begin
       lwt () = Lwt_io.flush oc in
@@ -983,15 +996,7 @@ let fprints_windows term oc text =
       return ()
     end else begin
       let ch, style = Array.unsafe_get text idx in
-      let attr =
-        if style.reverse = Some true then {
-          LTerm_windows.foreground = (match style.background with Some color -> windows_bg_color term color | None -> 0);
-          LTerm_windows.background = (match style.foreground with Some color -> windows_fg_color term color | None -> 7);
-        } else {
-          LTerm_windows.foreground = (match style.foreground with Some color -> windows_fg_color term color | None -> 7);
-          LTerm_windows.background = (match style.background with Some color -> windows_bg_color term color | None -> 0);
-        }
-      in
+      let attr = windows_attributes_of_style term style in
       lwt () =
         if attr <> prev_attr then
           lwt () = Lwt_io.flush oc in
@@ -1021,22 +1026,78 @@ let fprintls term text =
   fprints term (Array.append text (LTerm_text.of_string "\n"))
 
 (* +-----------------------------------------------------------------+
+   | Printing with contexts                                          |
+   +-----------------------------------------------------------------+ *)
+
+type context = {
+  ctx_term : t;
+  ctx_oc : Lwt_io.output_channel;
+  mutable ctx_style : LTerm_style.t;
+  mutable ctx_attr : LTerm_windows.text_attributes;
+}
+
+let clear_styles term oc =
+  if term.outgoing_is_a_tty then
+    if term.windows then
+      lwt () = Lwt_io.flush oc in
+      LTerm_windows.set_console_text_attribute term.outgoing_fd windows_default_attributes;
+      return ()
+    else
+      Lwt_io.write oc "\027[0m"
+  else
+    return ()
+
+let with_context term f =
+  Lwt_io.atomic
+    (fun oc ->
+       let ctx = {
+         ctx_term = term;
+         ctx_oc = oc;
+         ctx_style = LTerm_style.none;
+         ctx_attr = windows_default_attributes;
+       } in
+       lwt () = clear_styles term oc in
+       try_lwt
+         f ctx
+       finally
+         clear_styles term oc)
+    term.oc
+
+let update_style ctx style =
+  if ctx.ctx_term.outgoing_is_a_tty then begin
+    if ctx.ctx_term.windows then begin
+      let attr = windows_attributes_of_style ctx.ctx_term style in
+      if attr <> ctx.ctx_attr then
+        lwt () = Lwt_io.flush ctx.ctx_oc in
+        LTerm_windows.set_console_text_attribute ctx.ctx_term.outgoing_fd attr;
+        ctx.ctx_attr <- attr;
+        return ()
+      else
+        return ()
+    end else begin
+      if not (LTerm_style.equal style ctx.ctx_style) then begin
+        let buf = Buffer.create 16 in
+        add_style ctx.ctx_term buf style;
+        lwt () = Lwt_io.write ctx.ctx_oc (Buffer.contents buf) in
+        ctx.ctx_style <- style;
+        return ()
+      end else
+        return ()
+    end
+  end else
+    return ()
+
+let context_term ctx = ctx.ctx_term
+let context_oc ctx = ctx.ctx_oc
+
+(* +-----------------------------------------------------------------+
    | Styles setting                                                  |
    +-----------------------------------------------------------------+ *)
 
 let set_style term style =
   if term.outgoing_is_a_tty then
     if term.windows then begin
-      let open LTerm_style in
-      let attr =
-        if style.reverse = Some true then {
-          LTerm_windows.foreground = (match style.background with Some color -> windows_bg_color term color | None -> 0);
-          LTerm_windows.background = (match style.foreground with Some color -> windows_fg_color term color | None -> 7);
-        } else {
-          LTerm_windows.foreground = (match style.foreground with Some color -> windows_fg_color term color | None -> 7);
-          LTerm_windows.background = (match style.background with Some color -> windows_bg_color term color | None -> 0);
-        }
-      in
+      let attr = windows_attributes_of_style term style in
       Lwt_io.atomic
         (fun oc ->
            lwt () = Lwt_io.flush oc in
