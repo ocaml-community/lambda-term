@@ -17,30 +17,30 @@ type map = {
   count_r : int;
   count_g : int;
   count_b : int;
-  index_r : int array;
-  index_g : int array;
-  index_b : int array;
+  index_r : string;
+  index_g : string;
+  index_b : string;
   map : string;
 }
 
 module Int_set = Set.Make(struct type t = int let compare x y = x - y end)
 
 let reindex set =
-  let indexes = Array.make 256 0 in
+  let indexes = String.make 256 '\x00' in
   let rec loop idx prev = function
     | [] ->
         for i = prev to 255 do
-          indexes.(i) <- idx
+          indexes.[i] <- char_of_int idx
         done;
         indexes
     | next :: rest ->
         let middle = (prev + next) / 2 in
         for i = prev to middle do
-          indexes.(i) <- idx
+          indexes.[i] <- char_of_int idx
         done;
         let idx = idx + 1 in
         for i = middle + 1 to next - 1 do
-          indexes.(i) <- idx
+          indexes.[i] <- char_of_int idx
         done;
         loop idx next rest
   in
@@ -189,23 +189,44 @@ let colors_256 = make_map 16 [
    | Color generation                                                |
    +-----------------------------------------------------------------+ *)
 
-let code_of_map map =
-  Printf.sprintf "{
+let add_string str strings =
+  let rec aux n strings =
+    match strings with
+      | [] ->
+          let id = "data" ^ string_of_int n in
+          (id, [(id, str)])
+      | (id, str') :: _ when str = str' ->
+          (id, strings)
+      | x :: strings ->
+          let id, strings = aux (n + 1) strings in
+          (id, x :: strings)
+  in
+  aux 0 strings
+
+let code_of_map map strings =
+  let index_r, strings = add_string map.index_r strings in
+  let index_g, strings = add_string map.index_g strings in
+  let index_b, strings = add_string map.index_b strings in
+  let mapping, strings = add_string map.map strings in
+  let code =
+    Printf.sprintf "{
   count_r = %d;
   count_g = %d;
   count_b = %d;
-  index_r = [|%s|];
-  index_g = [|%s|];
-  index_b = [|%s|];
-  map = %S;
+  index_r = %s;
+  index_g = %s;
+  index_b = %s;
+  map = %s;
 }"
-    map.count_r
-    map.count_g
-    map.count_b
-    (String.concat "; " (List.map string_of_int (Array.to_list map.index_r)))
-    (String.concat "; " (List.map string_of_int (Array.to_list map.index_g)))
-    (String.concat "; " (List.map string_of_int (Array.to_list map.index_b)))
-    map.map
+      map.count_r
+      map.count_g
+      map.count_b
+      index_r
+      index_g
+      index_b
+      mapping
+  in
+  (code, strings)
 
 let () =
   let oc =
@@ -214,14 +235,19 @@ let () =
     else
       open_out Sys.argv.(1)
   in
+  let strings = [] in
+  let code16, strings = code_of_map colors_16 strings in
+  let code88, strings = code_of_map colors_88 strings in
+  let code256, strings = code_of_map colors_256 strings in
+  List.iter (fun (id, str) -> Printf.fprintf oc "let %s = %S\n" id str) strings;
   Printf.fprintf oc "
 type map = {
   count_r : int;
   count_g : int;
   count_b : int;
-  index_r : int array;
-  index_g : int array;
-  index_b : int array;
+  index_r : string;
+  index_g : string;
+  index_b : string;
   map : string;
 }
 
@@ -231,6 +257,6 @@ let colors_88 = %s
 
 let colors_256 = %s
 "
-    (code_of_map colors_16)
-    (code_of_map colors_88)
-    (code_of_map colors_256)
+    code16
+    code88
+    code256

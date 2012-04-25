@@ -903,10 +903,14 @@ let add_int buf n =
 let map_color term r g b =
   let open LTerm_color_mappings in
   let map = term.color_map in
-  (* The [String.unsafe_get] is safe because the private type
+  (* The [String.unsafe_get]s are safe because the private type
      [LTerm_style.color] ensure that all components are in the range
      [0..255]. *)
-  Char.code (String.unsafe_get map.map (map.index_r.(r) + map.count_r * (map.index_g.(g) + map.count_g * map.index_b.(b))))
+  Char.code
+    (String.unsafe_get map.map
+       (Char.code (String.unsafe_get map.index_r r)
+        + map.count_r * (Char.code (String.unsafe_get map.index_g g)
+                         + map.count_g * Char.code (String.unsafe_get map.index_b b))))
 
 let add_index term buf base n =
   if n < 8 then begin
