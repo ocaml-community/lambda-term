@@ -21,12 +21,7 @@ let () =
              Options.make_links := false
 
          | After_rules ->
-             flag ["c"; "compile"; "use_lwt_unix_h"] & S[A"-package"; A"lwt"];
+             flag ["c"; "compile"; "use_lwt_unix_h"] & S[A"-package"; A"lwt"]
 
-             rule "generation of color mappings"
-               ~dep:"src/gen_color_mappings.byte"
-               ~prod:"src/lTerm_color_mappings.ml"
-               (fun _ _ ->
-                  Cmd(S[P"src/gen_color_mappings.byte"; A"src/lTerm_color_mappings.ml"]))
          | _ ->
              ())

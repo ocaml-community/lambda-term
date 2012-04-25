@@ -47,7 +47,6 @@ Library "lambda-term"
     LTerm_geom,
     LTerm_draw,
     LTerm_mouse,
-    LTerm_color_mappings,
     LTerm_widget,
     LTerm_edit,
     LTerm_read_line,
@@ -57,6 +56,7 @@ Library "lambda-term"
     LTerm_inputrc,
     LTerm_history
   InternalModules:
+    LTerm_color_mappings,
     LTerm_resource_lexer
   CSources:
     lTerm_term_stubs.c,
