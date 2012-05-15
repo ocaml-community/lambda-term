@@ -10,6 +10,8 @@
 open CamomileLibraryDyn.Camomile
 open Lwt
 
+let section = Lwt_log.Section.make "lambda-term(history)"
+
 (* A node contains an entry of the history. *)
 type node = {
   mutable data : Zed_utf8.t;
@@ -256,6 +258,35 @@ let unescape line =
 
 let section = Lwt_log.Section.make "lambda-term(history)"
 
+let rec safe_lockf fn fd cmd ofs =
+  try_lwt
+    lwt () = Lwt_unix.lockf fd cmd ofs in
+    return true
+  with
+    | Unix.Unix_error (Unix.EINTR, _, _) ->
+        safe_lockf fn fd cmd ofs
+    | Unix.Unix_error (error, _, _) ->
+        Lwt_log.ign_warning_f ~section "failed to lock file '%s': %s" fn (Unix.error_message error);
+        return false
+
+let open_history fn =
+  try_lwt
+    lwt fd = Lwt_unix.openfile fn [Unix.O_RDWR] 0 in
+    lwt locked = safe_lockf fn fd Lwt_unix.F_LOCK 0 in
+    return (Some (fd, locked))
+  with
+    | Unix.Unix_error (Unix.ENOENT, _, _) ->
+        return None
+    | Unix.Unix_error (Unix.EACCES, _, _) ->
+        Lwt_log.ign_info_f "cannot open file '%s' in read and write mode: %s" fn (Unix.error_message Unix.EACCES);
+        (* If the file cannot be openned in read & write mode,
+           open it in read only mode but do not lock it. *)
+        try_lwt
+          lwt fd = Lwt_unix.openfile fn [Unix.O_RDONLY] 0 in
+          return (Some (fd, false))
+        with Unix.Unix_error (Unix.ENOENT, _, _) ->
+          return None
+
 let load history ?log ?(skip_empty=true) ?(skip_dup=true) fn =
   (* In case we do not load anything. *)
   history.old_count <- history.length;
@@ -269,29 +300,36 @@ let load history ?log ?(skip_empty=true) ?(skip_dup=true) fn =
             func
         | None ->
             fun line msg ->
-              ignore (Lwt_log.error_f ~section "File %S, at line %d: %s" fn line msg)
+              Lwt_log.ign_error_f ~section "File %S, at line %d: %s" fn line msg
     in
-    try_lwt
-      Lwt_io.with_file ~mode:Lwt_io.input fn
-        (fun ic ->
-           let rec aux num =
-             match_lwt Lwt_io.read_line_opt ic with
-               | None ->
-                   return ()
-               | Some line ->
-                   (try
-                      let entry, size = unescape line in
-                      if not (skip_empty && is_empty entry) && not (skip_dup && is_dup history entry) then begin
-                        add_aux history entry size;
-                        history.old_count <- history.length
-                      end
-                    with Zed_utf8.Invalid (msg, _) ->
-                      log num msg);
-                   aux (num + 1)
-           in
-           aux 1)
-    with Unix.Unix_error (Unix.ENOENT, _, _) ->
-      return ()
+    (* File opening. *)
+    match_lwt open_history fn with
+      | None ->
+          return ()
+      | Some (fd, locked) ->
+          (* File loading. *)
+          let ic = Lwt_io.of_fd ~mode:Lwt_io.input fd in
+          try_lwt
+            let rec aux num =
+              match_lwt Lwt_io.read_line_opt ic with
+                | None ->
+                    return ()
+                | Some line ->
+                    (try
+                       let entry, size = unescape line in
+                       if not (skip_empty && is_empty entry) && not (skip_dup && is_dup history entry) then begin
+                         add_aux history entry size;
+                         history.old_count <- history.length
+                       end
+                     with Zed_utf8.Invalid (msg, _) ->
+                       log num msg);
+                    aux (num + 1)
+            in
+            aux 1
+          finally
+            (* Cleanup. *)
+            lwt _ = if locked then safe_lockf fn fd Lwt_unix.F_ULOCK 0 else return true in
+            Lwt_unix.close fd
   end
 
 let rec skip_nodes node count =
@@ -316,16 +354,6 @@ let rec dump_entries oc marker node =
     dump_entries oc marker node.prev
   end
 
-let rec safe_lockf fd cmd ofs =
-  try_lwt
-    Lwt_unix.lockf fd cmd ofs
-  with
-    | Unix.Unix_error (Unix.EINTR, _, _) ->
-        safe_lockf fd cmd ofs
-    | exn ->
-        lwt () = try_lwt Lwt_unix.close fd with _ -> return () in
-        raise_lwt exn
-
 let save history ?max_size ?max_entries ?(skip_empty=true) ?(skip_dup=true) ?(append=true) ?(perm=0o666) fn =
   let max_size =
     match max_size with
@@ -346,7 +374,7 @@ let save history ?max_size ?max_entries ?(skip_empty=true) ?(skip_dup=true) ?(ap
   else begin
     lwt fd = Lwt_unix.openfile fn [Unix.O_CREAT; Unix.O_RDWR] perm in
     (* Lock the entire file. *)
-    lwt () = safe_lockf fd Unix.F_LOCK 0 in
+    lwt locked = safe_lockf fn fd Unix.F_LOCK 0 in
     try_lwt
       lwt count =
         if append then begin
@@ -358,11 +386,12 @@ let save history ?max_size ?max_entries ?(skip_empty=true) ?(skip_dup=true) ?(ap
              - because the history files contains duplicated lines
                and/or empty lines and [skip_dup] and/or [skip_empty]
                have been specified. *)
-          let ic = Lwt_io.of_fd ~mode:Lwt_io.input fd in
+          let ic = Lwt_io.of_fd ~mode:Lwt_io.input ~close:return fd in
           let rec aux count =
             match_lwt Lwt_io.read_line_opt ic with
               | None ->
                   history_save.old_count <- history_save.length;
+                  lwt () = Lwt_io.close ic in
                   return count
               | Some line ->
                   (* Do not bother unescaping. Tests remain the same
@@ -391,13 +420,14 @@ let save history ?max_size ?max_entries ?(skip_empty=true) ?(skip_dup=true) ?(ap
           return 0
       in
       (* Save entries to the temporary file. *)
-      let oc = Lwt_io.of_fd ~mode:Lwt_io.output fd in
+      let oc = Lwt_io.of_fd ~mode:Lwt_io.output ~close:return fd in
       let marker = history_save.entries.prev in
       lwt () = dump_entries oc marker (skip_nodes marker.prev to_skip) in
-      lwt () = Lwt_io.flush oc in
+      lwt () = Lwt_io.close oc in
       (* Done! *)
       history.old_count <- history.length;
       return ()
     finally
+       lwt _ = if locked then safe_lockf fn fd Lwt_unix.F_ULOCK 0 else return true in
       Lwt_unix.close fd
   end
