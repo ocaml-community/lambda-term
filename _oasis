@@ -5,7 +5,7 @@
 OASISFormat: 0.3
 OCamlVersion: >= 3.12
 Name: lambda-term
-Version: 1.1
+Version: 1.2
 LicenseFile: LICENSE
 License: BSD3
 Authors: Jérémie Dimino
@@ -32,7 +32,7 @@ Description:
 
 Library "lambda-term"
   FindlibName: lambda-term
-  BuildDepends: lwt (>= 2.3.0), lwt.unix, lwt.syntax, lwt.react, zed (>= 1.1)
+  BuildDepends: lwt (>= 2.4.0), lwt.unix, lwt.syntax, lwt.react, zed (>= 1.2)
   XMETADescription: Corss-platform library for terminal manipulation
   XMETARequires: lwt.unix, lwt.react, zed
   Path: src
