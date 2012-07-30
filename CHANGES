@@ -1,3 +1,13 @@
+===== 1.2 (2012-07-30) =====
+
+  * better handling of newlines in read-line (avoid square selection bug)
+  * add a module for managing history
+  * use camomile for character encoding (remove iconv dependency)
+  * include generated tables for color mappings to speed up the build
+  * Windows fixes
+    ** use unicode version of IO console functions
+    ** better rendering method for read-line
+
 ===== 1.1 (2011-08-06) =====
 
   * fix a blinking problem on OS-X
