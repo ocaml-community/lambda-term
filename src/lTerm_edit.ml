@@ -107,6 +107,7 @@ let () =
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'a') }] [Zed Goto_bol];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'e') }] [Zed Goto_eol];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'd') }] [Zed Delete_next_char];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'h') }] [Zed Delete_prev_char];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') }] [Zed Kill_next_line];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'u') }] [Zed Kill_prev_line];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'n') }] [Zed Prev_char];
