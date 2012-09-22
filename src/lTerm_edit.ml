@@ -110,8 +110,8 @@ let () =
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'h') }] [Zed Delete_prev_char];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') }] [Zed Kill_next_line];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'u') }] [Zed Kill_prev_line];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'n') }] [Zed Prev_char];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'p') }] [Zed Next_char];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'n') }] [Zed Next_char];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'p') }] [Zed Prev_char];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'w') }] [Zed Kill];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'y') }] [Zed Yank];
   bind [{ control = false; meta = false; shift = false; code = Backspace }] [Zed Delete_prev_char];
