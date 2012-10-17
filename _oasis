@@ -229,5 +229,5 @@ Document "lamda-term-inputrc"
 
 SourceRepository head
   Type: git
-  Location: https://github.com/diml/zed.git
-  Browser: https://github.com/diml/zed
+  Location: https://github.com/diml/lambda-term.git
+  Browser: https://github.com/diml/lambda-term
