@@ -227,6 +227,6 @@ Document "lamda-term-inputrc"
 # +-------------------------------------------------------------------+
 
 SourceRepository head
-  Type: darcs
-  Location: http://darcs.ocamlcore.org/repos/lambda-term
-  Browser: http://darcs.ocamlcore.org/cgi-bin/darcsweb.cgi?r=lambda-term;a=summary
+  Type: git
+  Location: https://github.com/diml/zed.git
+  Browser: https://github.com/diml/zed

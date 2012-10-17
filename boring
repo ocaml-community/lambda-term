@@ -1,5 +1,0 @@
-(^|/)_build($|/)
-^lambda-term-.*\.tar\.gz$
-^setup\.data$
-^setup\.log$
-^man/.*\.gz$

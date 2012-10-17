@@ -1,0 +1,7 @@
+_build/
+/lambda-term-*.tar.gz
+/setup.data
+/setup.log
+/setup.exe
+/setup-dev.exe
+/man/*.gz
