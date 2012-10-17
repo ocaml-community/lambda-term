@@ -12,6 +12,7 @@ Authors: Jérémie Dimino
 Homepage: http://lambda-term.forge.ocamlcore.org/
 BuildTools: ocamlbuild
 Plugins: DevFiles (0.3), META (0.3)
+XDevFilesEnableMakefile: false
 Synopsis: Terminal manipulation library for OCaml
 Description:
   Lambda-term is a cross-platform library for manipulating the
