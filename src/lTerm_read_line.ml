@@ -155,12 +155,17 @@ let () =
   bind [{ control = false; meta = false; shift = false; code = Down }] [History_next];
   bind [{ control = false; meta = false; shift = false; code = Tab }] [Complete];
   bind [{ control = false; meta = false; shift = false; code = Enter }] [Accept];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'b') }] [Edit (LTerm_edit.Zed Zed_edit.Prev_char)];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'f') }] [Edit (LTerm_edit.Zed Zed_edit.Next_char)];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'h') }] [Edit (LTerm_edit.Zed Zed_edit.Delete_prev_char)];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'c') }] [Break];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'z') }] [Suspend];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'm') }] [Accept];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'l') }] [Clear_screen];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'r') }] [Prev_search];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'd') }] [Interrupt_or_delete_next_char];
+  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'p') }] [History_prev];
+  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'n') }] [History_next];
   bind [{ control = false; meta = true; shift = false; code = Left }] [Complete_bar_prev];
   bind [{ control = false; meta = true; shift = false; code = Right }] [Complete_bar_next];
   bind [{ control = false; meta = true; shift = false; code = Home }] [Complete_bar_first];
