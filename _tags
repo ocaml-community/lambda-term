@@ -3,4 +3,159 @@
 <src/*>: use_iconv
 
 # OASIS_START
+# DO NOT EDIT (digest: e78fd8b9674dd1ec0d4b08a2700288d0)
+# Ignore VCS directories, you can use the same kind of rule outside 
+# OASIS_START/STOP if you want to exclude directories that contains 
+# useless stuff for the build process
+<**/.svn>: -traverse
+<**/.svn>: not_hygienic
+".bzr": -traverse
+".bzr": not_hygienic
+".hg": -traverse
+".hg": not_hygienic
+".git": -traverse
+".git": not_hygienic
+"_darcs": -traverse
+"_darcs": not_hygienic
+# Library lambda-term
+"src/lambda-term.cmxs": use_lambda-term
+<src/lambda-term.{cma,cmxa}>: use_liblambda-term_stubs
+<src/*.ml{,i}>: pkg_lwt
+<src/*.ml{,i}>: pkg_lwt.unix
+<src/*.ml{,i}>: pkg_lwt.syntax
+<src/*.ml{,i}>: pkg_lwt.react
+<src/*.ml{,i}>: pkg_zed
+"src/lTerm_term_stubs.c": pkg_lwt
+"src/lTerm_term_stubs.c": pkg_lwt.unix
+"src/lTerm_term_stubs.c": pkg_lwt.syntax
+"src/lTerm_term_stubs.c": pkg_lwt.react
+"src/lTerm_term_stubs.c": pkg_zed
+"src/lTerm_unix_stubs.c": pkg_lwt
+"src/lTerm_unix_stubs.c": pkg_lwt.unix
+"src/lTerm_unix_stubs.c": pkg_lwt.syntax
+"src/lTerm_unix_stubs.c": pkg_lwt.react
+"src/lTerm_unix_stubs.c": pkg_zed
+"src/lTerm_windows_stubs.c": pkg_lwt
+"src/lTerm_windows_stubs.c": pkg_lwt.unix
+"src/lTerm_windows_stubs.c": pkg_lwt.syntax
+"src/lTerm_windows_stubs.c": pkg_lwt.react
+"src/lTerm_windows_stubs.c": pkg_zed
+# Executable events
+<examples/events.{native,byte}>: use_lambda-term
+<examples/events.{native,byte}>: pkg_lwt
+<examples/events.{native,byte}>: pkg_lwt.unix
+<examples/events.{native,byte}>: pkg_lwt.syntax
+<examples/events.{native,byte}>: pkg_lwt.react
+<examples/events.{native,byte}>: pkg_zed
+# Executable colors
+<examples/colors.{native,byte}>: use_lambda-term
+<examples/colors.{native,byte}>: pkg_lwt
+<examples/colors.{native,byte}>: pkg_lwt.unix
+<examples/colors.{native,byte}>: pkg_lwt.syntax
+<examples/colors.{native,byte}>: pkg_lwt.react
+<examples/colors.{native,byte}>: pkg_zed
+# Executable colors_256
+<examples/colors_256.{native,byte}>: use_lambda-term
+<examples/colors_256.{native,byte}>: pkg_lwt
+<examples/colors_256.{native,byte}>: pkg_lwt.unix
+<examples/colors_256.{native,byte}>: pkg_lwt.syntax
+<examples/colors_256.{native,byte}>: pkg_lwt.react
+<examples/colors_256.{native,byte}>: pkg_zed
+# Executable rgb
+<examples/rgb.{native,byte}>: use_lambda-term
+<examples/rgb.{native,byte}>: pkg_lwt
+<examples/rgb.{native,byte}>: pkg_lwt.unix
+<examples/rgb.{native,byte}>: pkg_lwt.syntax
+<examples/rgb.{native,byte}>: pkg_lwt.react
+<examples/rgb.{native,byte}>: pkg_zed
+# Executable move
+<examples/move.{native,byte}>: use_lambda-term
+<examples/move.{native,byte}>: pkg_lwt
+<examples/move.{native,byte}>: pkg_lwt.unix
+<examples/move.{native,byte}>: pkg_lwt.syntax
+<examples/move.{native,byte}>: pkg_lwt.react
+<examples/move.{native,byte}>: pkg_zed
+# Executable hello
+<examples/hello.{native,byte}>: use_lambda-term
+<examples/hello.{native,byte}>: pkg_lwt
+<examples/hello.{native,byte}>: pkg_lwt.unix
+<examples/hello.{native,byte}>: pkg_lwt.syntax
+<examples/hello.{native,byte}>: pkg_lwt.react
+<examples/hello.{native,byte}>: pkg_zed
+# Executable clock
+<examples/clock.{native,byte}>: use_lambda-term
+<examples/clock.{native,byte}>: pkg_lwt
+<examples/clock.{native,byte}>: pkg_lwt.unix
+<examples/clock.{native,byte}>: pkg_lwt.syntax
+<examples/clock.{native,byte}>: pkg_lwt.react
+<examples/clock.{native,byte}>: pkg_zed
+# Executable buttons
+<examples/buttons.{native,byte}>: use_lambda-term
+<examples/buttons.{native,byte}>: pkg_lwt
+<examples/buttons.{native,byte}>: pkg_lwt.unix
+<examples/buttons.{native,byte}>: pkg_lwt.syntax
+<examples/buttons.{native,byte}>: pkg_lwt.react
+<examples/buttons.{native,byte}>: pkg_zed
+# Executable shell
+<examples/shell.{native,byte}>: use_lambda-term
+<examples/shell.{native,byte}>: pkg_str
+<examples/shell.{native,byte}>: pkg_lwt
+<examples/shell.{native,byte}>: pkg_lwt.unix
+<examples/shell.{native,byte}>: pkg_lwt.syntax
+<examples/shell.{native,byte}>: pkg_lwt.react
+<examples/shell.{native,byte}>: pkg_zed
+<examples/*.ml{,i}>: pkg_str
+# Executable read-password
+<examples/read_password.{native,byte}>: use_lambda-term
+<examples/read_password.{native,byte}>: pkg_lwt
+<examples/read_password.{native,byte}>: pkg_lwt.unix
+<examples/read_password.{native,byte}>: pkg_lwt.syntax
+<examples/read_password.{native,byte}>: pkg_lwt.react
+<examples/read_password.{native,byte}>: pkg_zed
+# Executable read-yes-no
+<examples/read_yes_no.{native,byte}>: use_lambda-term
+<examples/read_yes_no.{native,byte}>: pkg_lwt
+<examples/read_yes_no.{native,byte}>: pkg_lwt.unix
+<examples/read_yes_no.{native,byte}>: pkg_lwt.syntax
+<examples/read_yes_no.{native,byte}>: pkg_lwt.react
+<examples/read_yes_no.{native,byte}>: pkg_zed
+# Executable editor
+<examples/editor.{native,byte}>: use_lambda-term
+<examples/editor.{native,byte}>: pkg_lwt
+<examples/editor.{native,byte}>: pkg_lwt.unix
+<examples/editor.{native,byte}>: pkg_lwt.syntax
+<examples/editor.{native,byte}>: pkg_lwt.react
+<examples/editor.{native,byte}>: pkg_zed
+<examples/*.ml{,i}>: use_lambda-term
+<examples/*.ml{,i}>: pkg_lwt
+<examples/*.ml{,i}>: pkg_lwt.unix
+<examples/*.ml{,i}>: pkg_lwt.syntax
+<examples/*.ml{,i}>: pkg_lwt.react
+<examples/*.ml{,i}>: pkg_zed
+# Executable lambda-term-actions
+<tools/lambda_term_actions.{native,byte}>: use_lambda-term
+<tools/lambda_term_actions.{native,byte}>: pkg_lwt
+<tools/lambda_term_actions.{native,byte}>: pkg_lwt.unix
+<tools/lambda_term_actions.{native,byte}>: pkg_lwt.syntax
+<tools/lambda_term_actions.{native,byte}>: pkg_lwt.react
+<tools/lambda_term_actions.{native,byte}>: pkg_zed
+<tools/*.ml{,i}>: use_lambda-term
+<tools/*.ml{,i}>: pkg_lwt
+<tools/*.ml{,i}>: pkg_lwt.unix
+<tools/*.ml{,i}>: pkg_lwt.syntax
+<tools/*.ml{,i}>: pkg_lwt.react
+<tools/*.ml{,i}>: pkg_zed
+# Executable history-stress-test
+<tests/history_stress_test.{native,byte}>: use_lambda-term
+<tests/history_stress_test.{native,byte}>: pkg_lwt
+<tests/history_stress_test.{native,byte}>: pkg_lwt.unix
+<tests/history_stress_test.{native,byte}>: pkg_lwt.syntax
+<tests/history_stress_test.{native,byte}>: pkg_lwt.react
+<tests/history_stress_test.{native,byte}>: pkg_zed
+<tests/*.ml{,i}>: use_lambda-term
+<tests/*.ml{,i}>: pkg_lwt
+<tests/*.ml{,i}>: pkg_lwt.unix
+<tests/*.ml{,i}>: pkg_lwt.syntax
+<tests/*.ml{,i}>: pkg_lwt.react
+<tests/*.ml{,i}>: pkg_zed
 # OASIS_STOP
