@@ -1,3 +1,9 @@
+1.4 (2013-03-26)
+----------------
+
+* added `C-b`, `C-f`, `C-h`, `M-p`, `M-n` by default
+* fix a segfault when running utop in an emacs terminal buffer
+
 1.3 (2012-10-08)
 ----------------
 
