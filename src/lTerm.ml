@@ -841,7 +841,7 @@ let encode_string term str =
         let ch, ofs = Zed_utf8.unsafe_extract_next str ofs in
         (try
            output#put ch
-         with CharEncoding.Out_of_range ->
+         with CharEncoding.Out_of_range | UChar.Out_of_range ->
            output#put (map_char ch));
         loop ofs
       end
@@ -856,7 +856,7 @@ let encode_char term ch =
     let output = new CharEncoding.uchar_output_channel_of term.outgoing_encoding (new output_to_buffer (Buffer.create 8) res) in
     (try
        output#put ch
-     with CharEncoding.Out_of_range ->
+     with CharEncoding.Out_of_range | UChar.Out_of_range ->
        output#put (map_char ch));
     output#close_out ();
     !res
