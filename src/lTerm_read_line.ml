@@ -171,6 +171,7 @@ let () =
   bind [{ control = false; meta = true; shift = false; code = Home }] [Complete_bar_first];
   bind [{ control = false; meta = true; shift = false; code = End }] [Complete_bar_last];
   bind [{ control = false; meta = true; shift = false; code = Tab }] [Complete_bar];
+  bind [{ control = false; meta = true; shift = false; code = Down }] [Complete_bar];
   bind [{ control = false; meta = true; shift = false; code = Enter }] [Edit (LTerm_edit.Zed Zed_edit.Newline)];
   bind [{ control = false; meta = false; shift = false; code = Escape }] [Cancel_search]
 
