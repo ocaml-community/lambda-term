@@ -119,6 +119,8 @@ let () =
   bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'c') }] [Zed Capitalize_word];
   bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'l') }] [Zed Lowercase_word];
   bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'u') }] [Zed Uppercase_word];
+  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'b') }] [Zed Prev_word];
+  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'f') }] [Zed Next_word];
   bind [{ control = false; meta = true; shift = false; code = Right }] [Zed Next_word];
   bind [{ control = false; meta = true; shift = false; code = Left }] [Zed Prev_word];
   bind [{ control = true; meta = false; shift = false; code = Right }] [Zed Next_word];
