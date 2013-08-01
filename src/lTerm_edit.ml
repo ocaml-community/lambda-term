@@ -125,6 +125,7 @@ let () =
   bind [{ control = false; meta = true; shift = false; code = Left }] [Zed Prev_word];
   bind [{ control = true; meta = false; shift = false; code = Right }] [Zed Next_word];
   bind [{ control = true; meta = false; shift = false; code = Left }] [Zed Prev_word];
+  bind [{ control = false; meta = true; shift = false; code = Backspace }] [Zed Kill_prev_word];
   bind [{ control = false; meta = true; shift = false; code = Delete }] [Zed Kill_prev_word];
   bind [{ control = true; meta = false; shift = false; code = Delete }] [Zed Kill_next_word];
   bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'd') }] [Zed Kill_next_word];
