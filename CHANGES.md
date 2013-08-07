@@ -1,3 +1,10 @@
+1.5 (2013-08-07)
+---------------
+
+* workaround camomile raising the wrong exception for encoding
+  failures
+* add more default keybindings
+
 1.4 (2013-03-26)
 ----------------
 
