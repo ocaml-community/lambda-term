@@ -28,6 +28,8 @@ Description:
   Lambda-term integrates with zed to provide text edition facilities in
   console applications.
 
+FilesAB: src/lTerm_config.h.ab
+
 # +-------------------------------------------------------------------+
 # | The library                                                       |
 # +-------------------------------------------------------------------+
@@ -61,9 +63,13 @@ Library "lambda-term"
     LTerm_color_mappings,
     LTerm_resource_lexer
   CSources:
+    lTerm_config.h,
     lTerm_term_stubs.c,
     lTerm_unix_stubs.c,
     lTerm_windows_stubs.c
+  if system(openbsd)
+    CCOpt: -I/usr/local/include
+    CCLib: -L/usr/local/lib -lcharset
 
 # +-------------------------------------------------------------------+
 # | Examples                                                          |

@@ -1,0 +1,15 @@
+/*
+ * lTerm_config.h
+ * --------------
+ * Copyright : (c) 2014, Jeremie Dimino <jdimino@janestreet.com>
+ * Licence   : BSD3
+ *
+ * This file is a part of lambda-term.
+ */
+
+#ifndef __LTERM_CONFIG_H
+#define __LTERM_CONFIG_H
+
+#define SYS_$(system)
+
+#endif /* __LTERM_CONFIG_H */

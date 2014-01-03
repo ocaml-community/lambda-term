@@ -7,6 +7,8 @@
  * This file is a part of Lambda-Term.
  */
 
+#include "lTerm_config.h"
+
 #include <caml/mlvalues.h>
 #include <caml/alloc.h>
 
@@ -29,7 +31,12 @@ CAMLprim value lt_unix_get_system_encoding()
 
 #include <signal.h>
 #include <locale.h>
-#include <langinfo.h>
+
+#if defined(SYS_openbsd)
+#  include <localcharset.h>
+#else
+#  include <langinfo.h>
+#endif
 
 CAMLprim value lt_unix_get_sigwinch()
 {
@@ -45,9 +52,13 @@ CAMLprim value lt_unix_get_sigwinch()
 CAMLprim value lt_unix_get_system_encoding()
 {
   /* Set the locale according to environment variables: */
-  char *locale = setlocale(LC_CTYPE, "");
+  const char *locale = setlocale(LC_CTYPE, "");
   /* Get the codeset used by current locale: */
-  char *codeset = nl_langinfo(CODESET);
+#if defined(SYS_openbsd)
+  const char *codeset = locale_charset();
+#else
+  const char *codeset = nl_langinfo(CODESET);
+#endif
   /* Reset the locale: */
   setlocale(LC_CTYPE, locale);
   /* If the encoding cannot be determined, just use ascii: */
