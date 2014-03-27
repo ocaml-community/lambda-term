@@ -105,6 +105,7 @@ type t = {
    +-----------------------------------------------------------------+ *)
 
 let resize_event, send_resize = E.create ()
+let send_resize () = send_resize () 
 
 let () =
   match LTerm_unix.sigwinch with
