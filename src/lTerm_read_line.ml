@@ -682,13 +682,13 @@ let styled_newline = [|(newline, LTerm_style.none)|]
 class virtual ['a] term term =
   let size, set_size = S.create (LTerm.size term) in
   let event, set_prompt = E.create () in
-  let prompt = S.switch (S.const default_prompt) event in
+  let prompt = S.switch (S.hold ~eq:( == ) (S.const default_prompt) event) in
   let key_sequence, set_key_sequence = S.create [] in
 object(self)
   inherit ['a] abstract
   method size = size
   method prompt = prompt
-  method set_prompt = set_prompt
+  method set_prompt prompt = set_prompt prompt
 
   val mutable visible = true
     (* Whether the read-line instance is currently visible. *)
