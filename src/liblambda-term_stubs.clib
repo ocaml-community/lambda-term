@@ -1,0 +1,6 @@
+# OASIS_START
+# DO NOT EDIT (digest: dff6f3d31800f198b7eea874f030ab42)
+lTerm_term_stubs.o
+lTerm_unix_stubs.o
+lTerm_windows_stubs.o
+# OASIS_STOP
