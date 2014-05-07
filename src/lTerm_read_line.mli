@@ -191,7 +191,7 @@ class virtual ['a] engine : ?history : history -> ?clipboard : Zed_edit.clipboar
         completions. [index] is the index of the beginning of the word
         being completed and [words] is the list of possible
         completions with their suffixes. The result is made available
-        through the {!compltion_words} signal. *)
+        through the {!completion_words} signal. *)
 
   method completion : unit
     (** Ask for computing completion for current input. This method
