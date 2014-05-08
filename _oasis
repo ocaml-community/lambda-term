@@ -67,8 +67,9 @@ Library "lambda-term"
     lTerm_term_stubs.c,
     lTerm_unix_stubs.c,
     lTerm_windows_stubs.c
+  CCOpt: -I$pkg_lwt
   if system(openbsd)
-    CCOpt: -I/usr/local/include
+    CCOpt+: -I/usr/local/include
     CCLib: -L/usr/local/lib -lcharset
 
 # +-------------------------------------------------------------------+

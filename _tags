@@ -1,6 +1,0 @@
-<**/*.ml>: syntax_camlp4o
-<src/*.{c,h}>: use_lwt_unix_h
-<src/*>: use_iconv
-
-# OASIS_START
-# OASIS_STOP
