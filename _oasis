@@ -186,6 +186,10 @@ Executable "history-stress-test"
 # | Doc                                                               |
 # +-------------------------------------------------------------------+
 
+Flag "uglydocworkaround"
+  Description: Apply ugly workaround to fix API documentation
+  Default: false
+
 Document "lambda-term-api"
   Title: API reference for Lambda-Term
   Type: ocamlbuild (0.3)
@@ -193,6 +197,8 @@ Document "lambda-term-api"
   InstallDir: $htmldir/api
   DataFiles: style.css
   BuildTools: ocamldoc
+  if flag(uglydocworkaround)
+    PostCommand: ln -sf _build/lambda-term-api.odocl ./ && ocamlbuild -pp cat lambda-term-api.docdir/index.html && rm -f lambda-term-api.odocl
   XOCamlbuildPath: ./
   XOCamlbuildLibraries: lambda-term
 
