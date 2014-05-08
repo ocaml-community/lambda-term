@@ -7,6 +7,8 @@
  * This file is a part of Lambda-Term.
  *)
 
+(** Widgets for creating applications *)
+
 open React
 open LTerm_geom
 
