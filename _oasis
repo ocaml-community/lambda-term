@@ -238,6 +238,13 @@ Document "lamda-term-inputrc"
   Install: true
   DataFiles: lambda-term-inputrc
 
+Document "lambda-termrc"
+  Type: custom (0.3)
+  Title: lambda-term resource file example
+  XCustom: true
+  Install: true
+  DataFiles: lambda-termrc
+
 # +-------------------------------------------------------------------+
 # | Misc                                                              |
 # +-------------------------------------------------------------------+

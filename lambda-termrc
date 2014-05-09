@@ -1,0 +1,10 @@
+button.focused.foreground: lyellow
+button.focused.background: blue
+checkbutton.focused.foreground: lyellow
+checkbutton.focused.background: blue
+!
+! For monochrome experience comment out the resources above and uncomment two
+! following lines:
+!
+!button.focused.reverse: true
+!checkbutton.focused.reverse: true
