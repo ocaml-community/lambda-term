@@ -7,3 +7,4 @@ _build/
 /man/*.gz
 /src/lTerm_config.h
 *.swp
+*.native
