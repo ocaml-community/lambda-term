@@ -166,6 +166,7 @@ class vline : t
 
 (** {6 Buttons} *)
 
+(** Normal button. *)
 class button : string -> object
   inherit t
 
