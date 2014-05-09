@@ -633,6 +633,39 @@ class button initial_label = object(self)
     end
 end
 
+class checkbutton initial_label initial_state = object(self)
+  inherit button initial_label
+
+  val mutable state = initial_state
+
+  initializer
+    self#on_event
+    (function
+      | LTerm_event.Key { control = false; meta = false; shift = false; code }
+        when (code = Enter || code = Char(UChar.of_char ' ')) ->
+          state <- not state;
+          (* checkbutton changes the state when clicked, so has to be redrawn *)
+          self#queue_draw;
+          exec_callbacks click_callbacks ();
+          true
+      | _ ->
+          false);
+    self#set_resource_class "checkbutton"
+
+  method state = state
+
+  method draw ctx focused =
+    let { rows; cols } = LTerm_draw.size ctx in
+    let style = if focused = (self :> t) then focused_style else unfocused_style in
+    let checked = if state then "[x]" else "[ ]" in
+    begin
+      LTerm_draw.fill_style ctx style;
+      LTerm_draw.draw_string ctx (rows / 2) 0 (checked ^ label);
+    end
+
+end
+
+
 (* +-----------------------------------------------------------------+
    | Focus cycling                                                   |
    +-----------------------------------------------------------------+ *)
