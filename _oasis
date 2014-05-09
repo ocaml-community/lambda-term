@@ -132,6 +132,13 @@ Executable buttons
   MainIs: buttons.ml
   BuildDepends: lambda-term
 
+Executable checkbuttons
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: checkbuttons.ml
+  BuildDepends: lambda-term
+
 Executable shell
   Path: examples
   Install: false
