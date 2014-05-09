@@ -6,3 +6,4 @@ _build/
 /setup-dev.exe
 /man/*.gz
 /src/lTerm_config.h
+*.swp
