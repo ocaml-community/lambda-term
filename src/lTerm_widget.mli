@@ -179,8 +179,7 @@ class button : string -> object
     (** [on_click ?switch f] calls [f] when the button is clicked. *)
 end
 
-(** Checkbutton.
- *  A button that can be in active or inactive state. *)
+(** Checkbutton. A button that can be in active or inactive state. *)
 class checkbutton : string -> bool -> object
   inherit t
 
