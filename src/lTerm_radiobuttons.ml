@@ -1,6 +1,7 @@
 open CamomileLibraryDyn.Camomile
 open LTerm_geom
 open LTerm_key
+open LTerm_widget_callbacks
 
 let section = Lwt_log.Section.make "lambda-term(radiobuttons)"
 
@@ -9,20 +10,6 @@ class type ['a] radio = object
   method off : unit
   method id : 'a
 end
-
-type switch = { mutable switch_state : (int option -> unit) list option }
-
-let register switch_opt seq f =
-  match switch_opt with
-    | None ->
-        ignore (Lwt_sequence.add_l f seq)
-    | Some switch ->
-        match switch.switch_state with
-          | Some l ->
-              let node = Lwt_sequence.add_l f seq in
-              switch.switch_state <- Some ((fun _ -> Lwt_sequence.remove node) :: l)
-          | None ->
-              ()
 
 class ['a] radiogroup  = object(self)
 
@@ -46,13 +33,7 @@ class ['a] radiogroup  = object(self)
       if button#id != some_id then button#off else () in
     List.iter switch_button buttons;
     state <- Some some_id;
-    Lwt_sequence.iter_l
-    (fun f ->
-      try
-        f state
-      with exn ->
-        ignore (Lwt_log.error ~section ~exn "callback failed with"))
-    state_change_callbacks
+    exec_callbacks state_change_callbacks state
 
 end
 

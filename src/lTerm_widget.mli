@@ -12,22 +12,6 @@
 open React
 open LTerm_geom
 
-(** {6 Callbacks} *)
-
-type switch
-  (** Switches are used to stop signals. *)
-
-val register : switch option -> 'a Lwt_sequence.t -> 'a -> unit
-  (** *)
-
-val stop : switch -> unit
-  (** *)
-
-val exec_callbacks : ('a -> unit) Lwt_sequence.t -> 'a -> unit
-  (** [apply_callbacks callbacks x] *)
-
-val exec_filters : ('a -> bool) Lwt_sequence.t -> 'a -> bool
-
 (** {6 Base class} *)
 
 (** The base class. The parameter is the initial resource class. The
@@ -81,7 +65,7 @@ class t : string -> object
     (** Send an event to the widget. If the widget cannot process the
         event, it is sent to the parent and so on. *)
 
-  method on_event : ?switch : switch -> (LTerm_event.t -> bool) -> unit
+  method on_event : ?switch : LTerm_widget_callbacks.switch -> (LTerm_event.t -> bool) -> unit
     (** [on_event ?switch f] calls [f] each time an event is
         received. If [f] returns [true], the event is not passed to
         other callbacks. *)
@@ -175,7 +159,7 @@ class button : string -> object
 
   method set_label : string -> unit
 
-  method on_click : ?switch : switch -> (unit -> unit) -> unit
+  method on_click : ?switch : LTerm_widget_callbacks.switch -> (unit -> unit) -> unit
     (** [on_click ?switch f] calls [f] when the button is clicked. *)
 end
 
@@ -191,7 +175,7 @@ class checkbutton : string -> bool -> object
 
   method set_label : string -> unit
 
-  method on_click : ?switch : switch -> (unit -> unit) -> unit
+  method on_click : ?switch : LTerm_widget_callbacks.switch -> (unit -> unit) -> unit
   (** [on_click ?switch f] calls [f] when the button state is changed. *)
 end
 

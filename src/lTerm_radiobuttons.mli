@@ -1,5 +1,3 @@
-type switch
-
 class type ['a] radio = object
   method on : unit
   method off : unit
@@ -7,7 +5,7 @@ class type ['a] radio = object
 end
 
 class ['a] radiogroup : object
-  method on_state_change : ?switch : switch -> ('a option -> unit) -> unit
+  method on_state_change : ?switch : LTerm_widget_callbacks.switch -> ('a option -> unit) -> unit
   method state : 'a option
   method register_button : 'a radio -> unit
   method switch_to : 'a -> unit
@@ -18,7 +16,7 @@ class ['a] radiobutton : 'a radiogroup -> string -> 'a -> object
   method on : unit
   method off : unit
   method label : string
-  method on_click : ?switch:LTerm_widget.switch -> (unit -> unit) -> unit
+  method on_click : ?switch:LTerm_widget_callbacks.switch -> (unit -> unit) -> unit
   method set_label : string -> unit
   method id : 'a
 end

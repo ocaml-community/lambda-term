@@ -52,6 +52,7 @@ Library "lambda-term"
     LTerm_draw,
     LTerm_mouse,
     LTerm_widget,
+    LTerm_widget_callbacks,
     LTerm_radiobuttons,
     LTerm_edit,
     LTerm_read_line,

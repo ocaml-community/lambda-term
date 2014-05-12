@@ -15,57 +15,7 @@ open LTerm_draw
 open LTerm_key
 open LTerm_style
 open LTerm_text
-
-let section = Lwt_log.Section.make "lambda-term(widget)"
-
-(* +-----------------------------------------------------------------+
-   | Callbacks                                                       |
-   +-----------------------------------------------------------------+ *)
-
-type switch = { mutable switch_state : (unit -> unit) list option }
-
-let register switch_opt seq f =
-  match switch_opt with
-    | None ->
-        ignore (Lwt_sequence.add_l f seq)
-    | Some switch ->
-        match switch.switch_state with
-          | Some l ->
-              let node = Lwt_sequence.add_l f seq in
-              switch.switch_state <- Some ((fun () -> Lwt_sequence.remove node) :: l)
-          | None ->
-              ()
-
-let stop switch =
-  match switch.switch_state with
-    | Some l ->
-        switch.switch_state <- None;
-        List.iter (fun f -> f ()) l
-    | None ->
-        ()
-
-let exec_callbacks seq x =
-  Lwt_sequence.iter_l
-    (fun f ->
-       try
-         f x
-       with exn ->
-         ignore (Lwt_log.error ~section ~exn "callback failed with"))
-    seq
-
-let exec_filters seq x =
-  Lwt_sequence.fold_l
-    (fun f acc ->
-       if acc then
-         true
-       else begin
-         try
-           f x
-         with exn ->
-           ignore (Lwt_log.error ~section ~exn "filter failed with");
-           false
-       end)
-    seq false
+open LTerm_widget_callbacks
 
 (* +-----------------------------------------------------------------+
    | The widget class                                                |
