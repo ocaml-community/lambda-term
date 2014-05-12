@@ -52,6 +52,7 @@ Library "lambda-term"
     LTerm_draw,
     LTerm_mouse,
     LTerm_widget,
+    LTerm_radiobuttons,
     LTerm_edit,
     LTerm_read_line,
     LTerm_text,
@@ -137,6 +138,13 @@ Executable checkbuttons
   Install: false
   CompiledObject: best
   MainIs: checkbuttons.ml
+  BuildDepends: lambda-term
+
+Executable radiobuttons
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: radiobuttons.ml
   BuildDepends: lambda-term
 
 Executable shell
