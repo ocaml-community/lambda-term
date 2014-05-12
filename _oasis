@@ -132,6 +132,13 @@ Executable buttons
   MainIs: buttons.ml
   BuildDepends: lambda-term
 
+Executable checkbuttons
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: checkbuttons.ml
+  BuildDepends: lambda-term
+
 Executable shell
   Path: examples
   Install: false
@@ -230,6 +237,13 @@ Document "lamda-term-inputrc"
   XCustom: true
   Install: true
   DataFiles: lambda-term-inputrc
+
+Document "lambda-termrc"
+  Type: custom (0.3)
+  Title: lambda-term resource file example
+  XCustom: true
+  Install: true
+  DataFiles: lambda-termrc
 
 # +-------------------------------------------------------------------+
 # | Misc                                                              |

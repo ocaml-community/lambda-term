@@ -166,6 +166,7 @@ class vline : t
 
 (** {6 Buttons} *)
 
+(** Normal button. *)
 class button : string -> object
   inherit t
 
@@ -176,6 +177,22 @@ class button : string -> object
 
   method on_click : ?switch : switch -> (unit -> unit) -> unit
     (** [on_click ?switch f] calls [f] when the button is clicked. *)
+end
+
+(** Checkbutton. A button that can be in active or inactive state. *)
+class checkbutton : string -> bool -> object
+  inherit t
+
+  method label : string
+    (** The text displayed on the checkbutton. *)
+
+  method state : bool
+    (** The state of checkbutton; [true] means checked and [false] means unchecked. *)
+
+  method set_label : string -> unit
+
+  method on_click : ?switch : switch -> (unit -> unit) -> unit
+  (** [on_click ?switch f] calls [f] when the button state is changed. *)
 end
 
 (** {6 Running in a terminal} *)
