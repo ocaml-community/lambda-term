@@ -4,7 +4,6 @@
 
 open Lwt
 open LTerm_widget
-open LTerm_radiobuttons
 
 lwt () =
   let waiter, wakener = wait () in

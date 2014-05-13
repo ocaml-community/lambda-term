@@ -179,6 +179,29 @@ class checkbutton : string -> bool -> object
   (** [on_click ?switch f] calls [f] when the button state is changed. *)
 end
 
+class type ['a] radio = object
+  method on : unit
+  method off : unit
+  method id : 'a
+end
+
+class ['a] radiogroup : object
+  method on_state_change : ?switch : LTerm_widget_callbacks.switch -> ('a option -> unit) -> unit
+  method state : 'a option
+  method register_button : 'a radio -> unit
+  method switch_to : 'a -> unit
+end
+
+class ['a] radiobutton : 'a radiogroup -> string -> 'a -> object
+  inherit t
+  method on : unit
+  method off : unit
+  method label : string
+  method on_click : ?switch:LTerm_widget_callbacks.switch -> (unit -> unit) -> unit
+  method set_label : string -> unit
+  method id : 'a
+end
+
 (** {6 Running in a terminal} *)
 
 val run : LTerm.t -> ?save_state : bool -> ?load_resources : bool -> ?resources_file : string -> #t -> 'a Lwt.t -> 'a Lwt.t
