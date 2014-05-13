@@ -9,9 +9,6 @@
 
 (** Widgets for creating applications *)
 
-open React
-open LTerm_geom
-
 (** {6 Base class} *)
 
 (** The base class. The parameter is the initial resource class. The
@@ -50,15 +47,15 @@ class t : string -> object
     (** [draw ctx focused] draws the widget on the given
         context. [focused] is the focused widget. *)
 
-  method cursor_position : coord option
+  method cursor_position : LTerm_geom.coord option
     (** Method invoked when the widget has the focus, it returns the
         position of the cursor inside the widget if it should be
         displayed. *)
 
-  method allocation : rect
+  method allocation : LTerm_geom.rect
     (** The zone occuped by the widget. *)
 
-  method set_allocation : rect -> unit
+  method set_allocation : LTerm_geom.rect -> unit
     (** Sets the zone occuped by the widget. *)
 
   method send_event : LTerm_event.t -> unit
@@ -70,7 +67,7 @@ class t : string -> object
         received. If [f] returns [true], the event is not passed to
         other callbacks. *)
 
-  method size_request : size
+  method size_request : LTerm_geom.size
     (** The size wanted by the widget. *)
 
   method resources : LTerm_resources.t
@@ -185,21 +182,60 @@ class type ['a] radio = object
   method id : 'a
 end
 
+(** Radio group.
+
+ Radio group governs the set of {!radio} objects. At each given moment of time only one
+ of the objects in the "on" state and the rest are in the "off" state. *)
 class ['a] radiogroup : object
+
   method on_state_change : ?switch : LTerm_widget_callbacks.switch -> ('a option -> unit) -> unit
+  (** [on_state_change ?switch f] calls [f] when the state of the group is changed. *)
+
   method state : 'a option
-  method register_button : 'a radio -> unit
+  (** The state of the group. Contains [Some id] with the id of "on" object
+   in the group or None if no objects were added to the group yet. *)
+
+  method register_object : 'a radio -> unit
+  (** Adds radio object to the group *)
+
   method switch_to : 'a -> unit
+  (** [switch_to id] switches radio group to the state [Some id], calls {!radio.on}
+  method of the object with the given id and {!radio.off} method of all other objects
+  added to the group. *)
+
 end
 
+(** Radiobutton. The button which implements {!radio} object contract, so can be
+ added to {!radiogroup}. *)
 class ['a] radiobutton : 'a radiogroup -> string -> 'a -> object
   inherit t
+
+  method state : bool
+  (** The state of the button; [true] if button is "on" and [false] if the button
+   is "off". *)
+
   method on : unit
+  (** Switches the button state to "on". Affects only how the button is drawn,
+   does not change the state of the group the button is added to.
+   Use {!radiogroup.switch_to} instead. *)
+
   method off : unit
+  (** Switches the button state to "off". Affects only how the button is drawn,
+   does not change the state of the group the button is added to.
+   Use {!radiogroup.switch_to} instead. *)
+
   method label : string
-  method on_click : ?switch:LTerm_widget_callbacks.switch -> (unit -> unit) -> unit
+  (** The text displayed on the radiobutton. *)
+
   method set_label : string -> unit
+
   method id : 'a
+  (** The id of the button. *)
+
+  method on_click : ?switch:LTerm_widget_callbacks.switch -> (unit -> unit) -> unit
+  (** [on_click ?switch f] calls [f] when the button is clicked. You probably want
+   to use {!radiogroup.on_state_change} instead. *)
+
 end
 
 (** {6 Running in a terminal} *)

@@ -7,8 +7,6 @@
  * This file is a part of Lambda-Term.
  *)
 
-(** {6 Callbacks} *)
-
 type switch
   (** Switches are used to stop signals. *)
 
