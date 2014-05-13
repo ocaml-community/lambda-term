@@ -29,6 +29,15 @@ lwt () =
   vbox#add ~expand:false button;
   vbox#add ~expand:false (new hline);
 
+  let button = new button "reset radiobuttons" in
+  let reset = fun () ->
+    group_int#switch_to 1;
+    group_string#switch_to "foo"
+  in
+  button#on_click reset;
+  vbox#add ~expand:false button;
+  vbox#add ~expand:false (new hline);
+
   let hbox = new hbox in
   hbox#add (new radiobutton group_int "Number 1" 1);
   hbox#add ~expand:false (new vline);
