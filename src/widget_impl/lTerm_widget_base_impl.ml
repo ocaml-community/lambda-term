@@ -1,3 +1,12 @@
+(*
+ * lTerm_widget_base_impl.ml
+ * ---------------------
+ * Copyright : (c) 2011, Jeremie Dimino <jeremie@dimino.org>
+ * Licence   : BSD3
+ *
+ * This file is a part of Lambda-Term.
+ *)
+
 open LTerm_widget_callbacks
 open LTerm_geom
 
