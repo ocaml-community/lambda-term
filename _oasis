@@ -2,17 +2,17 @@
 # | Package parameters                                                |
 # +-------------------------------------------------------------------+
 
-OASISFormat: 0.3
+OASISFormat: 0.4
 OCamlVersion: >= 3.12
 Name: lambda-term
 Version: 1.6
 LicenseFile: LICENSE
-License: BSD3
+License: BSD-3-CLAUSE
 Authors: Jeremie Dimino
 Maintainers: Jeremie Dimino <jeremie@dimino.org>
 Homepage: http://lambda-term.forge.ocamlcore.org/
 BuildTools: ocamlbuild
-Plugins: DevFiles (0.3), META (0.3)
+Plugins: DevFiles (0.4), META (0.4)
 XDevFilesEnableMakefile: false
 Synopsis: Terminal manipulation library for OCaml
 Description:
@@ -52,6 +52,7 @@ Library "lambda-term"
     LTerm_draw,
     LTerm_mouse,
     LTerm_widget,
+    LTerm_widget_callbacks,
     LTerm_edit,
     LTerm_read_line,
     LTerm_text,
@@ -61,7 +62,9 @@ Library "lambda-term"
     LTerm_history
   InternalModules:
     LTerm_color_mappings,
-    LTerm_resource_lexer
+    LTerm_resource_lexer,
+    widget_impl/LTerm_widget_base_impl,
+    widget_impl/LTerm_buttons_impl
   CSources:
     lTerm_config.h,
     lTerm_term_stubs.c,
@@ -139,6 +142,13 @@ Executable checkbuttons
   MainIs: checkbuttons.ml
   BuildDepends: lambda-term
 
+Executable radiobuttons
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: radiobuttons.ml
+  BuildDepends: lambda-term
+
 Executable shell
   Path: examples
   Install: false
@@ -195,7 +205,7 @@ Executable "history-stress-test"
 
 Document "lambda-term-api"
   Title: API reference for Lambda-Term
-  Type: ocamlbuild (0.3)
+  Type: ocamlbuild (0.4)
   Install: true
   InstallDir: $htmldir/api
   DataFiles: style.css
@@ -208,7 +218,7 @@ Document "lambda-term-api"
 # +-------------------------------------------------------------------+
 
 Document "lambda-term-actions-man"
-  Type: custom (0.3)
+  Type: custom (0.4)
   Title: Man page for lambda-term-actions
   Install: true
   BuildTools: gzip
@@ -218,7 +228,7 @@ Document "lambda-term-actions-man"
   InstallDir: $mandir/man1
 
 Document "lambda-term-inputrc-man"
-  Type: custom (0.3)
+  Type: custom (0.4)
   Title: Man page for ~/.lambda-term-inputrc
   Install: true
   BuildTools: gzip
@@ -232,14 +242,14 @@ Document "lambda-term-inputrc-man"
 # +-------------------------------------------------------------------+
 
 Document "lamda-term-inputrc"
-  Type: custom (0.3)
+  Type: custom (0.4)
   Title: lambda-term-inputrc example
   XCustom: true
   Install: true
   DataFiles: lambda-term-inputrc
 
 Document "lambda-termrc"
-  Type: custom (0.3)
+  Type: custom (0.4)
   Title: lambda-term resource file example
   XCustom: true
   Install: true

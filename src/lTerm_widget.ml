@@ -15,134 +15,13 @@ open LTerm_draw
 open LTerm_key
 open LTerm_style
 open LTerm_text
-
-let section = Lwt_log.Section.make "lambda-term(widget)"
-
-(* +-----------------------------------------------------------------+
-   | Callbacks                                                       |
-   +-----------------------------------------------------------------+ *)
-
-type switch = { mutable switch_state : (unit -> unit) list option }
-
-let register switch_opt seq f =
-  match switch_opt with
-    | None ->
-        ignore (Lwt_sequence.add_l f seq)
-    | Some switch ->
-        match switch.switch_state with
-          | Some l ->
-              let node = Lwt_sequence.add_l f seq in
-              switch.switch_state <- Some ((fun () -> Lwt_sequence.remove node) :: l)
-          | None ->
-              ()
-
-let stop switch =
-  match switch.switch_state with
-    | Some l ->
-        switch.switch_state <- None;
-        List.iter (fun f -> f ()) l
-    | None ->
-        ()
-
-let exec_callbacks seq x =
-  Lwt_sequence.iter_l
-    (fun f ->
-       try
-         f x
-       with exn ->
-         ignore (Lwt_log.error ~section ~exn "callback failed with"))
-    seq
-
-let exec_filters seq x =
-  Lwt_sequence.fold_l
-    (fun f acc ->
-       if acc then
-         true
-       else begin
-         try
-           f x
-         with exn ->
-           ignore (Lwt_log.error ~section ~exn "filter failed with");
-           false
-       end)
-    seq false
+open LTerm_widget_callbacks
 
 (* +-----------------------------------------------------------------+
    | The widget class                                                |
    +-----------------------------------------------------------------+ *)
 
-class t initial_resource_class : object
-  method children : t list
-  method parent : t option
-  method set_parent : t option -> unit
-  method can_focus : bool
-  method queue_draw : unit
-  method set_queue_draw : (unit -> unit) -> unit
-  method draw : LTerm_draw.context -> t -> unit
-  method cursor_position : coord option
-  method allocation : rect
-  method set_allocation : rect -> unit
-  method send_event : LTerm_event.t -> unit
-  method on_event : ?switch : switch -> (LTerm_event.t -> bool) -> unit
-  method size_request : size
-  method resources : LTerm_resources.t
-  method set_resources : LTerm_resources.t -> unit
-  method resource_class : string
-  method set_resource_class : string -> unit
-  method update_resources : unit
-end = object(self)
-
-  method children : t list = []
-
-  method can_focus = false
-
-  val mutable parent : t option = None
-  method parent = parent
-  method set_parent opt = parent <- opt
-
-  val mutable queue_draw = ignore
-  method queue_draw = queue_draw ()
-  method set_queue_draw f =
-    queue_draw <- f;
-    List.iter (fun w -> w#set_queue_draw f) self#children
-
-  method draw (ctx : LTerm_draw.context) (focused : t) = ()
-  method cursor_position = None
-
-  val mutable allocation = { row1 = 0; col1 = 0; row2 = 0; col2 = 0 }
-  method allocation = allocation
-  method set_allocation rect = allocation <- rect
-
-  val event_filters = Lwt_sequence.create ()
-
-  method send_event ev =
-    if not (exec_filters event_filters ev) then
-      match parent with
-        | Some widget ->
-            widget#send_event ev
-        | None ->
-            ()
-
-  method on_event ?switch f = register switch event_filters f
-
-  val size_request = { rows = 0; cols = 0 }
-  method size_request = size_request
-
-  val mutable resource_class = initial_resource_class
-  method resource_class = resource_class
-  method set_resource_class rc =
-    resource_class <- rc;
-    self#update_resources
-
-  val mutable resources = LTerm_resources.empty
-  method resources = resources
-  method set_resources res =
-    resources <- res;
-    self#update_resources;
-    List.iter (fun w -> w#set_resources res) self#children
-
-  method update_resources = ()
-end
+class t = LTerm_widget_base_impl.t
 
 (* +-----------------------------------------------------------------+
    | Labels                                                          |
@@ -583,88 +462,11 @@ end
    | Buttons                                                         |
    +-----------------------------------------------------------------+ *)
 
-class button initial_label = object(self)
-  inherit t "button" as super
-
-  method can_focus = true
-
-  val click_callbacks = Lwt_sequence.create ()
-
-  method on_click ?switch f =
-    register switch click_callbacks f
-
-  val mutable size_request = { rows = 1; cols = 4 + Zed_utf8.length initial_label }
-  method size_request = size_request
-
-  val mutable label = initial_label
-
-  method label = label
-
-  method set_label text =
-    label <- text;
-    size_request <- { rows = 1; cols = 4 + Zed_utf8.length text };
-    self#queue_draw
-
-  initializer
-    self#on_event
-      (function
-         | LTerm_event.Key { control = false; meta = false; shift = false; code = Enter } ->
-             exec_callbacks click_callbacks ();
-             true
-         | _ ->
-             false)
-
-  val mutable focused_style = LTerm_style.none
-  val mutable unfocused_style = LTerm_style.none
-  method update_resources =
-    let rc = self#resource_class and resources = self#resources in
-    focused_style <- LTerm_resources.get_style (rc ^ ".focused") resources;
-    unfocused_style <- LTerm_resources.get_style (rc ^ ".unfocused") resources
-
-  method draw ctx focused =
-    let { rows; cols } = LTerm_draw.size ctx in
-    let len = Zed_utf8.length label in
-    if focused = (self :> t) then begin
-      LTerm_draw.fill_style ctx focused_style;
-      LTerm_draw.draw_string ctx (rows / 2) ((cols - len - 4) / 2) (Printf.sprintf "< %s >" label)
-    end else begin
-      LTerm_draw.fill_style ctx unfocused_style;
-      LTerm_draw.draw_string ctx (rows / 2) ((cols - len - 4) / 2) (Printf.sprintf "< %s >" label)
-    end
-end
-
-class checkbutton initial_label initial_state = object(self)
-  inherit button initial_label
-
-  val mutable state = initial_state
-
-  initializer
-    self#on_event
-    (function
-      | LTerm_event.Key { control = false; meta = false; shift = false; code }
-        when (code = Enter || code = Char(UChar.of_char ' ')) ->
-          state <- not state;
-          (* checkbutton changes the state when clicked, so has to be redrawn *)
-          self#queue_draw;
-          exec_callbacks click_callbacks ();
-          true
-      | _ ->
-          false);
-    self#set_resource_class "checkbutton"
-
-  method state = state
-
-  method draw ctx focused =
-    let { rows; cols } = LTerm_draw.size ctx in
-    let style = if focused = (self :> t) then focused_style else unfocused_style in
-    let checked = if state then "[x]" else "[ ]" in
-    begin
-      LTerm_draw.fill_style ctx style;
-      LTerm_draw.draw_string ctx (rows / 2) 0 (checked ^ label);
-    end
-
-end
-
+class button = LTerm_buttons_impl.button
+class checkbutton = LTerm_buttons_impl.checkbutton
+class type ['a] radio = ['a] LTerm_buttons_impl.radio
+class ['a] radiogroup = ['a] LTerm_buttons_impl.radiogroup
+class ['a] radiobutton = ['a] LTerm_buttons_impl.radiobutton
 
 (* +-----------------------------------------------------------------+
    | Focus cycling                                                   |

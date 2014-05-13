@@ -8,3 +8,4 @@ _build/
 /src/lTerm_config.h
 *.swp
 *.native
+/lambda-term-api.docdir
