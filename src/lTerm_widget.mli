@@ -120,11 +120,11 @@ class type box = object
     (** [remove widget] remove a widget from the box. *)
 end
 
+(** A widget displaying a list of widgets, listed horizontally. *)
 class hbox : box
-  (** A widget displaying a list of widgets, listed horizontally. *)
 
+(** A widget displaying a list of widgets, listed vertically. *)
 class vbox : box
-  (** A widget displaying a list of widgets, listed vertically. *)
 
 (** A widget displayiing another widget in a box. *)
 class frame : object
@@ -139,11 +139,11 @@ end
 
 (** {6 Lines} *)
 
+(** A horizontal line. *)
 class hline : t
-  (** A horizontal line. *)
 
+(** A vertical line. *)
 class vline : t
-  (** A vertical line. *)
 
 (** {6 Buttons} *)
 
