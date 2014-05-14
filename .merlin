@@ -1,7 +1,9 @@
 S src/
+S src/widget_impl/
 S examples/
 
 B _build/src
+B _build/src/widget_impl/
 B _build/examples
 
 PKG lwt
