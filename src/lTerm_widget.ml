@@ -595,48 +595,35 @@ class toplevel focused widget = object(self)
     coord <- { row = (rect.row1 + rect.row2) / 2;
                col = (rect.col1 + rect.col2) / 2 }
 
+  method private move_focus direction =
+    match direction (self :> t) !focused coord with
+    | Some (widget, c) ->
+      coord <- c;
+      focused := widget;
+      self#queue_draw
+    | None ->
+      ()
+
+  method private process_arrows = function
+    | LTerm_event.Key { control = false; meta = false; shift = false; code = Left } ->
+        self#move_focus focus_left;
+        true
+    | LTerm_event.Key { control = false; meta = false; shift = false; code = Right } ->
+        self#move_focus focus_right;
+        true
+    | LTerm_event.Key { control = false; meta = false; shift = false; code = Up } ->
+        self#move_focus focus_up;
+        true
+    | LTerm_event.Key { control = false; meta = false; shift = false; code = Down } ->
+        self#move_focus focus_down;
+        true
+    | other_event ->
+        false
+
   initializer
     widget#set_parent (Some (self :> t));
-    self#on_event
-      (function
-         | LTerm_event.Key { control = false; meta = false; shift = false; code = Left } ->
-             (match focus_left (self :> t) !focused coord with
-                | Some(widget, c) ->
-                    coord <- c;
-                    focused := widget;
-                    self#queue_draw
-                | None ->
-                    ());
-             true
-         | LTerm_event.Key { control = false; meta = false; shift = false; code = Right } ->
-             (match focus_right (self :> t) !focused coord with
-                | Some(widget, c) ->
-                    coord <- c;
-                    focused := widget;
-                    self#queue_draw
-                | None ->
-                    ());
-             true
-         | LTerm_event.Key { control = false; meta = false; shift = false; code = Up } ->
-             (match focus_up (self :> t) !focused coord with
-                | Some(widget, c) ->
-                    coord <- c;
-                    focused := widget;
-                    self#queue_draw
-                | None ->
-                    ());
-             true
-         | LTerm_event.Key { control = false; meta = false; shift = false; code = Down } ->
-             (match focus_down (self :> t) !focused coord with
-                | Some(widget, c) ->
-                    coord <- c;
-                    focused := widget;
-                    self#queue_draw
-                | None ->
-                    ());
-             true
-         | ev ->
-             false)
+    self#on_event self#process_arrows
+
 end
 
 (* +-----------------------------------------------------------------+
