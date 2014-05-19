@@ -64,7 +64,8 @@ Library "lambda-term"
     LTerm_color_mappings,
     LTerm_resource_lexer,
     widget_impl/LTerm_widget_base_impl,
-    widget_impl/LTerm_buttons_impl
+    widget_impl/LTerm_buttons_impl,
+    widget_impl/LTerm_toplevel_impl
   CSources:
     lTerm_config.h,
     lTerm_term_stubs.c,

@@ -472,95 +472,6 @@ class ['a] radiobutton = ['a] LTerm_buttons_impl.radiobutton
    | Focus cycling                                                   |
    +-----------------------------------------------------------------+ *)
 
-let make_widget_matrix root =
-  let { rows; cols } = LTerm_geom.size_of_rect root#allocation in
-  let m = Array.make_matrix rows cols None in
-  let rec loop widget =
-    if widget#can_focus then begin
-      let rect = widget#allocation in
-      for r = rect.row1 to rect.row2 - 1 do
-        for c = rect.col1 to rect.col2 - 1 do
-          m.(r).(c) <- Some widget
-        done
-      done
-    end;
-    List.iter loop widget#children
-  in
-  loop root;
-  m
-
-let focus_left root focused coord =
-  let rect = root#allocation in
-  let m = make_widget_matrix root in
-  let rec loop coord =
-    if coord.row < rect.row1 || coord.row >= rect.row2 || coord.col < rect.col1 || coord.col >= rect.col2 then
-      None
-    else
-      match m.(coord.row).(coord.col) with
-        | None ->
-            loop { coord with col = coord.col - 1 }
-        | Some widget when widget = focused ->
-            loop { coord with col = coord.col - 1 }
-        | Some widget ->
-            let rect = widget#allocation in
-            Some(widget, { coord with col = (rect.col1 + rect.col2) / 2 })
-  in
-  loop coord
-
-let focus_right root focused coord =
-  let rect = root#allocation in
-  let m = make_widget_matrix root in
-  let rec loop coord =
-    if coord.row < rect.row1 || coord.row >= rect.row2 || coord.col < rect.col1 || coord.col >= rect.col2 then
-      None
-    else
-      match m.(coord.row).(coord.col) with
-        | None ->
-            loop { coord with col = coord.col + 1 }
-        | Some widget when widget = focused ->
-            loop { coord with col = coord.col + 1 }
-        | Some widget ->
-            let rect = widget#allocation in
-            Some(widget, { coord with col = (rect.col1 + rect.col2) / 2 })
-  in
-  loop coord
-
-let focus_up root focused coord =
-  let rect = root#allocation in
-  let m = make_widget_matrix root in
-  let rec loop coord =
-    if coord.row < rect.row1 || coord.row >= rect.row2 || coord.col < rect.col1 || coord.col >= rect.col2 then
-      None
-    else
-      match m.(coord.row).(coord.col) with
-        | None ->
-            loop { coord with row = coord.row - 1 }
-        | Some widget when widget = focused ->
-            loop { coord with row = coord.row - 1 }
-        | Some widget ->
-            let rect = widget#allocation in
-            Some(widget, { coord with row = (rect.row1 + rect.row2) / 2 })
-  in
-  loop coord
-
-let focus_down root focused coord =
-  let rect = root#allocation in
-  let m = make_widget_matrix root in
-  let rec loop coord =
-    if coord.row < rect.row1 || coord.row >= rect.row2 || coord.col < rect.col1 || coord.col >= rect.col2 then
-      None
-    else
-      match m.(coord.row).(coord.col) with
-        | None ->
-            loop { coord with row = coord.row + 1 }
-        | Some widget when widget = focused ->
-            loop { coord with row = coord.row + 1 }
-        | Some widget ->
-            let rect = widget#allocation in
-            Some(widget, { coord with row = (rect.row1 + rect.row2) / 2 })
-  in
-  loop coord
-
 let rec find_focusable widget =
   if widget#can_focus then
     Some widget
@@ -579,52 +490,7 @@ and find_focusable_in_list = function
    | The toplevel widget                                             |
    +-----------------------------------------------------------------+ *)
 
-class toplevel focused widget = object(self)
-  inherit t "toplevel" as super
-  val children = [widget]
-  method children = children
-  method draw ctx focused = widget#draw ctx focused
-
-  val mutable coord = { row = 0; col = 0 }
-    (* Coordinates of the cursor inside the screen. *)
-
-  method set_allocation rect =
-    super#set_allocation rect;
-    widget#set_allocation rect;
-    let rect = !focused#allocation in
-    coord <- { row = (rect.row1 + rect.row2) / 2;
-               col = (rect.col1 + rect.col2) / 2 }
-
-  method private move_focus direction =
-    match direction (self :> t) !focused coord with
-    | Some (widget, c) ->
-      coord <- c;
-      focused := widget;
-      self#queue_draw
-    | None ->
-      ()
-
-  method private process_arrows = function
-    | LTerm_event.Key { control = false; meta = false; shift = false; code = Left } ->
-        self#move_focus focus_left;
-        true
-    | LTerm_event.Key { control = false; meta = false; shift = false; code = Right } ->
-        self#move_focus focus_right;
-        true
-    | LTerm_event.Key { control = false; meta = false; shift = false; code = Up } ->
-        self#move_focus focus_up;
-        true
-    | LTerm_event.Key { control = false; meta = false; shift = false; code = Down } ->
-        self#move_focus focus_down;
-        true
-    | other_event ->
-        false
-
-  initializer
-    widget#set_parent (Some (self :> t));
-    self#on_event self#process_arrows
-
-end
+class toplevel = LTerm_toplevel_impl.toplevel
 
 (* +-----------------------------------------------------------------+
    | Running in a terminal                                           |
