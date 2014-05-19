@@ -10,3 +10,5 @@ PKG lwt
 PKG lwt.unix
 PKG lwt.react
 PKG zed
+
+EXT lwt
