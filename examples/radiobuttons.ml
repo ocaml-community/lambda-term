@@ -42,7 +42,6 @@ lwt () =
   hbox#add (new radiobutton group_int "Number 1" 1);
   hbox#add ~expand:false (new vline);
   hbox#add (new radiobutton group_string "String 'foo'" "foo");
-  hbox#add ~expand:false (new vline);
   vbox#add ~expand:false hbox;
 
 
@@ -50,7 +49,6 @@ lwt () =
   hbox#add (new radiobutton group_int "Number 2" 2);
   hbox#add ~expand:false (new vline);
   hbox#add (new radiobutton group_string "String 'bar'" "bar");
-  hbox#add ~expand:false (new vline);
   vbox#add ~expand:false hbox;
 
 
@@ -58,7 +56,6 @@ lwt () =
   hbox#add (new radiobutton group_int "Number 3" 3);
   hbox#add ~expand:false (new vline);
   hbox#add (new radiobutton group_string "String 'baz'" "baz");
-  hbox#add ~expand:false (new vline);
   vbox#add ~expand:false hbox;
 
   vbox#add ~expand:false (new hline);
