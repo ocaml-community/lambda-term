@@ -351,6 +351,7 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
   try_lwt
     loop ()
   finally
+    (* to prevent signal handlers from being garbage collected *)
     nothing push_handler pop_handler;
     LTerm_ui.quit ui
 
