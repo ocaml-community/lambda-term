@@ -158,6 +158,13 @@ Executable shell
   MainIs: shell.ml
   BuildDepends: lambda-term, str
 
+Executable modal
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: modal.ml
+  BuildDepends: lambda-term
+
 Executable "read-password"
   Path: examples
   Install: false
