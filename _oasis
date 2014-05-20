@@ -66,6 +66,7 @@ Library "lambda-term"
     widget_impl/LTerm_widget_base_impl,
     widget_impl/LTerm_buttons_impl,
     widget_impl/LTerm_containers_impl,
+    widget_impl/LTerm_running_impl,
     widget_impl/LTerm_toplevel_impl
   CSources:
     lTerm_config.h,
