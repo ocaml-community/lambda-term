@@ -79,7 +79,7 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
   let layers = ref [toplevel] in
   let focuses = ref [focused] in
 
-  (* Layer signal handlers. *)
+  (* Layer event handlers. *)
   let push_layer w =
     let new_focus = ref_focus w in
     let new_top = new toplevel new_focus w in
@@ -92,13 +92,17 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
   in
   let pop_layer () =
     match !layers with
-    | [_] -> failwith "Internal error: trying to destroy non-modal layer."
+    | [_] ->
+        failwith "Trying to destroy the only existing layer."
     | _ :: tl ->
         layers := tl;
         focuses := List.tl !focuses;
         (List.hd !layers)#queue_draw
-    | [] -> failwith "Internal error: no idea how it happened."
+    | [] ->
+        failwith "Internal error: no idea how it happened."
   in
+  (* Arm layer event handlers. *)
+  toplevel#arm_layer_handlers push_event push_layer pop_event pop_layer;
 
   let draw ui matrix =
     let ctx = LTerm_draw.context matrix (LTerm_ui.size ui) in
@@ -119,8 +123,6 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
   in
 
   lwt ui = LTerm_ui.create term ?save_state draw in
-  (* Handle layer creation/deletion. *)
-  toplevel#set_layer_handlers push_event push_layer pop_event pop_layer;
   draw_toplevel := (fun () -> LTerm_ui.draw ui);
   toplevel#set_queue_draw !draw_toplevel;
   let size = LTerm_ui.size ui in

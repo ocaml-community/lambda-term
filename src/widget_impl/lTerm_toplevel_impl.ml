@@ -63,7 +63,7 @@ class toplevel focused widget = object(self)
   val mutable push_layer_handler = Lwt_react.E.never;
   val mutable pop_layer_handler = Lwt_react.E.never;
 
-  method set_layer_handlers (push_event : t Lwt_react.event)
+  method arm_layer_handlers (push_event : t Lwt_react.event)
                             (push_handler : t -> unit)
                             (pop_event : unit Lwt_react.event)
                             (pop_handler : unit -> unit) =
