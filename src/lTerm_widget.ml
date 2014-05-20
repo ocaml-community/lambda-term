@@ -198,67 +198,6 @@ let ref_focus widget =
         | Some w -> w
         | None -> widget)
 
-let run term ?save_state ?(load_resources = true) ?(resources_file = lambda_termrc) widget waiter =
-  let widget = (widget :> t) in
-
-  lwt () = apply_resources load_resources resources_file widget in
-
-  (* The currently focused widget. *)
-  let focused = ref_focus widget in
-
-  (* Create a toplevel widget. *)
-  let toplevel = new toplevel focused widget in
-
-  let draw ui matrix =
-    let ctx = LTerm_draw.context matrix (LTerm_ui.size ui) in
-    LTerm_draw.clear ctx;
-    toplevel#draw ctx !focused;
-    match !focused#cursor_position with
-      | Some coord ->
-          let rect = !focused#allocation in
-          LTerm_ui.set_cursor_visible ui true;
-          LTerm_ui.set_cursor_position ui { row = rect.row1 + coord.row; col = rect.col1 + coord.col }
-      | None ->
-          LTerm_ui.set_cursor_visible ui false
-  in
-
-  lwt ui = LTerm_ui.create term ?save_state draw in
-  toplevel#set_queue_draw (fun () -> LTerm_ui.draw ui);
-  let size = LTerm_ui.size ui in
-  toplevel#set_allocation {
-    row1 = 0;
-    col1 = 0;
-    row2 = size.rows;
-    col2 = size.cols;
-  };
-
-  (* Loop handling events. *)
-  let waiter = waiter >|= fun x -> Value x in
-  let rec loop () =
-    let thread = LTerm_ui.wait ui >|= fun x -> Event x in
-    choose [thread; waiter] >>= function
-      | Event(LTerm_event.Resize size) ->
-          toplevel#set_allocation {
-            row1 = 0;
-            col1 = 0;
-            row2 = size.rows;
-            col2 = size.cols;
-          };
-          loop ()
-      | Event ev ->
-          !focused#send_event ev;
-          loop ()
-      | Value value ->
-          cancel thread;
-          return value
-  in
-
-  try_lwt
-    loop ()
-  finally
-    LTerm_ui.quit ui
-
-
 let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambda_termrc) push_layer pop_layer widget waiter =
   let widget = (widget :> t) in
   let resources_cache = ref LTerm_resources.empty in
@@ -313,7 +252,8 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
     | Some coord ->
         let rect = !current_focus#allocation in
         LTerm_ui.set_cursor_visible ui true;
-        LTerm_ui.set_cursor_position ui { row = rect.row1 + coord.row; col = rect.col1 + coord.col }
+        LTerm_ui.set_cursor_position ui { row = rect.row1 + coord.row;
+                                          col = rect.col1 + coord.col }
     | None ->
         LTerm_ui.set_cursor_visible ui false
   in
@@ -348,6 +288,9 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
     loop ()
   finally
     LTerm_ui.quit ui
+
+let run term ?save_state ?load_resources ?resources_file widget waiter =
+  run_modal term ?save_state ?load_resources ?resources_file Lwt_react.E.never Lwt_react.E.never widget waiter
 
 let prepare_simple_run () =
   let waiter, wakener = wait () in
