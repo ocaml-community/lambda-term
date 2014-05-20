@@ -49,8 +49,7 @@ let avg_row rect coord = { coord with row = (rect.row1 + rect.row2) / 2 }
 let focus_left (* root focused coord *) = focus_to left avg_col
 let focus_right (* root focused coord *) = focus_to right avg_col
 let focus_up (* root focused coord *) = focus_to up avg_row
-let focus_down (* root docused coord *) = focus_to down avg_row
-
+let focus_down (* root focused coord *) = focus_to down avg_row
 
 class toplevel focused widget = object(self)
   inherit t "toplevel" as super
