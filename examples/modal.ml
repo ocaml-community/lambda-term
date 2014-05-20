@@ -3,14 +3,12 @@ open Lwt_react
 open LTerm_widget
 
 lwt () =
-  let waiter, wakener = wait () in
-  let push_ev, push_layer = E.create () in
-  let pop_ev, pop_layer = E.create () in
+  let do_run, push_layer, pop_layer, exit = prepare_simple_run () in
 
   let vbox = new vbox in
 
   let button = new button "exit" in
-  button#on_click (wakeup wakener);
+  button#on_click exit;
   vbox#add button;
 
   let change = new button "change counter" in
@@ -55,7 +53,6 @@ lwt () =
   vbox'#add close;
 
   (* set 'change' button to open modal layer *)
-  change#on_click (fun () -> push_layer (layer2 :> t));
+  change#on_click (push_layer layer2);
 
-  lwt term = Lazy.force LTerm.stdout in
-  run_modal term push_ev pop_ev frame waiter
+  do_run frame

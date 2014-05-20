@@ -258,6 +258,7 @@ let run term ?save_state ?(load_resources = true) ?(resources_file = lambda_term
   finally
     LTerm_ui.quit ui
 
+
 let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambda_termrc) push_layer pop_layer widget waiter =
   let widget = (widget :> t) in
   let resources_cache = ref LTerm_resources.empty in
@@ -348,3 +349,15 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
   finally
     LTerm_ui.quit ui
 
+let prepare_simple_run () =
+  let waiter, wakener = wait () in
+  let push_ev, push_ev_send = Lwt_react.E.create () in
+  let pop_ev, pop_ev_send = Lwt_react.E.create () in
+  let exit = wakeup wakener in
+  let push_layer w = fun () -> push_ev_send (w :> t) in
+  let pop_layer = pop_ev_send in
+  let do_run w =
+    lwt term = Lazy.force LTerm.stdout in
+    run_modal term push_ev pop_ev w waiter
+  in
+  (do_run, push_layer, pop_layer, exit)

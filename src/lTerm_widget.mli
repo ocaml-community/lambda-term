@@ -266,3 +266,24 @@ val run_modal : LTerm.t -> ?save_state : bool -> ?load_resources : bool -> ?reso
    bottom to up, but only the topmost layer gets keyboard events delivered to
    it. This allows to implement things like modal dialogs.
    *)
+
+val prepare_simple_run : unit -> (#t -> 'a Lwt.t) * (#t -> unit -> unit) * (?step:React.step -> unit -> unit) * ('a -> unit)
+  (** [prepare_simple_run ()] returns a tuple [(do_run, push_layer, pop_layer,
+     exit)] -- functions useful for creating simple UI.
+
+     [do_run w] where w is a widget runs the given widget in a terminal over
+     stdout, loading resources from [.lambda-termrc], saving state and
+     restoring it on exit from ui.
+     Example: [do_run my_frame]
+
+     [push_layer w] where w is a widget is a callback to add w as a new modal
+     layer to UI.
+     Example: [button#on_click (push_layer my_modal_dialog)].
+
+     [pop_layer] is a callback to destroy the topmost modal layer.
+     Example: [cancel_button#on_click pop_layer].
+
+     [exit] is a callback to exit the UI.
+     Example: [exit_button#on_click exit]
+*)
+
