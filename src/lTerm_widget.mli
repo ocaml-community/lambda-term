@@ -249,3 +249,5 @@ val run : LTerm.t -> ?save_state : bool -> ?load_resources : bool -> ?resources_
       If [load_resources] is [true] (the default) then
       [resources_file] (which default to ".lambda-termrc" in the home
       directory) is loaded and the result is set to [w]. *)
+
+val run_modal : LTerm.t -> ?save_state : bool -> ?load_resources : bool -> ?resources_file : string -> #t Lwt_react.event -> unit Lwt_react.event -> #t -> 'a Lwt.t -> 'a Lwt.t
