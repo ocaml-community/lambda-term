@@ -137,6 +137,14 @@ class frame : object
     (** Remove the child of the frame. *)
 end
 
+(** A widget displaying a frame around child widget. Unlike {!frame}, the child
+    widget is not expanded to take all available space; instead the child is
+    centered and frame is drawn around it. This is a utility class for creation
+    of modal dialogs and similar widgets. *)
+class modal_frame : object
+  inherit frame
+end
+
 (** {6 Lines} *)
 
 (** A horizontal line. *)
