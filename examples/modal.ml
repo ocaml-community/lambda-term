@@ -55,7 +55,7 @@ lwt () =
   vbox'#add close;
 
   (* set 'change' button to open modal layer *)
-  change#on_click (fun () -> push_layer layer2);
+  change#on_click (fun () -> push_layer (layer2 :> t));
 
   lwt term = Lazy.force LTerm.stdout in
   run_modal term push_ev pop_ev frame waiter

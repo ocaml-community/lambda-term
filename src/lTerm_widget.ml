@@ -258,8 +258,6 @@ let run term ?save_state ?(load_resources = true) ?(resources_file = lambda_term
   finally
     LTerm_ui.quit ui
 
-let nothing a b = ()
-
 let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambda_termrc) push_layer pop_layer widget waiter =
   let widget = (widget :> t) in
   let resources_cache = ref LTerm_resources.empty in
@@ -283,7 +281,6 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
 
   (* Layer signal handlers. *)
   let push_layer_handler w =
-    let w = (w :> t) in
     let new_focus = ref_focus w in
     let new_top = new toplevel new_focus w in
     new_top#set_queue_draw !draw_toplevel;
@@ -303,10 +300,6 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
     | [] -> failwith "Internal error: no idea how it happened."
   in
 
-  (* Handle layer creation/deletion. *)
-  let push_handler = E.map push_layer_handler push_layer in
-  let pop_handler = E.map pop_layer_handler pop_layer in
-
   let draw ui matrix =
     let ctx = LTerm_draw.context matrix (LTerm_ui.size ui) in
     LTerm_draw.clear ctx;
@@ -325,6 +318,8 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
   in
 
   lwt ui = LTerm_ui.create term ?save_state draw in
+  (* Handle layer creation/deletion. *)
+  toplevel#set_layer_handlers push_layer push_layer_handler pop_layer pop_layer_handler;
   draw_toplevel := (fun () -> LTerm_ui.draw ui);
   toplevel#set_queue_draw !draw_toplevel;
   let size = LTerm_ui.size ui in
@@ -351,7 +346,5 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
   try_lwt
     loop ()
   finally
-    (* to prevent signal handlers from being garbage collected *)
-    nothing push_handler pop_handler;
     LTerm_ui.quit ui
 
