@@ -52,9 +52,6 @@ type t = {
   mutable cursor_position : LTerm_geom.coord;
   (* The cursor position. *)
 
-  mutable draw_queued : bool;
-  (* Is a draw operation queued ? *)
-
   mutable drawer : unit Lwt.t;
   (* The thread drawing the terminal. *)
 
@@ -88,7 +85,6 @@ let create term ?(save_state = true) draw =
     matrix_b = [||];
     cursor_visible = false;
     cursor_position = { row = 0; col = 0 };
-    draw_queued = false;
     drawer = return ();
     drawing = false;
     draw_error_push = push;
@@ -110,53 +106,49 @@ let quit ui =
    | Drawing                                                         |
    +-----------------------------------------------------------------+ *)
 
+let immediate_draw ui = fun () ->
+  try_lwt
+    (* Wait a bit in order not to redraw too often. *)
+    lwt () = pause() in
+    if ui.state = Stop then
+      return ()
+    else begin
+      (* Allocate the first matrix if needed. *)
+      if ui.matrix_a = [||] then ui.matrix_a <- LTerm_draw.make_matrix ui.size;
+
+      (* Draw the screen *)
+      ui.drawing <- true;
+      (try ui.draw ui ui.matrix_a with exn -> ui.drawing <- false; raise exn);
+      ui.drawing <- false;
+
+      (* Rendering. *)
+      lwt () = LTerm.hide_cursor ui.term in
+      lwt () = LTerm.render_update ui.term ui.matrix_b ui.matrix_a in
+      lwt () =
+        if ui.cursor_visible then
+          lwt () = LTerm.goto ui.term ui.cursor_position in
+          LTerm.show_cursor ui.term
+        else
+          return ()
+      in
+      lwt () = LTerm.flush ui.term in
+
+      (* Swap the two matrices. *)
+      let a = ui.matrix_a and b = ui.matrix_b in
+      ui.matrix_a <- b;
+      ui.matrix_b <- a;
+
+      return ()
+    end
+  with exn ->
+    ui.draw_error_push (Some exn);
+    return ()
+
 let draw ui =
   check ui;
   ui.state <- Loop;
-  (* If a draw operation is already queued, do nothing. *)
-  if not ui.draw_queued then
-    ui.drawer <- begin
-      try_lwt
-        ui.draw_queued <- true;
-
-        (* Wait a bit in order not to redraw too often. *)
-        lwt () = pause () in
-        ui.draw_queued <- false;
-
-        if ui.state = Stop then
-          return ()
-        else begin
-          (* Allocate the first matrix if needed. *)
-          if ui.matrix_a = [||] then ui.matrix_a <- LTerm_draw.make_matrix ui.size;
-
-          (* Draw the screen. *)
-          ui.drawing <- true;
-          (try ui.draw ui ui.matrix_a with exn -> ui.drawing <- false; raise exn);
-          ui.drawing <- false;
-
-          (* Rendering. *)
-          lwt () = LTerm.hide_cursor ui.term in
-          lwt () = LTerm.render_update ui.term ui.matrix_b ui.matrix_a in
-          lwt () =
-            if ui.cursor_visible then
-              lwt () = LTerm.goto ui.term ui.cursor_position in
-              LTerm.show_cursor ui.term
-            else
-              return ()
-          in
-          lwt () = LTerm.flush ui.term in
-
-          (* Swap the two matrices. *)
-          let a = ui.matrix_a and b = ui.matrix_b in
-          ui.matrix_a <- b;
-          ui.matrix_b <- a;
-
-          return ()
-        end
-      with exn ->
-        ui.draw_error_push (Some exn);
-        return ()
-    end
+  (* Wait for draw operation to finish before starting new one *)
+  ui.drawer <- ui.drawer >>= immediate_draw ui
 
 (* +-----------------------------------------------------------------+
    | Accessors                                                       |
