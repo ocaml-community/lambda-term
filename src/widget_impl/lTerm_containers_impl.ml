@@ -385,11 +385,13 @@ class modal_frame = object(self)
         let desired_row2 = desired_row1 + request.rows in
         let desired_col1 = rect.col1 + margin_width + 3 in
         let desired_col2 = desired_col1 + request.cols in
-        (* make sure we stay inside the area allocated for the modal_frame *)
-        let row1 = min desired_row1 rect.row2 in
-        let row2 = min desired_row2 rect.row2 in
-        let col1 = min desired_col1 rect.col2 in
-        let col2 = min desired_col2 rect.col2 in
+        (* make sure we stay inside the modal_frame *)
+        (* Remember that right and left margins for the widget inside the frame
+         * are 3, and top and bottom margins are 2 *)
+        let row1 = min desired_row1 (rect.row2 - 2) in
+        let row2 = min desired_row2 (rect.row2 - 2) in
+        let col1 = min desired_col1 (rect.col2 - 3) in
+        let col2 = min desired_col2 (rect.col2 - 3) in
         (* now inform the child widget about its area *)
         widget#set_allocation {
           row1 = row1;
