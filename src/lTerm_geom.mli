@@ -44,7 +44,7 @@ type rect = {
 val row1 : rect -> int
 val col1 : rect -> int
 val row2 : rect -> int
-val row2 : rect -> int
+val col2 : rect -> int
 
 val size_of_rect : rect -> size
   (** Returns the size of a rectangle. *)
