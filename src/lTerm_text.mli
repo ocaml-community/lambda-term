@@ -86,3 +86,29 @@ type markup = item list
 
 val eval : markup -> t
   (** [eval makrup] evaluates a markup strings as a styled string. *)
+
+
+(** {6 Styled formatters} *)
+
+val make_formatter :
+  ?read_color:(Format.tag -> LTerm_style.t) -> unit -> (unit -> t) * Format.formatter
+(** Create a formatter on a styled string. Returns a tuple [get_content, fmt]. Calling [get_content ()] will flush the formatter and output the resulting styled string.
+
+    If a [read_color] function is provided, Format's tag are enabled and [read_color] is used to transform tags into styles.
+ *)
+
+val pp_with_style :
+  (LTerm_style.t -> Format.tag) ->
+  (LTerm_style.t -> ('b, Format.formatter, unit, unit) format4 -> Format.formatter -> 'b)
+(** [pp_with_style f] will create a pretty printer analogous to {!stylise}, using f to encode style into tags. Will only work on a formatter with tag enabled. *)
+
+val styprintf :
+  ?read_color:(Format.tag -> LTerm_style.t) ->
+  ('a, Format.formatter, unit, t) format4 -> 'a
+(** Equivalent of {!Format.sprintf} for styled strings. *)
+
+
+val kstyprintf :
+  ?read_color:(Format.tag -> LTerm_style.t) ->
+  (t -> 'a) -> ('b, Format.formatter, unit, 'a) format4 -> 'b
+(** Equivalent of {!Format.ksprintf} for styled strings. *)

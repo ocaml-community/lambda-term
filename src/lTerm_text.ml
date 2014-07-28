@@ -346,3 +346,65 @@ let eval markup =
       end
   in
   loop 0 none markup
+
+
+
+(** {6 Styled formatters} *)
+
+let make_formatter ?read_color () =
+  let style = Stack.create () in
+  let content = ref [||] in
+
+  let get_style () =
+    if Stack.is_empty style then LTerm_style.none
+    else Stack.top style
+  and pop_style () =
+    if Stack.is_empty style then ()
+    else ignore (Stack.pop style)
+  and push_style sty =
+    if Stack.is_empty style then Stack.push sty style
+    else Stack.push (LTerm_style.merge (Stack.top style) sty) style
+  in
+
+  let put s pos len =
+    let s = String.sub s pos len in
+    content := Array.append !content (stylise s (get_style ()))
+  in
+  let flush () = () in
+  let fmt = Format.make_formatter put flush in
+
+  let get_content () =
+    Format.pp_print_flush fmt () ; !content
+  in
+
+  begin match read_color with
+    | None -> ()
+    | Some f ->
+        Format.pp_set_tags fmt true;
+        Format.pp_set_formatter_tag_functions fmt {
+          Format.
+          mark_open_tag =
+            (fun a -> push_style (f a) ; "");
+          mark_close_tag =
+            (fun _ -> pop_style (); "");
+          print_open_tag = (fun _ -> ());
+          print_close_tag = (fun _ -> ());
+        } ;
+  end ;
+
+  get_content, fmt
+
+let pp_with_style to_style =
+  fun style fstr fmt ->
+    let tag = to_style style in
+    Format.pp_open_tag fmt tag;
+    Format.kfprintf
+      (fun fmt ->
+         Format.pp_close_tag fmt ())
+      fmt fstr
+
+let kstyprintf ?read_color f fstr =
+  let get_content, fmt = make_formatter ?read_color () in
+  Format.kfprintf (fun _ -> f (get_content ())) fmt fstr
+
+let styprintf ?read_color fstr = kstyprintf ?read_color (fun x -> x) fstr
