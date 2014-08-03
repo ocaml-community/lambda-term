@@ -233,10 +233,16 @@ object(self)
   (* Save for when setting the macro counter. *)
   val mutable save = (0, Zed_rope.empty)
 
-  method set_completion start words =
+  method set_completion ?(index=0) start words =
+    let len = List.length words in
+    if index < 0 || index > len - 1 then raise (Invalid_argument
+          "LTerm_read_line.set_completion: index out of bounds compared to words."
+      ) ;
+    let step = React.Step.create () in
     completion_start <- start;
-    set_completion_index 0;
-    set_completion_words words
+    set_completion_index ~step index ;
+    set_completion_words ~step words ;
+    React.Step.execute step
 
   initializer
     completion_event <- (
@@ -521,7 +527,7 @@ class virtual ['a] abstract = object
   method virtual input_next : Zed_rope.t
   method virtual completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
   method virtual completion_index : int signal
-  method virtual set_completion : int -> (Zed_utf8.t * Zed_utf8.t) list -> unit
+  method virtual set_completion : ?index:int -> int -> (Zed_utf8.t * Zed_utf8.t) list -> unit
   method virtual completion : unit
   method virtual complete : unit
   method virtual show_box : bool

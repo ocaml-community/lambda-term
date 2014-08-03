@@ -186,11 +186,12 @@ class virtual ['a] engine : ?history : history -> ?clipboard : Zed_edit.clipboar
   method completion_index : int signal
     (** The position in the completion bar. *)
 
-  method set_completion : int -> (Zed_utf8.t * Zed_utf8.t) list -> unit
-    (** [set_completion index words] sets the current
-        completions. [index] is the index of the beginning of the word
+  method set_completion : ?index:int -> int -> (Zed_utf8.t * Zed_utf8.t) list -> unit
+    (** [set_completion ?index start words] sets the current
+        completions. [start] is the position of the beginning of the word
         being completed and [words] is the list of possible
-        completions with their suffixes. The result is made available
+        completions with their suffixes. [index] is the position in the completion
+        bar, default to [0]. The result is made available
         through the {!completion_words} signal. *)
 
   method completion : unit
@@ -221,7 +222,7 @@ class virtual ['a] abstract : object
   method virtual input_next : Zed_rope.t
   method virtual completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
   method virtual completion_index : int signal
-  method virtual set_completion : int -> (Zed_utf8.t * Zed_utf8.t) list -> unit
+  method virtual set_completion : ?index:int -> int -> (Zed_utf8.t * Zed_utf8.t) list -> unit
   method virtual completion : unit
   method virtual complete : unit
   method virtual show_box : bool
