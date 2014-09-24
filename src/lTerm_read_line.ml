@@ -235,13 +235,13 @@ object(self)
 
   method set_completion ?(index=0) start words =
     let len = List.length words in
-    if index < 0 || index > len - 1 then raise (Invalid_argument
+    if index < 0 || index > max 0 (len - 1) then raise (Invalid_argument
           "LTerm_read_line.set_completion: index out of bounds compared to words."
-      ) ;
+      );
     let step = React.Step.create () in
     completion_start <- start;
-    set_completion_index ~step index ;
-    set_completion_words ~step words ;
+    set_completion_index ~step index;
+    set_completion_words ~step words;
     React.Step.execute step
 
   initializer
