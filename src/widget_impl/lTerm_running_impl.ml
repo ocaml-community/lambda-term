@@ -31,16 +31,21 @@ let lambda_termrc =
   Filename.concat LTerm_resources.home ".lambda-termrc"
 
 let file_exists file =
-  try_lwt
-    lwt () = Lwt_unix.access file [Unix.R_OK] in
-    return true
-  with Unix.Unix_error _ ->
-    return false
+  Lwt.catch
+    (fun () ->
+      Lwt_unix.access file [Unix.R_OK] >>= fun () ->
+      return true)
+    (function
+    | Unix.Unix_error _ ->
+        return false
+    | exn -> Lwt.fail exn)
 
 let apply_resources ?cache load_resources resources_file widget =
   if load_resources then
-    match_lwt file_exists resources_file with
-    | true -> lwt resources = LTerm_resources.load resources_file in
+    file_exists resources_file >>= fun has_resources ->
+    match has_resources with
+    | true ->
+        LTerm_resources.load resources_file >>= fun resources ->
         widget#set_resources resources;
         begin
           match cache with
@@ -62,7 +67,7 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
   let widget = (widget :> t) in
   let resources_cache = ref LTerm_resources.empty in
 
-  lwt () = apply_resources ~cache:resources_cache load_resources resources_file widget in
+  apply_resources ~cache:resources_cache load_resources resources_file widget >>= fun () ->
 
   (* The currently focused widget. *)
   let focused = ref_focus widget in
@@ -122,7 +127,7 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
         LTerm_ui.set_cursor_visible ui false
   in
 
-  lwt ui = LTerm_ui.create term ?save_state draw in
+  LTerm_ui.create term ?save_state draw >>= fun ui ->
   draw_toplevel := (fun () -> LTerm_ui.draw ui);
   toplevel#set_queue_draw !draw_toplevel;
   let size = LTerm_ui.size ui in
@@ -146,10 +151,7 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
           return value
   in
 
-  try_lwt
-    loop ()
-  finally
-    LTerm_ui.quit ui
+  Lwt.finalize loop (fun () -> LTerm_ui.quit ui)
 
 let run term ?save_state ?load_resources ?resources_file widget waiter =
   run_modal term ?save_state ?load_resources ?resources_file Lwt_react.E.never Lwt_react.E.never widget waiter
@@ -162,7 +164,7 @@ let prepare_simple_run () =
   let push_layer w = fun () -> push_ev_send (w :> t) in
   let pop_layer = pop_ev_send in
   let do_run w =
-    lwt term = Lazy.force LTerm.stdout in
+    Lazy.force LTerm.stdout >>= fun term ->
     run_modal term push_ev pop_ev w waiter
   in
   (do_run, push_layer, pop_layer, exit)

@@ -7,6 +7,8 @@
  * This file is a part of Lambda-Term.
  *)
 
+let return, (>>=) = Lwt.return, Lwt.(>>=)
+
 let home =
   try
     Sys.getenv "HOME"
@@ -969,23 +971,23 @@ let parse str =
   loop 1 []
 
 let load file =
-  lwt ic = Lwt_io.open_file ~mode:Lwt_io.input file in
-  let rec loop line acc =
-    match_lwt Lwt_io.read_line_opt ic with
+  Lwt_io.open_file ~mode:Lwt_io.input file >>= fun ic ->
+  let rec loop lineno acc =
+    Lwt_io.read_line_opt ic >>= fun line ->
+    match line with
       | None ->
           Lwt.return acc
       | Some str ->
           match LTerm_resource_lexer.line (Lexing.from_string str) with
             | `EOF ->
-                loop (line + 1) acc
+                loop (lineno + 1) acc
             | `Empty ->
-                loop (line + 1) acc
+                loop (lineno + 1) acc
             | `Assoc(pattern, value) ->
-                loop (line + 1) (add pattern value acc)
+                loop (lineno + 1) (add pattern value acc)
             | `Error msg ->
-                raise_lwt (Parse_error(file, line, msg))
+                Lwt.fail (Parse_error(file, lineno, msg))
   in
-  try_lwt
-    loop 1 []
-  finally
-    Lwt_io.close ic
+  Lwt.finalize
+    (fun () -> loop 1 [])
+    (fun () -> Lwt_io.close ic)

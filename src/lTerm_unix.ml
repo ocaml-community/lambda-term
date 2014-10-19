@@ -8,8 +8,9 @@
  *)
 
 open CamomileLibraryDyn.Camomile
-open Lwt
 open LTerm_key
+
+let return, (>>=), (>|=) = Lwt.return, Lwt.(>>=), Lwt.(>|=)
 
 external get_sigwinch : unit -> int option = "lt_unix_get_sigwinch"
 external get_system_encoding : unit -> string = "lt_unix_get_system_encoding"
@@ -337,16 +338,19 @@ let parse_char encoding st first_byte =
       | Some char ->
           return char
       | None ->
-          lwt byte = Lwt_stream.next st in
+          Lwt_stream.next st >>= fun byte ->
           assert (output#output (String.make 1 byte) 0 1 = 1);
           output#flush ();
           loop st
   in
-  try_lwt
-    assert (output#output (String.make 1 first_byte) 0 1 = 1);
-    Lwt_stream.parse st loop
-  with CharEncoding.Malformed_code | Lwt_stream.Empty ->
-    return (UChar.of_char first_byte)
+  Lwt.catch
+    (fun () ->
+      assert (output#output (String.make 1 first_byte) 0 1 = 1);
+      Lwt_stream.parse st loop)
+    (function
+    | CharEncoding.Malformed_code | Lwt_stream.Empty ->
+        return (UChar.of_char first_byte)
+    | exn -> Lwt.fail exn)
 
 (* +-----------------------------------------------------------------+
    | Input of escape sequence                                        |
@@ -358,16 +362,17 @@ let parse_escape escape_time st =
   let buf = Buffer.create 32 in
   (* Read one character and add it to [buf]: *)
   let get () =
-    match_lwt pick [Lwt_stream.get st; Lwt_unix.sleep escape_time >> return None] with
+    Lwt.pick [Lwt_stream.get st; Lwt_unix.sleep escape_time >>= fun () -> return None] >>= fun ch ->
+    match ch with
       | None ->
           (* If the rest is not immediatly available, conclude that
              this is not an escape sequence but just the escape
              key: *)
-          raise_lwt Not_a_sequence
+          Lwt.fail Not_a_sequence
       | Some('\x00' .. '\x1f' | '\x80' .. '\xff') ->
           (* Control characters and non-ascii characters are not part
              of escape sequences. *)
-          raise_lwt Not_a_sequence
+          Lwt.fail Not_a_sequence
       | Some ch ->
           Buffer.add_char buf ch;
           return ch
@@ -385,7 +390,7 @@ let parse_escape escape_time st =
     | '[' | 'O' ->
         loop ()
     | _ ->
-        raise_lwt Not_a_sequence
+        Lwt.fail Not_a_sequence
 
 (* +-----------------------------------------------------------------+
    | Escape sequences mapping                                        |
@@ -836,19 +841,19 @@ let find_sequence seq =
   loop 0 (Array.length sequences)
 
 let rec parse_event ?(escape_time = 0.1) encoding stream =
-  lwt byte = Lwt_stream.next stream in
+  Lwt_stream.next stream >>= fun byte ->
   match byte with
     | '\x1b' -> begin
         (* Escape sequences *)
-        try_lwt
+        Lwt.catch (fun () ->
           (* Try to parse an escape seqsuence *)
           Lwt_stream.parse stream (parse_escape escape_time) >>= function
             | "[M" -> begin
                 (* Mouse report *)
                 let open LTerm_mouse in
-                lwt mask = Lwt_stream.next stream >|= Char.code in
-                lwt x = Lwt_stream.next stream >|= Char.code in
-                lwt y = Lwt_stream.next stream >|= Char.code in
+                Lwt_stream.next stream >|= Char.code >>= fun mask ->
+                Lwt_stream.next stream >|= Char.code >>= fun x ->
+                Lwt_stream.next stream >|= Char.code >>= fun y ->
                 try
                   if mask = 0b00100011 then raise Exit;
                   return (LTerm_event.Mouse {
@@ -878,52 +883,68 @@ let rec parse_event ?(escape_time = 0.1) encoding stream =
                   | Some key ->
                       return (LTerm_event.Key key)
                   | None ->
-                      return (LTerm_event.Sequence ("\x1b" ^ seq))
-        with Not_a_sequence ->
-          (* If it is not, test if it is META+key. *)
-          match_lwt pick [Lwt_stream.peek stream; Lwt_unix.sleep escape_time >> return None] with
-            | None ->
-                return (LTerm_event.Key { control = false; meta = false; shift = false; code = Escape })
-            | Some byte ->
-                match byte with
-                  | '\x1b' -> begin
-                      (* Escape sequences *)
-                      try_lwt
-                        lwt seq =
-                          Lwt_stream.parse stream
-                            (fun stream ->
-                               lwt () = Lwt_stream.junk stream in
-                               match_lwt pick [Lwt_stream.peek stream; Lwt_unix.sleep escape_time >> return None] with
-                                 | None ->
-                                     raise_lwt Not_a_sequence
-                                 | Some _ ->
-                                     parse_escape escape_time stream)
-                        in
-                        match find_sequence seq with
-                          | Some key ->
-                              return (LTerm_event.Key { key with meta = true })
-                          | None ->
-                              return (LTerm_event.Sequence ("\x1b\x1b" ^ seq))
-                      with Not_a_sequence ->
-                        return (LTerm_event.Key { control = false; meta = false; shift = false; code = Escape })
+                      return (LTerm_event.Sequence ("\x1b" ^ seq)))
+          (function
+          | Not_a_sequence -> begin
+              (* If it is not, test if it is META+key. *)
+              Lwt.pick [Lwt_stream.peek stream;
+                        Lwt_unix.sleep escape_time >>= fun () -> return None] >>= fun ch ->
+              match ch with
+                | None ->
+                    return (LTerm_event.Key { control = false; meta = false;
+                                              shift = false; code = Escape })
+                | Some byte -> begin
+                    match byte with
+                      | '\x1b' -> begin
+                          (* Escape sequences *)
+                          Lwt.catch (fun () ->
+                            begin
+                              Lwt_stream.parse stream
+                                (fun stream ->
+                                   Lwt_stream.junk stream >>= fun () ->
+                                   Lwt.pick [Lwt_stream.peek stream;
+                                             Lwt_unix.sleep escape_time >>= fun () -> return None]
+                                             >>= fun ch ->
+                                   match ch with
+                                     | None ->
+                                         Lwt.fail Not_a_sequence
+                                     | Some _ ->
+                                         parse_escape escape_time stream)
+                            end >>= fun seq ->
+                            match find_sequence seq with
+                              | Some key ->
+                                  return (LTerm_event.Key { key with meta = true })
+                              | None ->
+                                  return (LTerm_event.Sequence ("\x1b\x1b" ^ seq)))
+                            (function
+                            | Not_a_sequence ->
+                                return (LTerm_event.Key { control = false; meta = false;
+                                                          shift = false; code = Escape })
+                            | exn -> Lwt.fail exn)
+                        end
+                      | '\x00' .. '\x1b' ->
+                          (* Control characters *)
+                          Lwt_stream.junk stream >>= fun () ->
+                          let code = controls.(Char.code byte) in
+                          return (LTerm_event.Key { control = (match code with Char _ -> true | _ -> false); meta = true; shift = false; code })
+                      | '\x7f' ->
+                          (* Backspace *)
+                          Lwt_stream.junk stream >>= fun () ->
+                          return (LTerm_event.Key { control = false; meta = true;
+                                                    shift = false; code = Backspace })
+                      | '\x00' .. '\x7f' ->
+                          (* Other ascii characters *)
+                          Lwt_stream.junk stream >>= fun () ->
+                          return(LTerm_event.Key  { control = false; meta = true;
+                                                    shift = false; code = Char(UChar.of_char byte) })
+                      | byte' ->
+                          Lwt_stream.junk stream >>= fun () ->
+                          parse_char encoding stream byte' >>= fun code ->
+                          return (LTerm_event.Key { control = false; meta = true;
+                                                    shift = false; code = Char code })
                     end
-                  | '\x00' .. '\x1b' ->
-                      (* Control characters *)
-                      lwt () = Lwt_stream.junk stream in
-                      let code = controls.(Char.code byte) in
-                      return (LTerm_event.Key { control = (match code with Char _ -> true | _ -> false); meta = true; shift = false; code })
-                  | '\x7f' ->
-                      (* Backspace *)
-                      lwt () = Lwt_stream.junk stream in
-                      return (LTerm_event.Key { control = false; meta = true; shift = false; code = Backspace })
-                  | '\x00' .. '\x7f' ->
-                      (* Other ascii characters *)
-                      lwt () = Lwt_stream.junk stream in
-                      return(LTerm_event.Key  { control = false; meta = true; shift = false; code = Char(UChar.of_char byte) })
-                  | byte' ->
-                      lwt () = Lwt_stream.junk stream in
-                      lwt code = parse_char encoding stream byte' in
-                      return (LTerm_event.Key { control = false; meta = true; shift = false; code = Char code })
+            end
+          | exn -> Lwt.fail exn)
       end
     | '\x00' .. '\x1f' ->
         (* Control characters *)
@@ -931,11 +952,14 @@ let rec parse_event ?(escape_time = 0.1) encoding stream =
         return (LTerm_event.Key { control = (match code with Char _ -> true | _ -> false); meta = false; shift = false; code })
     | '\x7f' ->
         (* Backspace *)
-        return (LTerm_event.Key { control = false; meta = false; shift = false; code = Backspace })
+        return (LTerm_event.Key { control = false; meta = false;
+                                  shift = false; code = Backspace })
     | '\x00' .. '\x7f' ->
         (* Other ascii characters *)
-        return (LTerm_event.Key { control = false; meta = false; shift = false; code = Char(UChar.of_char byte) })
+        return (LTerm_event.Key { control = false; meta = false;
+                                  shift = false; code = Char(UChar.of_char byte) })
     | _ ->
         (* Encoded characters *)
-        lwt code = parse_char encoding stream byte in
-        return (LTerm_event.Key { control = false; meta = false; shift = false; code = Char code })
+        parse_char encoding stream byte >>= fun code ->
+        return (LTerm_event.Key { control = false; meta = false;
+                                  shift = false; code = Char code })

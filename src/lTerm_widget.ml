@@ -9,13 +9,14 @@
 
 open CamomileLibraryDyn.Camomile
 open Lwt_react
-open Lwt
 open LTerm_geom
 open LTerm_draw
 open LTerm_key
 open LTerm_style
 open LTerm_text
 open LTerm_widget_callbacks
+
+let return, (>>=) = Lwt.return, Lwt.(>>=)
 
 (* +-----------------------------------------------------------------+
    | The widget class                                                |

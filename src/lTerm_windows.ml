@@ -8,7 +8,8 @@
  *)
 
 open CamomileLibraryDyn.Camomile
-open Lwt
+
+let return, (>>=), (>|=) = Lwt.return, Lwt.(>>=), Lwt.(>|=)
 
 external get_acp : unit -> int = "lt_windows_get_acp"
 external get_console_cp : unit -> int = "lt_windows_get_console_cp"
