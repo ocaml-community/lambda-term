@@ -37,7 +37,7 @@ FilesAB: src/lTerm_config.h.ab
 Library "lambda-term"
   FindlibName: lambda-term
   BuildDepends: lwt (>= 2.4.0), lwt.unix, lwt.syntax, lwt.react, zed (>= 1.2)
-  XMETADescription: Corss-platform library for terminal manipulation
+  XMETADescription: Cross-platform library for terminal manipulation
   XMETARequires: lwt.unix, lwt.react, zed
   Path: src
   Install: true
