@@ -1,3 +1,13 @@
+1.7 (2014-10-20)
+----------------
+
+* removed hard dependency on camlp4 (thanks to Peter Zotov)
+* added styled formatters (thanks to Gabriel Radanne)
+* doc fixes
+* Extended widget support (thanks to Alexey Vyskubov):
+  - added modal frames
+  - added radiobutton and checkbutton
+
 1.6 (2014-04-21)
 ----------------
 
