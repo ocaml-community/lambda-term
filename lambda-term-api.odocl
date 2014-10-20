@@ -1,0 +1,21 @@
+# OASIS_START
+# DO NOT EDIT (digest: ab0a7c808bd6a138dc73e0c4e0d53271)
+src/LTerm
+src/LTerm_key
+src/LTerm_event
+src/LTerm_unix
+src/LTerm_windows
+src/LTerm_style
+src/LTerm_geom
+src/LTerm_draw
+src/LTerm_mouse
+src/LTerm_widget
+src/LTerm_widget_callbacks
+src/LTerm_edit
+src/LTerm_read_line
+src/LTerm_text
+src/LTerm_ui
+src/LTerm_resources
+src/LTerm_inputrc
+src/LTerm_history
+# OASIS_STOP
