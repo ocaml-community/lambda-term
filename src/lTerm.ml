@@ -9,8 +9,9 @@
 
 open CamomileLibraryDyn.Camomile
 open Lwt_react
-open Lwt
 open LTerm_geom
+
+let return, (>>=) = Lwt.return, Lwt.(>>=)
 
 let uspace = UChar.of_char ' '
 
@@ -105,7 +106,7 @@ type t = {
    +-----------------------------------------------------------------+ *)
 
 let resize_event, send_resize = E.create ()
-let send_resize () = send_resize () 
+let send_resize () = send_resize ()
 
 let () =
   match LTerm_unix.sigwinch with
@@ -167,7 +168,7 @@ let () = CharEncoding.alias "CP65001" "UTF-8"
 let empty_stream = Lwt_stream.from (fun () -> return None)
 
 let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding ?outgoing_encoding incoming_fd incoming_channel outgoing_fd outgoing_channel =
-  try_lwt
+  Lwt.catch (fun () ->
     (* Colors stuff. *)
     let colors = if windows then 16 else colors_of_term model in
     let bold_is_bright =
@@ -207,8 +208,8 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
                else
                  LTerm_unix.system_encoding) in
     (* Check if fds are ttys. *)
-    lwt incoming_is_a_tty = Lwt_unix.isatty incoming_fd
-    and outgoing_is_a_tty = Lwt_unix.isatty outgoing_fd in
+    Lwt_unix.isatty incoming_fd >>= fun incoming_is_a_tty ->
+    Lwt_unix.isatty outgoing_fd >>= fun outgoing_is_a_tty ->
     (* Create the terminal. *)
     let term = {
       model;
@@ -249,9 +250,8 @@ let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding 
       term.last_reported_size <- term.size;
       term.event <- E.map check_size resize_event
     end;
-    return term
-  with exn ->
-    raise_lwt exn
+    return term)
+    Lwt.fail
 
 let set_io ?incoming_fd ?incoming_channel ?outgoing_fd ?outgoing_channel term =
   let get opt x =
@@ -264,8 +264,8 @@ let set_io ?incoming_fd ?incoming_channel ?outgoing_fd ?outgoing_channel term =
   and incoming_channel = get incoming_channel term.ic
   and outgoing_channel = get outgoing_channel term.oc in
   (* Check if fds are ttys. *)
-  lwt incoming_is_a_tty = Lwt_unix.isatty incoming_fd
-  and outgoing_is_a_tty = Lwt_unix.isatty outgoing_fd in
+  Lwt_unix.isatty incoming_fd >>= fun incoming_is_a_tty ->
+  Lwt_unix.isatty outgoing_fd >>= fun outgoing_is_a_tty ->
   (* Apply changes. *)
   term.incoming_fd <- incoming_fd;
   term.outgoing_fd <- outgoing_fd;
@@ -296,12 +296,9 @@ let size term =
     raise Not_a_tty
 
 let get_size term =
-  try
-    return (size term)
-  with exn ->
-    raise_lwt exn
+  Lwt.catch (fun () -> return (size term)) Lwt.fail
 
-let set_size term size = raise_lwt (Failure "LTerm.set_size is deprecated")
+let set_size term size = Lwt.fail (Failure "LTerm.set_size is deprecated")
 
 (* +-----------------------------------------------------------------+
    | Events                                                          |
@@ -314,11 +311,12 @@ class output_single (cell : UChar.t option ref) = object
 end
 
 let read_char term =
-  lwt first_byte =
-    match_lwt Lwt_stream.get term.input_stream with
+  begin
+    Lwt_stream.get term.input_stream >>= fun byte_opt ->
+    match byte_opt with
       | Some byte -> return byte
-      | None -> raise_lwt End_of_file
-  in
+      | None -> Lwt.fail End_of_file
+  end >>= fun first_byte ->
   let cell = ref None in
   let output = new CharEncoding.convert_uchar_output term.incoming_encoding (new output_single cell) in
   let rec loop st =
@@ -326,18 +324,18 @@ let read_char term =
       | Some char ->
           return char
       | None ->
-          lwt byte = Lwt_stream.next st in
+          Lwt_stream.next st >>= fun byte ->
           assert (output#output (String.make 1 byte) 0 1 = 1);
           output#flush ();
           loop st
   in
-  lwt char =
-    try_lwt
+  Lwt.catch (fun () ->
       assert (output#output (String.make 1 first_byte) 0 1 = 1);
-      Lwt_stream.parse term.input_stream loop
-    with CharEncoding.Malformed_code | Lwt_stream.Empty ->
+      Lwt_stream.parse term.input_stream loop)
+    (function
+    | CharEncoding.Malformed_code | Lwt_stream.Empty ->
       return (UChar.of_char first_byte)
-  in
+    | exn -> Lwt.fail exn) >>= fun char ->
   return (LTerm_event.Key {
             LTerm_key.control = false;
             LTerm_key.meta = false;
@@ -347,7 +345,8 @@ let read_char term =
 
 let rec next_event term =
   if term.windows then
-    match_lwt LTerm_windows.read_console_input term.incoming_fd with
+    LTerm_windows.read_console_input term.incoming_fd >>= fun input ->
+    match input with
       | LTerm_windows.Resize ->
           if term.outgoing_is_a_tty then
             let size = get_size_from_fd term.outgoing_fd in
@@ -376,43 +375,44 @@ let wrap_next_event next_event term =
         thread
     | None ->
         (* Create a non-cancelable thread. *)
-        let waiter, wakener = wait () in
+        let waiter, wakener = Lwt.wait () in
         term.next_event <- Some waiter;
         (* Connect the [next_event term] thread to [waiter]. *)
         ignore
-          (try_bind
+          (Lwt.try_bind
              (fun () -> next_event term)
              (fun v ->
                 term.next_event <- None;
-                wakeup wakener v;
+                Lwt.wakeup wakener v;
                 return ())
              (fun e ->
                 term.next_event <- None;
-                wakeup_exn wakener e;
+                Lwt.wakeup_exn wakener e;
                 return ()));
         waiter
 
 let read_event term =
   if term.read_event then
-    raise_lwt (Failure "LTerm.read_event: cannot read events from two thread at the same time")
+    Lwt.fail (Failure "LTerm.read_event: cannot read events from two thread at the same time")
   else if term.size <> term.last_reported_size then begin
     term.last_reported_size <- term.size;
     return (LTerm_event.Resize term.last_reported_size)
   end else begin
     term.read_event <- true;
-    try_lwt
+    Lwt.finalize (fun () ->
       if term.incoming_is_a_tty then
-        match_lwt pick [wrap_next_event next_event term; Lwt_condition.wait term.notify] with
+        Lwt.pick [wrap_next_event next_event term; Lwt_condition.wait term.notify] >>= fun ev ->
+        match ev with
           | LTerm_event.Resize size ->
               term.last_reported_size <- size;
               return (LTerm_event.Resize size)
           | ev ->
               return ev
       else
-        wrap_next_event read_char term
-    finally
-      term.read_event <- false;
-      return ()
+        wrap_next_event read_char term)
+      (fun () ->
+        term.read_event <- false;
+        return ())
   end
 
 (* +-----------------------------------------------------------------+
@@ -441,8 +441,8 @@ let enter_raw_mode term =
       term.raw_mode <- true;
       return (Mode_windows mode)
     end else begin
-      lwt attr = Lwt_unix.tcgetattr term.incoming_fd in
-      lwt () = Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH {
+      Lwt_unix.tcgetattr term.incoming_fd >>= fun attr ->
+      Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH {
         attr with
           (* Inspired from Python-3.0/Lib/tty.py: *)
           Unix.c_brkint = false;
@@ -456,12 +456,12 @@ let enter_raw_mode term =
           Unix.c_vmin = 1;
           Unix.c_vtime = 0;
           Unix.c_isig = false;
-      } in
+      } >>= fun () ->
       term.raw_mode <- true;
       return (Mode_unix attr)
     end
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 let leave_raw_mode term mode =
   if term.incoming_is_a_tty then
@@ -476,7 +476,7 @@ let leave_raw_mode term mode =
           LTerm_windows.set_console_mode term.incoming_fd mode;
           return ()
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 let enable_mouse term =
   if term.outgoing_is_a_tty then
@@ -485,7 +485,7 @@ let enable_mouse term =
     else
       Lwt_io.write term.oc "\027[?1000h"
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 let disable_mouse term =
   if term.outgoing_is_a_tty then
@@ -494,7 +494,7 @@ let disable_mouse term =
     else
       Lwt_io.write term.oc "\027[?1000l"
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 (* +-----------------------------------------------------------------+
    | Cursor                                                          |
@@ -509,7 +509,7 @@ let show_cursor term =
     end else
       Lwt_io.write term.oc "\027[?25h"
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 let hide_cursor term =
   if term.outgoing_is_a_tty then
@@ -520,12 +520,12 @@ let hide_cursor term =
     end else
       Lwt_io.write term.oc "\027[?25l"
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 let goto term coord =
   if term.outgoing_is_a_tty then
     if term.windows then begin
-      lwt () = Lwt_io.flush term.oc in
+      Lwt_io.flush term.oc >>= fun () ->
       let window = (LTerm_windows.get_console_screen_buffer_info term.outgoing_fd).LTerm_windows.window in
       LTerm_windows.set_console_cursor_position term.outgoing_fd {
         row = window.row1 + coord.row;
@@ -533,18 +533,20 @@ let goto term coord =
       };
       return ()
     end else begin
-      lwt () = Lwt_io.fprint term.oc "\027[H" in
-      lwt () = if coord.row > 0 then Lwt_io.fprintf term.oc "\027[%dB" coord.row else return () in
-      lwt () = if coord.col > 0 then Lwt_io.fprintf term.oc "\027[%dC" coord.col else return () in
+      Lwt_io.fprint term.oc "\027[H" >>= fun () ->
+      (if coord.row > 0 then Lwt_io.fprintf term.oc "\027[%dB" coord.row
+                        else return ()) >>= fun () ->
+      (if coord.col > 0 then Lwt_io.fprintf term.oc "\027[%dC" coord.col
+                        else return ()) >>= fun () ->
       return ()
     end
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 let move term rows cols =
   if term.outgoing_is_a_tty then
     if term.windows then begin
-      lwt () = Lwt_io.flush term.oc in
+      Lwt_io.flush term.oc >>= fun () ->
       let pos = (LTerm_windows.get_console_screen_buffer_info term.outgoing_fd).LTerm_windows.cursor_position in
       LTerm_windows.set_console_cursor_position term.outgoing_fd {
         row = pos.row + rows;
@@ -552,7 +554,7 @@ let move term rows cols =
       };
       return ()
     end else
-      lwt () =
+      begin
         match rows with
           | n when n < 0 ->
               Lwt_io.fprintf term.oc "\027[%dA" (-n)
@@ -560,7 +562,8 @@ let move term rows cols =
               Lwt_io.fprintf term.oc "\027[%dB" n
           | _ ->
               return ()
-      and () =
+      end >>= fun () ->
+      begin
         match cols with
           | n when n < 0 ->
               Lwt_io.fprintf term.oc "\027[%dD" (-n)
@@ -568,10 +571,9 @@ let move term rows cols =
               Lwt_io.fprintf term.oc "\027[%dC" n
           | _ ->
               return ()
-      in
-      return ()
+      end
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 (* +-----------------------------------------------------------------+
    | Erasing text                                                    |
@@ -592,7 +594,7 @@ let clear_screen term =
     end else
       Lwt_io.write term.oc "\027[2J"
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 let clear_screen_next term =
   if term.outgoing_is_a_tty then
@@ -610,7 +612,7 @@ let clear_screen_next term =
     end else
       Lwt_io.write term.oc "\027[J"
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 let clear_screen_prev term =
   if term.outgoing_is_a_tty then
@@ -628,7 +630,7 @@ let clear_screen_prev term =
     end else
       Lwt_io.write term.oc "\027[1J"
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 let clear_line term =
   if term.outgoing_is_a_tty then
@@ -645,7 +647,7 @@ let clear_line term =
     end else
       Lwt_io.write term.oc "\027[2K"
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 let clear_line_next term =
   if term.outgoing_is_a_tty then
@@ -662,7 +664,7 @@ let clear_line_next term =
     end else
       Lwt_io.write term.oc "\027[K"
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 let clear_line_prev term =
   if term.outgoing_is_a_tty then
@@ -679,7 +681,7 @@ let clear_line_prev term =
     end else
       Lwt_io.write term.oc "\027[1K"
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 (* +-----------------------------------------------------------------+
    | State                                                           |
@@ -692,7 +694,7 @@ let save_state term =
     else
       Lwt_io.write term.oc "\027[?1049h"
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 let load_state term =
   if term.outgoing_is_a_tty then
@@ -701,7 +703,7 @@ let load_state term =
     else
       Lwt_io.write term.oc "\027[?1049l"
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 (* +-----------------------------------------------------------------+
    | String recoding                                                 |
@@ -996,25 +998,25 @@ let windows_attributes_of_style term style =
 let fprints_windows term oc text =
   let rec loop idx prev_attr =
     if idx = Array.length text then begin
-      lwt () = Lwt_io.flush oc in
+      Lwt_io.flush oc >>= fun () ->
       LTerm_windows.set_console_text_attribute term.outgoing_fd windows_default_attributes;
       return ()
     end else begin
       let ch, style = Array.unsafe_get text idx in
       let attr = windows_attributes_of_style term style in
-      lwt () =
+      begin
         if attr <> prev_attr then
-          lwt () = Lwt_io.flush oc in
+          Lwt_io.flush oc >>= fun () ->
           LTerm_windows.set_console_text_attribute term.outgoing_fd attr;
           return ()
         else
           return ()
-      in
-      lwt () = Lwt_io.write oc (encode_char term ch) in
+      end >>= fun () ->
+      Lwt_io.write oc (encode_char term ch) >>= fun () ->
       loop (idx + 1) attr
     end
   in
-  lwt () = Lwt_io.flush oc in
+  Lwt_io.flush oc >>= fun () ->
   LTerm_windows.set_console_text_attribute term.outgoing_fd windows_default_attributes;
   loop 0 windows_default_attributes
 
@@ -1044,7 +1046,7 @@ type context = {
 let clear_styles term oc =
   if term.outgoing_is_a_tty then
     if term.windows then
-      lwt () = Lwt_io.flush oc in
+      Lwt_io.flush oc >>= fun () ->
       LTerm_windows.set_console_text_attribute term.outgoing_fd windows_default_attributes;
       return ()
     else
@@ -1061,11 +1063,10 @@ let with_context term f =
          ctx_style = LTerm_style.none;
          ctx_attr = windows_default_attributes;
        } in
-       lwt () = clear_styles term oc in
-       try_lwt
-         f ctx
-       finally
-         clear_styles term oc)
+       clear_styles term oc >>= fun () ->
+       Lwt.finalize
+         (fun () -> f ctx)
+         (fun () -> clear_styles term oc))
     term.oc
 
 let update_style ctx style =
@@ -1073,7 +1074,7 @@ let update_style ctx style =
     if ctx.ctx_term.windows then begin
       let attr = windows_attributes_of_style ctx.ctx_term style in
       if attr <> ctx.ctx_attr then
-        lwt () = Lwt_io.flush ctx.ctx_oc in
+        Lwt_io.flush ctx.ctx_oc >>= fun () ->
         LTerm_windows.set_console_text_attribute ctx.ctx_term.outgoing_fd attr;
         ctx.ctx_attr <- attr;
         return ()
@@ -1083,7 +1084,7 @@ let update_style ctx style =
       if not (LTerm_style.equal style ctx.ctx_style) then begin
         let buf = Buffer.create 16 in
         add_style ctx.ctx_term buf style;
-        lwt () = Lwt_io.write ctx.ctx_oc (Buffer.contents buf) in
+        Lwt_io.write ctx.ctx_oc (Buffer.contents buf) >>= fun () ->
         ctx.ctx_style <- style;
         return ()
       end else
@@ -1105,7 +1106,7 @@ let set_style term style =
       let attr = windows_attributes_of_style term style in
       Lwt_io.atomic
         (fun oc ->
-           lwt () = Lwt_io.flush oc in
+           Lwt_io.flush oc >>= fun () ->
            LTerm_windows.set_console_text_attribute term.outgoing_fd attr;
            return ())
         term.oc
@@ -1246,16 +1247,16 @@ let render_windows term kind handle_newlines matrix =
       matrix
   in
   let rows = Array.length matrix in
-  lwt () =
+  begin
     match kind with
       | Render_screen ->
           return ()
       | Render_box ->
           (* Ensure that there is enough place to display the box. *)
-          lwt () = fprint term "\r" in
-          lwt () = fprint term (String.make (rows - 1) '\n') in
+          fprint term "\r" >>= fun () ->
+          fprint term (String.make (rows - 1) '\n') >>= fun () ->
           Lwt_io.flush term.oc
-  in
+  end >>= fun () ->
   let info = LTerm_windows.get_console_screen_buffer_info term.outgoing_fd in
   let window_rect = info.LTerm_windows.window in
   let rect =
@@ -1284,7 +1285,7 @@ let render_update term old_matrix matrix =
     else
       render_update_unix term Render_screen old_matrix matrix
   else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 let render term m = render_update term [||] m
 
@@ -1298,7 +1299,7 @@ let print_box term matrix =
     end else
       fprint term "\r"
   end else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 let print_box_with_newlines_unix term matrix =
   let open LTerm_draw in
@@ -1354,7 +1355,7 @@ let print_box_with_newlines term matrix =
     end else
       fprint term "\r"
   end else
-    raise_lwt Not_a_tty
+    Lwt.fail Not_a_tty
 
 (* +-----------------------------------------------------------------+
    | Misc                                                            |

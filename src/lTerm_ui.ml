@@ -7,8 +7,9 @@
  * This file is a part of Lambda-Term.
  *)
 
-open Lwt
 open LTerm_geom
+
+let return, (>>=) = Lwt.return, Lwt.(>>=)
 
 (* +-----------------------------------------------------------------+
    | The UI type                                                     |
@@ -74,8 +75,8 @@ let check ui =
    +-----------------------------------------------------------------+ *)
 
 let create term ?(save_state = true) draw =
-  lwt mode = LTerm.enter_raw_mode term in
-  lwt () = if save_state then LTerm.save_state term else return () in
+  LTerm.enter_raw_mode term >>= fun mode ->
+  (if save_state then LTerm.save_state term else return ()) >>= fun () ->
   let stream, push = Lwt_stream.create () in
   return {
     term = term;
@@ -98,10 +99,10 @@ let create term ?(save_state = true) draw =
 let quit ui =
   check ui;
   ui.state <- Stop;
-  lwt () = ui.drawer in
-  lwt () = LTerm.leave_raw_mode ui.term ui.mode in
+  ui.drawer >>= fun () ->
+  LTerm.leave_raw_mode ui.term ui.mode >>= fun () ->
   if ui.restore_state then
-    lwt () = LTerm.show_cursor ui.term in
+    LTerm.show_cursor ui.term >>= fun () ->
     LTerm.load_state ui.term
   else
     return ()
@@ -111,9 +112,9 @@ let quit ui =
    +-----------------------------------------------------------------+ *)
 
 let immediate_draw ui = fun () ->
-  try_lwt
+  Lwt.catch (fun () ->
     (* Wait a bit in order not to redraw too often. *)
-    lwt () = pause() in
+    Lwt.pause () >>= fun () ->
     ui.draw_queued <- false;
     if ui.state = Stop then
       return ()
@@ -127,16 +128,16 @@ let immediate_draw ui = fun () ->
       ui.drawing <- false;
 
       (* Rendering. *)
-      lwt () = LTerm.hide_cursor ui.term in
-      lwt () = LTerm.render_update ui.term ui.matrix_b ui.matrix_a in
-      lwt () =
+      LTerm.hide_cursor ui.term >>= fun () ->
+      LTerm.render_update ui.term ui.matrix_b ui.matrix_a >>= fun () ->
+      begin
         if ui.cursor_visible then
-          lwt () = LTerm.goto ui.term ui.cursor_position in
+          LTerm.goto ui.term ui.cursor_position >>= fun () ->
           LTerm.show_cursor ui.term
         else
           return ()
-      in
-      lwt () = LTerm.flush ui.term in
+      end >>= fun () ->
+      LTerm.flush ui.term >>= fun () ->
 
       (* Swap the two matrices. *)
       let a = ui.matrix_a and b = ui.matrix_b in
@@ -144,10 +145,10 @@ let immediate_draw ui = fun () ->
       ui.matrix_b <- a;
 
       return ()
-    end
-  with exn ->
+    end)
+    (fun exn ->
     ui.draw_error_push (Some exn);
-    return ()
+    return ())
 
 let draw ui =
   check ui;
@@ -194,7 +195,8 @@ let set_cursor_position ui coord =
 let rec wait ui =
   check ui;
   if ui.state = Init then draw ui;
-  lwt ev = pick [LTerm.read_event ui.term; Lwt_stream.next ui.draw_error_stream >>= fail] in
+  Lwt.pick [LTerm.read_event ui.term;
+            Lwt_stream.next ui.draw_error_stream >>= Lwt.fail] >>= fun ev ->
   match ev with
     | LTerm_event.Resize size ->
         ui.size <- size;

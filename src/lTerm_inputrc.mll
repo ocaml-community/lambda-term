@@ -8,9 +8,10 @@
  *)
 
 {
-  open Lwt
   open CamomileLibraryDyn.Camomile
   open LTerm_key
+
+  let return, (>>=) = Lwt.return, Lwt.(>>=)
 
   exception Parse_error of string * int * string
 
@@ -336,10 +337,11 @@ and comma_actions seq l = parse
     Filename.concat LTerm_resources.home ".lambda-term-inputrc"
 
   let load ?(file = default) () =
-    try_lwt
-      lwt ic = Lwt_io.open_file ~mode:Lwt_io.input file in
+    Lwt.catch (fun () ->
+      Lwt_io.open_file ~mode:Lwt_io.input file >>= fun ic ->
       let rec loop num handler =
-        match_lwt Lwt_io.read_line_opt ic with
+        Lwt_io.read_line_opt ic >>= fun input_line ->
+        match input_line with
           | None ->
               return ()
           | Some str ->
@@ -358,10 +360,11 @@ and comma_actions seq l = parse
                 | Error msg ->
                     raise (Parse_error (file, num, msg))
       in
-      try_lwt
-        loop 1 handle_edit_action
-      finally
-        Lwt_io.close ic
-    with Unix.Unix_error(Unix.ENOENT, _, _) ->
-      return ()
+      Lwt.finalize
+        (fun () -> loop 1 handle_edit_action)
+        (fun () -> Lwt_io.close ic))
+      (function
+      | Unix.Unix_error(Unix.ENOENT, _, _) ->
+          return ()
+      | exn -> Lwt.fail exn)
 }

@@ -34,11 +34,14 @@ FilesAB: src/lTerm_config.h.ab
 # | The library                                                       |
 # +-------------------------------------------------------------------+
 
+Flag camlp4
+  Description: camlp4 support
+  Default: false
+
 Library "lambda-term"
   FindlibName: lambda-term
-  BuildDepends: lwt (>= 2.4.0), lwt.unix, lwt.syntax, lwt.react, zed (>= 1.2)
-  XMETADescription: Corss-platform library for terminal manipulation
-  XMETARequires: lwt.unix, lwt.react, zed
+  BuildDepends: lwt (>= 2.4.0), lwt.unix, lwt.react, zed (>= 1.2)
+  XMETADescription: Cross-platform library for terminal manipulation
   Path: src
   Install: true
   Modules:
@@ -84,108 +87,123 @@ Library "lambda-term"
 
 Executable events
   Path: examples
+  Build$: flag(camlp4)
   Install: false
   CompiledObject: best
   MainIs: events.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term, lwt.syntax
 
 Executable colors
   Path: examples
+  Build$: flag(camlp4)
   Install: false
   CompiledObject: best
   MainIs: colors.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term, lwt.syntax
 
 Executable colors_256
   Path: examples
+  Build$: flag(camlp4)
   Install: false
   CompiledObject: best
   MainIs: colors_256.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term, lwt.syntax
 
 Executable rgb
   Path: examples
+  Build$: flag(camlp4)
   Install: false
   CompiledObject: best
   MainIs: rgb.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term, lwt.syntax
 
 Executable move
   Path: examples
+  Build$: flag(camlp4)
   Install: false
   CompiledObject: best
   MainIs: move.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term, lwt.syntax
 
 Executable hello
   Path: examples
+  Build$: flag(camlp4)
   Install: false
   CompiledObject: best
   MainIs: hello.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term, lwt.syntax
 
 Executable clock
   Path: examples
+  Build$: flag(camlp4)
   Install: false
   CompiledObject: best
   MainIs: clock.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term, lwt.syntax
 
 Executable buttons
   Path: examples
+  Build$: flag(camlp4)
   Install: false
   CompiledObject: best
   MainIs: buttons.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term, lwt.syntax
 
 Executable checkbuttons
   Path: examples
+  Build$: flag(camlp4)
   Install: false
   CompiledObject: best
   MainIs: checkbuttons.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term, lwt.syntax
 
 Executable radiobuttons
   Path: examples
+  Build$: flag(camlp4)
   Install: false
   CompiledObject: best
   MainIs: radiobuttons.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term, lwt.syntax
 
 Executable shell
   Path: examples
+  Build$: flag(camlp4)
   Install: false
   CompiledObject: best
   MainIs: shell.ml
-  BuildDepends: lambda-term, str
+  BuildDepends: lambda-term, lwt.syntax, str
 
 Executable modal
   Path: examples
+  Build$: flag(camlp4)
   Install: false
   CompiledObject: best
   MainIs: modal.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term, lwt.syntax
 
 Executable "read-password"
   Path: examples
+  Build$: flag(camlp4)
   Install: false
   CompiledObject: best
   MainIs: read_password.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term, lwt.syntax
 
 Executable "read-yes-no"
   Path: examples
+  Build$: flag(camlp4)
   Install: false
   CompiledObject: best
   MainIs: read_yes_no.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term, lwt.syntax
 
 Executable "editor"
   Path: examples
+  Build$: flag(camlp4)
   Install: false
   CompiledObject: best
   MainIs: editor.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term, lwt.syntax
 
 # +-------------------------------------------------------------------+
 # | Utils                                                             |

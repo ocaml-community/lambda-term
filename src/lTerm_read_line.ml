@@ -9,11 +9,12 @@
 
 open CamomileLibraryDyn.Camomile
 open Lwt_react
-open Lwt
 open LTerm_geom
 open LTerm_style
 open LTerm_text
 open LTerm_key
+
+let return, (>>=) = Lwt.return, Lwt.(>>=)
 
 exception Interrupt
 type prompt = LTerm_text.t
@@ -754,7 +755,7 @@ object(self)
     else begin
       (* Wait a bit in order not to draw too often. *)
       draw_queued <- true;
-      lwt () = pause () in
+      Lwt.pause () >>= fun () ->
       draw_queued <- false;
       Lwt_mutex.with_lock draw_mutex (fun () -> self#draw_update)
     end
@@ -906,22 +907,22 @@ object(self)
           matrix
         end
       in
-      lwt () = LTerm.hide_cursor term in
-      lwt () =
+      LTerm.hide_cursor term >>= fun () ->
+      begin
         if displayed then
           (* Go back to the beginning of displayed text. *)
           LTerm.move term (-cursor.row) (-cursor.col)
         else
           return ()
-      in
+      end >>= fun () ->
       (* Display everything. *)
-      lwt () = LTerm.print_box_with_newlines term matrix in
+      LTerm.print_box_with_newlines term matrix >>= fun () ->
       (* Update the cursor. *)
       cursor <- pos_cursor;
       (* Move the cursor to the right position. *)
-      lwt () = LTerm.move term (cursor.row - Array.length matrix + 1) cursor.col in
-      lwt () = LTerm.show_cursor term in
-      lwt () = LTerm.flush term in
+      LTerm.move term (cursor.row - Array.length matrix + 1) cursor.col >>= fun () ->
+      LTerm.show_cursor term >>= fun () ->
+      LTerm.flush term >>= fun () ->
       displayed <- true;
       return ()
     end else
@@ -941,9 +942,9 @@ object(self)
       draw_styled_with_newlines matrix size.cols 0 0 prompt;
       draw_styled_with_newlines matrix size.cols pos_after_prompt.row pos_after_prompt.col styled;
       draw_styled_with_newlines matrix size.cols pos_after_styled.row pos_after_styled.col styled_newline;
-      lwt () = if displayed then LTerm.move term (-cursor.row) (-cursor.col) else return () in
-      lwt () = LTerm.print_box_with_newlines term matrix in
-      lwt () = LTerm.move term (total_height - Array.length matrix) 0 in
+      (if displayed then LTerm.move term (-cursor.row) (-cursor.col) else return ()) >>= fun () ->
+      LTerm.print_box_with_newlines term matrix >>= fun () ->
+      LTerm.move term (total_height - Array.length matrix) 0 >>= fun () ->
       (* Print a newline instead of a movement to ensure scrolling when
          at the end of screen. *)
       LTerm.fprint term "\n"
@@ -956,8 +957,8 @@ object(self)
   method hide =
     if visible then begin
       visible <- false;
-      lwt () = Lwt_mutex.lock draw_mutex in
-      try_lwt
+      Lwt_mutex.lock draw_mutex >>= fun () ->
+      Lwt.finalize (fun () ->
         let size = S.value size in
         if displayed && size.rows > 0 && size.cols > 0 then
           let matrix_size = { cols = size.cols + 1; rows = height } in
@@ -965,18 +966,18 @@ object(self)
           for row = 0 to height - 1 do
             (unsafe_get matrix row 0).LTerm_draw.char <- newline
           done;
-          lwt () = LTerm.move term (-cursor.row) (-cursor.col) in
-          lwt () = LTerm.print_box_with_newlines term matrix in
-          lwt () = LTerm.move term (1 - Array.length matrix) 0 in
+          LTerm.move term (-cursor.row) (-cursor.col) >>= fun () ->
+          LTerm.print_box_with_newlines term matrix >>= fun () ->
+          LTerm.move term (1 - Array.length matrix) 0 >>= fun () ->
           cursor <- { row = 0; col = 0 };
           height <- 0;
           displayed <- false;
           return ()
         else
-          return ()
-      finally
-        Lwt_mutex.unlock draw_mutex;
-        return ()
+          return ())
+        (fun () ->
+          Lwt_mutex.unlock draw_mutex;
+          return ())
     end else
       return ()
 
@@ -991,7 +992,8 @@ object(self)
 
   (* The main loop. *)
   method private loop =
-    match_lwt LTerm.read_event term with
+    LTerm.read_event term >>= fun ev ->
+    match ev with
       | LTerm_event.Resize size ->
           set_size size;
           self#loop
@@ -1037,10 +1039,10 @@ object(self)
         return self#eval
     | Clear_screen :: actions ->
         Zed_macro.add self#macro Clear_screen;
-        lwt () = LTerm.clear_screen term in
-        lwt () = LTerm.goto term { row = 0; col = 0 } in
+        LTerm.clear_screen term >>= fun () ->
+        LTerm.goto term { row = 0; col = 0 } >>= fun () ->
         displayed <- false;
-        lwt () = self#queue_draw_update in
+        self#queue_draw_update >>= fun () ->
         self#exec actions
     | Edit LTerm_edit.Play_macro :: actions ->
         Zed_macro.cancel self#macro;
@@ -1050,26 +1052,26 @@ object(self)
           self#exec actions
         else begin
           let is_visible = visible in
-          lwt () = self#hide in
-          lwt () = LTerm.flush term in
-          lwt () =
+          self#hide >>= fun () ->
+          LTerm.flush term >>= fun () ->
+          begin
             match mode with
               | Some mode ->
                   LTerm.leave_raw_mode term mode
               | None ->
                   return ()
-          in
+          end >>= fun () ->
           Unix.kill (Unix.getpid ()) Sys.sigtstp;
-          lwt () =
+          begin
             match LTerm.is_a_tty term with
               | true ->
-                  lwt m = LTerm.enter_raw_mode term in
+                  LTerm.enter_raw_mode term >>= fun m ->
                   mode <- Some m;
                   return ()
               | false ->
                   return ()
-          in
-          lwt () = if is_visible then self#show else return () in
+          end >>= fun () ->
+          (if is_visible then self#show else return ()) >>= fun () ->
           self#exec actions
         end
     | action :: actions ->
@@ -1099,37 +1101,38 @@ object(self)
          ])
     in
 
-    lwt () =
+    begin
       match LTerm.is_a_tty term with
         | true ->
-            lwt m = LTerm.enter_raw_mode term in
+            LTerm.enter_raw_mode term >>= fun m ->
             mode <- Some m;
             return ()
         | false ->
             return ()
-    in
+    end >>= fun () ->
 
-    lwt result =
-      try_lwt
-        (* Go to the beginning of line otherwise all offset
-           calculation will be false. *)
-        lwt () = LTerm.fprint term "\r" in
-        lwt () = self#queue_draw_update in
-        self#loop
-      with exn ->
-        running := false;
-        E.stop event;
-        lwt () = Lwt_mutex.with_lock draw_mutex (fun () -> self#draw_failure) in
-        raise_lwt exn
-      finally
-        match mode with
-          | Some mode ->
-              LTerm.leave_raw_mode term mode
-          | None ->
-              return ()
-    in
+    begin
+      Lwt.finalize (fun () ->
+          Lwt.catch (fun () ->
+              (* Go to the beginning of line otherwise all offset
+                 calculation will be false. *)
+              LTerm.fprint term "\r" >>= fun () ->
+              self#queue_draw_update >>= fun () ->
+              self#loop)
+            (fun exn ->
+              running := false;
+              E.stop event;
+              Lwt_mutex.with_lock draw_mutex (fun () -> self#draw_failure) >>= fun () ->
+              Lwt.fail exn))
+        (fun () ->
+          match mode with
+            | Some mode ->
+                LTerm.leave_raw_mode term mode
+            | None ->
+                return ())
+    end >>= fun result ->
     running := false;
     E.stop event;
-    lwt () = Lwt_mutex.with_lock draw_mutex (fun () -> self#draw_success) in
+    Lwt_mutex.with_lock draw_mutex (fun () -> self#draw_success) >>= fun () ->
     return result
 end
