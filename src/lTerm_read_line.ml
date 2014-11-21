@@ -203,12 +203,38 @@ type mode =
   | Set_counter
   | Add_counter
 
+type completion_state = {
+  start : int; (* Beginning of the word being completed *)
+  index : int; (* Index of the selected in [words]      *)
+  count : int; (* Length of [words]                     *)
+  words : (Zed_utf8.t * Zed_utf8.t) list;
+}
+
+let no_completion = {
+  start = 0;
+  index = 0;
+  words = [];
+  count = 0;
+}
+
 class virtual ['a] engine ?(history = []) ?(clipboard = LTerm_edit.clipboard) ?(macro = macro) () =
   let edit : unit Zed_edit.t = Zed_edit.create ~clipboard () in
   let context = Zed_edit.context edit (Zed_edit.new_cursor edit) in
-  let completion_words, set_completion_words = S.create ([] : (Zed_utf8.t * Zed_utf8.t) list) in
-  let completion_index, set_completion_index = S.create 0 in
   let mode, set_mode = S.create Edition in
+  let user_completion_state, set_completion_state = E.create () in
+  let reset_completion_state =
+    E.when_
+      (S.map (fun mode -> mode = Edition) mode)
+      (E.select [
+         E.stamp (Zed_edit.changes edit                                    ) no_completion;
+         E.stamp (S.changes (Zed_cursor.position (Zed_edit.cursor context))) no_completion;
+       ])
+  in
+  let completion_state =
+    S.hold ~eq:(==) no_completion (E.select [reset_completion_state; user_completion_state])
+  in
+  let completion_words = S.map ~eq:(==) (fun c -> c.words) completion_state in
+  let completion_index = S.map          (fun c -> c.index) completion_state in
   let history, set_history = S.create (history, []) in
   let message, set_message = S.create None in
 object(self)
@@ -222,41 +248,29 @@ object(self)
   method clipboard = clipboard
   method macro = macro
 
-  (* Whether a completion has been queued. *)
-  val mutable completion_queued = false
-
   (* The event which occurs when completion need to be recomputed. *)
   val mutable completion_event = E.never
-
-  (* The index of the start of the word being completed. *)
-  val mutable completion_start = 0
 
   (* Save for when setting the macro counter. *)
   val mutable save = (0, Zed_rope.empty)
 
   method set_completion ?(index=0) start words =
-    let len = List.length words in
-    if index < 0 || index > max 0 (len - 1) then raise (Invalid_argument
-          "LTerm_read_line.set_completion: index out of bounds compared to words."
-      );
-    let step = React.Step.create () in
-    completion_start <- start;
-    set_completion_index ~step index;
-    set_completion_words ~step words;
-    React.Step.execute step
+    let count = List.length words in
+    if index < 0 || index > max 0 (count - 1) then
+      invalid_arg
+        "LTerm_read_line.set_completion: \
+         index out of bounds compared to words.";
+    set_completion_state { start; index; count; words }
 
   initializer
     completion_event <- (
-      E.map
-        (fun () ->
-           self#set_completion 0 [];
-           self#completion)
-        (E.when_
-           (S.map (fun mode -> mode = Edition) mode)
-           (E.select [
-              E.stamp (Zed_edit.changes edit) ();
-              E.stamp (S.changes (Zed_cursor.position (Zed_edit.cursor context))) ();
-            ]))
+      E.map (fun _ ->
+        (* We can't execute it right now as the user might call [set_completion]
+          immediatly. *)
+        Lwt.pause () >>= fun () ->
+        self#completion;
+        Lwt.return_unit)
+        reset_completion_state
     );
     self#completion
 
@@ -271,8 +285,9 @@ object(self)
   method completion = self#set_completion 0 []
 
   method complete =
-    let prefix_length = Zed_edit.position context - completion_start in
-    match S.value completion_words with
+    let comp = S.value completion_state in
+    let prefix_length = Zed_edit.position context - comp.start in
+    match comp.words with
       | [] ->
           ()
       | [(completion, suffix)] ->
@@ -353,28 +368,30 @@ object(self)
           self#complete
 
       | Complete_bar_next when S.value mode = Edition ->
-          let index = S.value completion_index in
-          if index < List.length (S.value completion_words) - 1 then
-            set_completion_index (index + 1)
+          let comp = S.value completion_state in
+          if comp.index < comp.count - 1 then
+            set_completion_state { comp with index = comp.index + 1 }
 
       | Complete_bar_prev when S.value mode = Edition ->
-          let index = S.value completion_index in
-          if index > 0 then
-            set_completion_index (index - 1)
+          let comp = S.value completion_state in
+          if comp.index > 0 then
+            set_completion_state { comp with index = comp.index + 1 }
 
       | Complete_bar_first when S.value mode = Edition ->
-          set_completion_index 0
+          let comp = S.value completion_state in
+          if comp.index > 0 then
+            set_completion_state { comp with index = 0 }
 
       | Complete_bar_last when S.value mode = Edition ->
-          let len = List.length (S.value completion_words) in
-          if len > 0 then
-            set_completion_index (len - 1)
+          let comp = S.value completion_state in
+          if comp.index < comp.count - 1 then
+            set_completion_state { comp with index = comp.count - 1 }
 
       | Complete_bar when S.value mode = Edition ->
-          let words = S.value completion_words in
-          if words <> [] then begin
-            let prefix_length = Zed_edit.position context - completion_start in
-            let completion, suffix = List.nth words (S.value completion_index) in
+          let comp = S.value completion_state in
+          if comp.words <> [] then begin
+            let prefix_length = Zed_edit.position context - comp.start in
+            let completion, suffix = List.nth comp.words comp.index in
             Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after completion prefix_length));
             Zed_edit.insert context (Zed_rope.of_string suffix)
           end
