@@ -167,7 +167,13 @@ let () = CharEncoding.alias "CP65001" "UTF-8"
 
 let empty_stream = Lwt_stream.from (fun () -> return None)
 
-let create ?(windows=Lwt_sys.windows) ?(model=default_model) ?incoming_encoding ?outgoing_encoding incoming_fd incoming_channel outgoing_fd outgoing_channel =
+let create
+      ?(windows=Sys.win32)
+      ?(model=default_model)
+      ?incoming_encoding
+      ?outgoing_encoding
+      incoming_fd incoming_channel outgoing_fd outgoing_channel
+  =
   Lwt.catch (fun () ->
     (* Colors stuff. *)
     let colors = if windows then 16 else colors_of_term model in

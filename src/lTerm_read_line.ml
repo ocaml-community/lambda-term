@@ -1065,7 +1065,7 @@ object(self)
         Zed_macro.cancel self#macro;
         self#exec (Zed_macro.contents macro @ actions)
     | Suspend :: actions ->
-        if Lwt_sys.windows then
+        if Sys.win32 then
           self#exec actions
         else begin
           let is_visible = visible in
