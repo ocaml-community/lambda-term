@@ -32,7 +32,7 @@ val create :
       [output_fd] and [output_channel] for outputs.
 
       - [windows] indicates whether the terminal is a windows console
-      (not mintty, rxvt, ...). It defaults to [Lwt_sys.windows].
+      (not mintty, rxvt, ...). It defaults to [Sys.win32].
 
       - [model] is the type of the terminal, such as "rxvt" or
       "xterm". It defaults to the contents of the "TERM" environment
