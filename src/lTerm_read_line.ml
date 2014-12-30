@@ -375,7 +375,7 @@ object(self)
       | Complete_bar_prev when S.value mode = Edition ->
           let comp = S.value completion_state in
           if comp.index > 0 then
-            set_completion_state { comp with index = comp.index + 1 }
+            set_completion_state { comp with index = comp.index - 1 }
 
       | Complete_bar_first when S.value mode = Edition ->
           let comp = S.value completion_state in
