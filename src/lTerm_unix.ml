@@ -819,6 +819,12 @@ let sequences = [|
   "[3;8~", { control = true; meta = true; shift = true; code = Delete };
   "[5;8~", { control = true; meta = true; shift = true; code = Prev_page };
   "[6;8~", { control = true; meta = true; shift = true; code = Next_page };
+
+  (* iTerm2 *)
+  "[1;9A", { control = false; meta = true; shift = false; code = Up };
+  "[1;9B", { control = false; meta = true; shift = false; code = Down };
+  "[1;9C", { control = false; meta = true; shift = false; code = Right };
+  "[1;9D", { control = false; meta = true; shift = false; code = Left };
 |]
 
 let () = Array.sort (fun (seq1, _) (seq2, _) -> String.compare seq1 seq2) sequences
