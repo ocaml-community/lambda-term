@@ -20,7 +20,7 @@ let dummy = (UChar.of_char ' ', LTerm_style.none)
 
 let of_string str =
   let len = Zed_utf8.length str in
-  let arr = Array.create len dummy in
+  let arr = Array.make len dummy in
   let rec loop ofs idx =
     if idx = len then
       arr
@@ -47,7 +47,7 @@ let uchar_of_hex x =
 
 let of_string_maybe_invalid str =
   let len = invalid_length str 0 0 in
-  let arr = Array.create len dummy in
+  let arr = Array.make len dummy in
   let rec loop ofs idx =
     if idx = len then
       arr
@@ -76,7 +76,7 @@ let to_string txt =
   Buffer.contents buf
 
 let of_rope rope =
-  let arr = Array.create (Zed_rope.length rope) dummy in
+  let arr = Array.make (Zed_rope.length rope) dummy in
   let rec loop zip idx =
     if Zed_rope.Zip.at_eos zip then
       arr
@@ -95,7 +95,7 @@ let to_rope txt =
 
 let stylise str style =
   let len = Zed_utf8.length str in
-  let arr = Array.create len dummy in
+  let arr = Array.make len dummy in
   let rec loop ofs idx =
     if idx = len then
       arr
@@ -252,7 +252,7 @@ let eval markup =
     q_fg = [];
     q_bg = [];
   } in
-  let arr = Array.create (markup_length markup) dummy in
+  let arr = Array.make (markup_length markup) dummy in
   let rec copy_utf8 str ofs idx style =
     if ofs = String.length str then
       idx
