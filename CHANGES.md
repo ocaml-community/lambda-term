@@ -1,3 +1,10 @@
+1.8 (2015-01-07)
+----------------
+
+* remove use of deprecated Lwt functions
+* add some iTerm2 keys
+* fix some invalid use of react
+
 1.7 (2014-10-20)
 ----------------
 
