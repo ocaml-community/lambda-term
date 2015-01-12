@@ -513,6 +513,9 @@ object(self)
       | Break ->
           raise Sys.Break
 
+      | Edit (LTerm_edit.Custom f) ->
+          f ()
+
       | _ ->
           ()
 
@@ -702,6 +705,8 @@ let draw_styled_with_newlines matrix cols row col str =
   loop row col 0
 
 let styled_newline = [|(newline, LTerm_style.none)|]
+
+type rl_action = Global of action list | Local of (unit -> unit)
 
 class virtual ['a] term term =
   let size, set_size = S.create (LTerm.size term) in
@@ -1007,6 +1012,9 @@ object(self)
 
   val mutable mode = None
 
+  val mutable local_bindings = Bindings.empty
+  method bind keys actions = local_bindings <- Bindings.add keys actions local_bindings
+
   (* The main loop. *)
   method private loop =
     LTerm.read_event term >>= fun ev ->
@@ -1018,8 +1026,12 @@ object(self)
           let res =
             match resolver with
               | Some res -> res
-              | None -> Bindings.resolver [Bindings.pack (fun x -> x) !bindings;
-                                           Bindings.pack (List.map (fun x -> Edit x)) !LTerm_edit.bindings]
+              | None ->
+                Bindings.resolver
+                  [ Bindings.pack (fun x -> x) !bindings
+                  ; Bindings.pack (List.map (fun x -> Edit x)) !LTerm_edit.bindings
+                  ; Bindings.pack (fun x -> x) local_bindings
+                  ]
           in
           match Bindings.resolve key res with
             | Bindings.Accepted actions ->

@@ -26,6 +26,7 @@ type action =
   | Insert_macro_counter
   | Set_macro_counter
   | Add_macro_counter
+  | Custom of (unit -> unit)
 
 let doc_of_action = function
   | Zed action -> Zed_edit.doc_of_action action
@@ -36,6 +37,7 @@ let doc_of_action = function
   | Insert_macro_counter -> "insert the current value of the macro counter."
   | Set_macro_counter -> "sets the value of the macro counter."
   | Add_macro_counter -> "adds a value to the macro counter."
+  | Custom _ -> "programmer defined action."
 
 let actions = [
   Start_macro, "start-macro";
@@ -199,6 +201,9 @@ object(self)
   val mutable event = E.never
   val mutable resolver = None
 
+  val mutable local_bindings = Bindings.empty
+  method bind keys actions = local_bindings <- Bindings.add keys actions local_bindings
+
   initializer
     engine <- (
       Zed_edit.create
@@ -215,11 +220,21 @@ object(self)
     self#on_event
       (function
          | LTerm_event.Key key -> begin
-             let res = match resolver with Some res -> res | None -> Bindings.resolver [Bindings.pack (fun x -> x) !bindings] in
+             let res =
+               match resolver with
+               | Some res -> res
+               | None -> Bindings.resolver [ Bindings.pack (fun x -> x) !bindings
+                                           ; Bindings.pack (fun x -> x) local_bindings
+                                           ]
+             in
              match Bindings.resolve key res with
                | Bindings.Accepted actions ->
                    resolver <- None;
                    let rec exec = function
+                     | Custom f :: actions ->
+                         Zed_macro.add macro (Custom f);
+                         f ();
+                         exec actions
                      | Zed action :: actions ->
                          Zed_macro.add macro (Zed action);
                          Zed_edit.get_action action context;

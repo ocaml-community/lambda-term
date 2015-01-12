@@ -18,21 +18,23 @@ lwt () =
 
   frame#set editor;
 
-  (* Exit when the user presses Ctrl+X *)
-  frame#on_event (function
-                    | LTerm_event.Key { LTerm_key.control = true; meta = false; shift = false; code = LTerm_key.Char ch } when ch = UChar.of_char 'c'->
-                        wakeup wakener ();
-                        true
-                    | _ ->
-                        false);
+  (* Exit when the user presses C-x C-c *)
+  editor#bind
+    (let open LTerm_key in
+     [ { control = true; meta = false; shift = false
+       ; code = Char (UChar.of_char 'x') }
+     ; { control = true; meta = false; shift = false
+       ; code = Char (UChar.of_char 'c') }
+     ])
+    [ LTerm_edit.Custom (fun () -> wakeup wakener ()) ];
 
   Zed_edit.insert editor#context
     (Zed_rope.of_string "\
 This is a simple edition widget.
 
-Type Control+C to exit.
+Type C-x C-c to exit.
 
 ");
 
   lwt term = Lazy.force LTerm.stdout in
-  LTerm_widget.run term frame waiter
+LTerm_widget.run term frame waiter

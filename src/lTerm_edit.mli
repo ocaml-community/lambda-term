@@ -28,6 +28,7 @@ type action =
       (** Sets the value of the macro counter. *)
   | Add_macro_counter
       (** Adds a value to the macro counter. *)
+  | Custom of (unit -> unit)
 
 val bindings : action list Zed_input.Make(LTerm_key).t ref
   (** Bindings. These bindings are used by {!LTerm_read_line} and by
@@ -99,4 +100,6 @@ class edit : ?clipboard : Zed_edit.clipboard -> ?macro : action Zed_macro.t -> u
     (** The locale used by the engine. *)
 
   method set_locale : string option -> unit
+
+  method bind : LTerm_key.t list -> action list -> unit
 end

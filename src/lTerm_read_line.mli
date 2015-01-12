@@ -290,6 +290,8 @@ class virtual ['a] term : LTerm.t -> object
     (** Executes a list of actions. Rememver to call [Zed_macro.add
         self#macro action] if you overload this method. *)
 
+  method bind : LTerm_key.t list -> action list -> unit
+
   method draw_update : unit Lwt.t
     (** Updates current display and put the cursor at current edition
         position. *)
