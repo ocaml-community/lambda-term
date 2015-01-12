@@ -706,8 +706,6 @@ let draw_styled_with_newlines matrix cols row col str =
 
 let styled_newline = [|(newline, LTerm_style.none)|]
 
-type rl_action = Global of action list | Local of (unit -> unit)
-
 class virtual ['a] term term =
   let size, set_size = S.create (LTerm.size term) in
   let event, set_prompt = E.create () in
