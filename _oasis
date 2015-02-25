@@ -173,6 +173,14 @@ Executable shell
   MainIs: shell.ml
   BuildDepends: lambda-term, lwt.syntax, str
 
+Executable repl
+  Path: examples
+  Build$: flag(camlp4)
+  Install: false
+  CompiledObject: best
+  MainIs: repl.ml
+  BuildDepends: lambda-term, lwt.syntax
+
 Executable modal
   Path: examples
   Build$: flag(camlp4)
