@@ -1026,9 +1026,9 @@ object(self)
               | Some res -> res
               | None ->
                 Bindings.resolver
-                  [ Bindings.pack (fun x -> x) !bindings
+                  [ Bindings.pack (fun x -> x) local_bindings
+                  ; Bindings.pack (fun x -> x) !bindings
                   ; Bindings.pack (List.map (fun x -> Edit x)) !LTerm_edit.bindings
-                  ; Bindings.pack (fun x -> x) local_bindings
                   ]
           in
           match Bindings.resolve key res with

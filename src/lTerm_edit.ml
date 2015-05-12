@@ -224,8 +224,8 @@ object(self)
              let res =
                match resolver with
                | Some res -> res
-               | None -> Bindings.resolver [ Bindings.pack (fun x -> x) !bindings
-                                           ; Bindings.pack (fun x -> x) local_bindings
+               | None -> Bindings.resolver [ Bindings.pack (fun x -> x) local_bindings
+                                           ; Bindings.pack (fun x -> x) !bindings
                                            ]
              in
              match Bindings.resolve key res with
