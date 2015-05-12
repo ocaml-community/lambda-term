@@ -86,6 +86,7 @@ let name_of_action x =
   in
   match x with
     | Zed x -> Zed_edit.name_of_action x
+    | Custom _ -> "custom"
     | _ -> loop 0 (Array.length actions_to_names)
 
 module Bindings = Zed_input.Make (LTerm_key)
