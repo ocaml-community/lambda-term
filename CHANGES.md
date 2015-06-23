@@ -1,3 +1,9 @@
+1.9 (2015-06-23)
+----------------
+
+* add repl example (Martin DeMello)
+* add support for custom and local bindings
+
 1.8 (2015-01-07)
 ----------------
 
