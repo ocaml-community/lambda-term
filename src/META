@@ -1,0 +1,12 @@
+# OASIS_START
+# DO NOT EDIT (digest: b5399031c9bab5c1e919a2231f734f11)
+version = "1.9"
+description = "Cross-platform library for terminal manipulation"
+requires = "lwt lwt.unix lwt.react zed"
+archive(byte) = "lambda-term.cma"
+archive(byte, plugin) = "lambda-term.cma"
+archive(native) = "lambda-term.cmxa"
+archive(native, plugin) = "lambda-term.cmxs"
+exists_if = "lambda-term.cma"
+# OASIS_STOP
+
