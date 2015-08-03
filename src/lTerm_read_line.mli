@@ -71,6 +71,8 @@ type action =
       (** Clear the screen. *)
   | Prev_search
       (** Search backward in the history. *)
+  | Next_search
+      (** Search forward in the history. *)
   | Cancel_search
       (** Cancel search mode. *)
   | Break

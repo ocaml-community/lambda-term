@@ -63,6 +63,7 @@ type action =
   | Accept
   | Clear_screen
   | Prev_search
+  | Next_search
   | Cancel_search
   | Break
   | Suspend
@@ -81,6 +82,7 @@ let doc_of_action = function
   | Accept -> "accept the current input."
   | Clear_screen -> "clear the screen."
   | Prev_search -> "search backward in the history."
+  | Next_search -> "search forward in the history."
   | Cancel_search -> "cancel search mode."
   | Break -> "cancel edition."
   | Suspend -> "suspend edition."
@@ -98,6 +100,7 @@ let actions = [
   Accept, "accept";
   Clear_screen, "clear-screen";
   Prev_search, "prev-search";
+  Next_search, "next-search";
   Cancel_search, "cancel-search";
   Break, "break";
   Suspend, "suspend";
@@ -164,6 +167,7 @@ let () =
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'm') }] [Accept];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'l') }] [Clear_screen];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'r') }] [Prev_search];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 's') }] [Next_search];
   bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'd') }] [Interrupt_or_delete_next_char];
   bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'p') }] [History_prev];
   bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'n') }] [History_next];
@@ -216,6 +220,14 @@ let no_completion = {
   words = [];
   count = 0;
 }
+
+type direction = Forward | Backward
+
+type search_status =
+  { before : Zed_utf8.t list
+  ; after  : Zed_utf8.t list
+  ; match_ : (Zed_utf8.t * int) option
+  }
 
 class virtual ['a] engine ?(history = []) ?(clipboard = LTerm_edit.clipboard) ?(macro = macro) () =
   let edit : unit Zed_edit.t = Zed_edit.create ~clipboard () in
@@ -300,41 +312,86 @@ object(self)
   (* The event which search for the string in the history. *)
   val mutable search_event = E.never
 
-  (* The result of the search. If the search was successful it
-     contains the matched history entry, the position of the substring
-     in this entry and the rest of the history. *)
-  val mutable search_result = None
+  val mutable search_status = None
 
   initializer
-    search_event <- E.map (fun _ -> search_result <- None; self#search) (E.when_ (S.map (fun mode -> mode = Search) mode) (Zed_edit.changes edit))
-
-  method private search =
-    let input = Zed_rope.to_string (Zed_edit.text edit) in
-    let rec loop = function
-      | [] ->
-          search_result <- None;
-          set_message (Some(LTerm_text.of_string "Reverse search: not found"))
-      | entry :: rest ->
-          match search_string entry input with
-            | Some pos -> begin
-                match search_result with
-                  | Some(entry', _, _) when entry = entry' ->
-                      loop rest
-                  | _ ->
-                      search_result <- Some(entry, pos, rest);
-                      let txt = LTerm_text.of_string entry in
-                      for i = pos to pos + Zed_rope.length (Zed_edit.text edit) - 1 do
-                        let ch, style = txt.(i) in
-                        txt.(i) <- (ch, { style with underline = Some true })
-                      done;
-                      set_message (Some(Array.append (LTerm_text.of_string "Reverse search: ") txt))
-              end
-            | None ->
-                loop rest
+    let reset_search _ =
+      search_status <- None;
+      self#search Backward
     in
-    match search_result with
-      | Some(entry, pos, rest) -> loop rest
-      | None -> loop (fst (S.value history))
+    search_event <-
+      E.map reset_search
+        (E.when_ (S.map (fun mode -> mode = Search) mode)
+           (Zed_edit.changes edit))
+
+  method private search direction =
+    let do_search direction =
+      let set_status other_entries entries match_ =
+        let before, after =
+          match direction with
+          | Backward -> (other_entries, entries)
+          | Forward  -> (entries, other_entries)
+        in
+        search_status <- Some { before; after; match_ }
+      in
+      let input = Zed_rope.to_string (Zed_edit.text edit) in
+      let rec loop other_entries entries =
+        match entries with
+        | [] ->
+          set_status other_entries entries None;
+          set_message (Some(LTerm_text.of_string "Reverse search: not found"))
+        | entry :: rest ->
+          match search_string entry input with
+          | Some pos -> begin
+              match search_status with
+              | Some { match_ = Some (entry', _) } when entry = entry' ->
+                loop (entry :: other_entries) rest
+              | _ ->
+                set_status other_entries rest (Some (entry, pos));
+                let txt = LTerm_text.of_string entry in
+                for i = pos to pos + Zed_rope.length (Zed_edit.text edit) - 1 do
+                  let ch, style = txt.(i) in
+                  txt.(i) <- (ch, { style with underline = Some true })
+                done;
+                set_message
+                  (Some (Array.append (LTerm_text.of_string "Reverse search: ") txt))
+            end
+          | None ->
+            loop (entry :: other_entries) rest
+      in
+      match search_status with
+      | None ->
+        let hist = fst (S.value history) in
+        loop []
+          (match direction with
+           | Backward -> hist
+           | Forward  -> List.rev hist)
+      | Some { before; after; match_ } ->
+        let other_entries, entries =
+          match direction with
+          | Backward -> (before, after)
+          | Forward  -> (after, before)
+        in
+        let other_entries =
+          match match_ with
+          | None -> other_entries
+          | Some (entry, _) -> entry :: other_entries
+        in
+        loop other_entries entries
+    in
+    match S.value mode with
+    | Search -> do_search direction
+    | Edition ->
+      let text = Zed_edit.text edit in
+      Zed_edit.goto context 0;
+      Zed_edit.remove context (Zed_rope.length text);
+      let prev, next = S.value history in
+      set_history (Zed_rope.to_string text :: (List.rev_append next prev), []);
+      search_status <- None;
+      set_mode Search;
+      do_search direction
+    | _ ->
+      ()
 
   method insert ch =
     Zed_edit.insert context (Zed_rope.singleton ch)
@@ -345,13 +402,13 @@ object(self)
       | (Complete | Complete_bar | Accept) when S.value mode = Search -> begin
           set_mode Edition;
           set_message None;
-          match search_result with
-            | Some(entry, pos, rest) ->
-                search_result <- None;
+          match search_status with
+            | Some { match_ = Some (entry, pos) } ->
+                search_status <- None;
                 Zed_edit.goto context 0;
                 Zed_edit.remove context (Zed_rope.length (Zed_edit.text edit));
                 Zed_edit.insert context (Zed_rope.of_string entry)
-            | None ->
+            | Some { match_ = None } | None ->
                 ()
         end
 
@@ -422,22 +479,8 @@ object(self)
                 Zed_edit.insert context (Zed_rope.of_string line)
         end
 
-      | Prev_search -> begin
-          match S.value mode with
-            | Search ->
-                self#search
-            | Edition ->
-                let text = Zed_edit.text edit in
-                Zed_edit.goto context 0;
-                Zed_edit.remove context (Zed_rope.length text);
-                let prev, next = S.value history in
-                set_history (Zed_rope.to_string text :: (List.rev_append next prev), []);
-                search_result <- None;
-                set_mode Search;
-                self#search
-            | _ ->
-                ()
-        end
+      | Prev_search -> self#search Backward
+      | Next_search -> self#search Forward
 
       | Cancel_search ->
           if S.value mode = Search then begin
@@ -580,7 +623,7 @@ class read_password () = object(self)
   method show_box = false
 
   method send_action = function
-    | Prev_search -> ()
+    | Prev_search | Next_search -> ()
     | action -> super#send_action action
 end
 
