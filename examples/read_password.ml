@@ -12,6 +12,8 @@
 open Lwt_react
 open LTerm_style
 
+let ( >>= ) = Lwt.( >>= )
+
 class read_password term = object(self)
   inherit LTerm_read_line.read_password () as super
   inherit [Zed_utf8.t] LTerm_read_line.term term
@@ -27,8 +29,13 @@ class read_password term = object(self)
     self#set_prompt (S.const (LTerm_text.of_string "Type a password: "))
 end
 
-lwt () =
-  lwt () = LTerm_inputrc.load () in
-  lwt term = Lazy.force LTerm.stdout in
-  lwt password = (new read_password term)#run in
+let main () =
+  LTerm_inputrc.load ()
+  >>= fun () ->
+  Lazy.force LTerm.stdout
+  >>= fun term ->
+  (new read_password term)#run
+  >>= fun password ->
   Lwt_io.printlf "You typed %S" password
+
+let () = Lwt_main.run (main ())

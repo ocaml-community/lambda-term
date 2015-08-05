@@ -61,31 +61,37 @@ end
    +-----------------------------------------------------------------+ *)
 
 let rec loop term history state =
-  match_lwt
-    try_lwt
-      let rl = new read_line ~term ~history:(LTerm_history.contents history) ~state in
-      lwt command = rl#run in
-      return (Some command)
-    with Sys.Break ->
-      return None
-  with
+  Lwt.catch (fun () ->
+    let rl = new read_line ~term ~history:(LTerm_history.contents history) ~state in
+    rl#run >|= fun command -> Some command)
+    (function
+      | Sys.Break -> return None
+      | exn -> Lwt.fail exn)
+  >>= function
   | Some command ->
-      let state, out = Interpreter.eval state command in
-      lwt () = LTerm.fprintls term (make_output state out) in
-      LTerm_history.add history command;
-      loop term history state
+    let state, out = Interpreter.eval state command in
+    LTerm.fprintls term (make_output state out)
+    >>= fun () ->
+    LTerm_history.add history command;
+    loop term history state
   | None ->
-      loop term history state
+    loop term history state
 
-(* +-----------------------------------------------------------------+
-   | Entry point                                                     |
-   +-----------------------------------------------------------------+ *)
+      (* +-----------------------------------------------------------------+
+     | Entry point                                                     |
+     +-----------------------------------------------------------------+ *)
 
-lwt () =
-  lwt () = LTerm_inputrc.load () in
-  try_lwt
+let main () =
+  LTerm_inputrc.load ()
+  >>= fun () ->
+  Lwt.catch (fun () ->
     let state = { Interpreter.n = 1 } in
-    lwt term = Lazy.force LTerm.stdout in
-    loop term (LTerm_history.create []) state
-  with LTerm_read_line.Interrupt ->
-    return ()
+    Lazy.force LTerm.stdout
+    >>= fun term ->
+    loop term (LTerm_history.create []) state)
+    (function
+      | LTerm_read_line.Interrupt -> Lwt.return ()
+      | exn -> Lwt.fail exn)
+
+let () = Lwt_main.run (main ())
+

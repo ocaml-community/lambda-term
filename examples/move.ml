@@ -46,14 +46,15 @@ let draw ui matrix coord =
     LTerm_draw.draw_styled ctx coord.row coord.col (eval [B_fg LTerm_style.lblue; S"Move me"; E_fg])
   end
 
-lwt () =
-  lwt term = Lazy.force LTerm.stdout in
+let main () =
+  Lazy.force LTerm.stdout
+  >>= fun term ->
 
   (* Coordinates of the message. *)
   let coord = ref { row = 0; col = 0 } in
 
-  lwt ui = LTerm_ui.create term (fun matrix size -> draw matrix size !coord) in
-  try_lwt
-    loop ui coord
-  finally
-    LTerm_ui.quit ui
+  LTerm_ui.create term (fun matrix size -> draw matrix size !coord)
+  >>= fun ui ->
+  Lwt.finalize (fun () -> loop ui coord) (fun () -> LTerm_ui.quit ui)
+
+let () = Lwt_main.run (main ())

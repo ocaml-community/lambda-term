@@ -13,21 +13,29 @@ open Lwt
 open LTerm_event
 
 let rec loop term =
-  lwt ev = LTerm.read_event term in
-  lwt () = Lwt_io.printl (LTerm_event.to_string ev) in
+  LTerm.read_event term
+  >>= fun ev ->
+  Lwt_io.printl (LTerm_event.to_string ev)
+  >>= fun () ->
   match ev with
-    | LTerm_event.Key{ LTerm_key.code = LTerm_key.Escape } ->
-        return ()
-    | _ ->
-        loop term
-
-lwt () =
-  lwt () = Lwt_io.printl "press escape to exit" in
-  lwt term = Lazy.force LTerm.stdout in
-  lwt () = LTerm.enable_mouse term in
-  lwt mode = LTerm.enter_raw_mode term in
-  try_lwt
+  | LTerm_event.Key{ LTerm_key.code = LTerm_key.Escape } ->
+    return ()
+  | _ ->
     loop term
-  finally
-    lwt () = LTerm.leave_raw_mode term mode in
-    LTerm.disable_mouse term
+
+let main () =
+  Lwt_io.printl "press escape to exit"
+  >>= fun () ->
+  Lazy.force LTerm.stdout
+  >>= fun term ->
+  LTerm.enable_mouse term
+  >>= fun () ->
+  LTerm.enter_raw_mode term
+  >>= fun mode ->
+  Lwt.finalize (fun () -> loop term)
+    (fun () ->
+       LTerm.leave_raw_mode term mode
+       >>= fun () ->
+       LTerm.disable_mouse term)
+
+let () = Lwt_main.run (main ())

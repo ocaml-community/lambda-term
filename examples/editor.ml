@@ -10,7 +10,7 @@
 open CamomileLibraryDyn.Camomile
 open Lwt
 
-lwt () =
+let main () =
   let waiter, wakener = wait () in
 
   let frame = new LTerm_widget.frame in
@@ -36,5 +36,8 @@ Type C-x C-c to exit.
 
 ");
 
-  lwt term = Lazy.force LTerm.stdout in
-LTerm_widget.run term frame waiter
+  Lazy.force LTerm.stdout
+  >>= fun term ->
+  LTerm_widget.run term frame waiter
+
+let () = Lwt_main.run (main ())

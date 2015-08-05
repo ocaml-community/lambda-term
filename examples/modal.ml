@@ -2,7 +2,7 @@ open Lwt
 open Lwt_react
 open LTerm_widget
 
-lwt () =
+let main () =
   let do_run, push_layer, pop_layer, exit = prepare_simple_run () in
 
   let vbox = new vbox in
@@ -56,3 +56,5 @@ lwt () =
   change#on_click (push_layer layer2);
 
   do_run frame
+
+let () = Lwt_main.run (main ())

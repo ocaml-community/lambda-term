@@ -18,7 +18,7 @@ let get_time () =
     localtime.Unix.tm_min
     localtime.Unix.tm_sec
 
-lwt () =
+let main () =
   let waiter, wakener = wait () in
 
   let vbox = new vbox in
@@ -34,5 +34,8 @@ lwt () =
   button#on_click (wakeup wakener);
 
   (* Run in the standard terminal. *)
-  lwt term = Lazy.force LTerm.stdout in
+  Lazy.force LTerm.stdout
+  >>= fun term ->
   run term vbox waiter
+
+let () = Lwt_main.run (main ())

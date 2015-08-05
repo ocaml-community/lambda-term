@@ -99,7 +99,7 @@ let get_paths () =
 let get_binaries () =
   Lwt_list.fold_left_s
     (fun set dir ->
-       try_lwt
+       Lwt.catch (fun () ->
          Lwt_stream.fold
            (fun file set ->
               if file <> "." && file <> ".." then
@@ -107,9 +107,10 @@ let get_binaries () =
               else
                 set)
            (Lwt_unix.files_of_directory dir)
-           set
-       with Unix.Unix_error _ ->
-         return set)
+           set)
+         (function
+           | Unix.Unix_error _ -> return set
+           | exn -> Lwt.fail exn))
     String_set.empty
     (get_paths ())
   >|= String_set.elements
@@ -143,41 +144,50 @@ end
    +-----------------------------------------------------------------+ *)
 
 let rec loop term history exit_code =
-  lwt binaries = get_binaries () in
-  match_lwt
-    try_lwt
-      lwt command = (new read_line ~term ~history:(LTerm_history.contents history) ~exit_code ~binaries)#run in
-      return (Some command)
-    with Sys.Break ->
-      return None
-  with
-    | Some command ->
-        lwt status =
-          try_lwt
-            Lwt_process.exec (Lwt_process.shell command)
-          with Unix.Unix_error (Unix.ENOENT, _, _) ->
-            lwt () = LTerm.fprintls term (eval [B_fg lred; S "command not found"]) in
-            return (Unix.WEXITED 127)
-        in
-        LTerm_history.add history command;
-        loop
-          term
-          history
-          (match status with
-             | Unix.WEXITED code -> code
-             | Unix.WSIGNALED code -> code
-             | Unix.WSTOPPED code -> code)
-    | None ->
-        loop term history 130
+  get_binaries ()
+  >>= fun binaries ->
+  Lwt.catch (fun () ->
+    (new read_line ~term ~history:(LTerm_history.contents history)
+      ~exit_code ~binaries)#run
+    >|= fun command -> Some command)
+    (function
+      | Sys.Break -> return None
+      | exn -> Lwt.fail exn)
+  >>= function
+  | Some command ->
+    Lwt.catch (fun () -> Lwt_process.exec (Lwt_process.shell command))
+      (function
+        | Unix.Unix_error (Unix.ENOENT, _, _) ->
+          LTerm.fprintls term (eval [B_fg lred; S "command not found"])
+          >>= fun () ->
+          Lwt.return (Unix.WEXITED 127)
+        | exn -> Lwt.fail exn)
+    >>= fun status ->
+    LTerm_history.add history command;
+    loop
+      term
+      history
+      (match status with
+       | Unix.WEXITED code -> code
+       | Unix.WSIGNALED code -> code
+       | Unix.WSTOPPED code -> code)
+  | None ->
+    loop term history 130
 
 (* +-----------------------------------------------------------------+
    | Entry point                                                     |
    +-----------------------------------------------------------------+ *)
 
-lwt () =
-  lwt () = LTerm_inputrc.load () in
-  try_lwt
-    lwt term = Lazy.force LTerm.stdout in
-    loop term (LTerm_history.create []) 0
-  with LTerm_read_line.Interrupt ->
-    return ()
+let main () =
+  LTerm_inputrc.load ()
+  >>= fun () ->
+  Lwt.catch
+    (fun () ->
+       Lazy.force LTerm.stdout
+       >>= fun term ->
+       loop term (LTerm_history.create []) 0)
+    (function
+      | LTerm_read_line.Interrupt -> Lwt.return ()
+      | exn -> Lwt.fail exn)
+
+let () = Lwt_main.run (main ())

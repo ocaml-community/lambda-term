@@ -10,7 +10,7 @@
 open Lwt_react
 open Lwt
 
-lwt () =
+let main () =
   (* Create a thread waiting for escape to be pressed. *)
   let waiter, wakener = wait () in
 
@@ -23,5 +23,8 @@ lwt () =
                    | _ -> false);
 
   (* Run. *)
-  lwt term = Lazy.force LTerm.stdout in
+  Lazy.force LTerm.stdout
+  >>= fun term ->
   LTerm_widget.run term vbox waiter
+
+let () = Lwt_main.run (main ())

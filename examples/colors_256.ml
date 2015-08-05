@@ -11,8 +11,14 @@ open Lwt
 open LTerm_style
 open LTerm_text
 
-lwt () =
-  for_lwt i = 0 to 255 do
-    LTerm.printls (eval [S(Printf.sprintf "color %d: " i);
-                         B_fg(index i); S"example"; E_fg])
-  done
+let () =
+  let rec loop i =
+    if i = 16 then
+      Lwt.return ()
+    else
+      LTerm.printls (eval [S(Printf.sprintf "color %d: " i);
+                           B_fg(index i); S"example"; E_fg])
+      >>= fun () ->
+      loop (i + 1)
+  in
+  Lwt_main.run (loop 0)
