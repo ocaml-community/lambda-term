@@ -942,7 +942,11 @@ object(self)
 
                 let rec loop idx col = function
                   | [] ->
-                      ()
+                     let help_message = "(M-left, M-right, M-enter)" in
+                     let right_col = size.cols - 2 - Zed_utf8.length help_message in
+                     (* do we have enough space to draw the message right-justified? *)
+                     if right_col >= col then
+                       LTerm_draw.draw_string ctx 0 right_col help_message;
                   | (word, suffix) :: words ->
                       let len = Zed_utf8.length word in
                       LTerm_draw.draw_string ctx 0 col word;
