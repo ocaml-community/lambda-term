@@ -64,3 +64,22 @@ val load : string -> t Lwt.t
 
 val home : string
   (** The home directory. *)
+
+type xdg_location = Cache | Config | Data
+  (** The type for user-specific 'cached', 'configuration' and 'data' files. *)
+
+val xdgbd_file : loc:xdg_location -> ?allow_legacy_location:bool -> string -> string
+  (** [xdgbd_file ~loc fn] returns the full file-name for a file [fn] in the
+      XDG Base Directory corresponding to the variant given by [loc].
+
+      E.g. [xdgbd_file ~loc:LTerm_resources.Cache app_history] would return
+      something like "/home/user/.cache/app_history"
+
+      Follows the XDG Base Directory specification:
+      http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html
+
+      The optional parameter [allow_legacy_location], default [false], first
+      searches if there is already a file with the desired name in the user's
+      home directory. If it finds such a file, it returns that filename,
+      else it resorts to regular behavior.
+  *)
