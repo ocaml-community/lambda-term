@@ -24,6 +24,30 @@ let home =
       else
         ""
 
+type xdg_location = Cache | Config | Data
+
+let xdgbd_warning loc file_name =
+  let loc_name = match loc with
+    | Cache  -> "$XDG_CACHE_HOME"
+    | Config -> "$XDG_CONFIG_HOME"
+    | Data   -> "$XDG_DATA_HOME" in
+  Printf.eprintf
+    "Warning: it is recommended to move `%s` to `%s`, see:\n%s\n"
+    file_name loc_name
+    "http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html"
+
+let xdgbd_file ~loc ?(allow_legacy_location=false) name =
+  let home_file = Filename.concat home name in
+  if allow_legacy_location && Sys.file_exists home_file then
+    let () = xdgbd_warning loc home_file in
+    home_file
+  else
+    let loc_file = match loc with
+      | Cache  -> XDGBaseDir.Cache.user_file
+      | Config -> XDGBaseDir.Config.user_file
+      | Data   -> XDGBaseDir.Data.user_file in
+    loc_file name
+
 (* +-----------------------------------------------------------------+
    | Types                                                           |
    +-----------------------------------------------------------------+ *)
