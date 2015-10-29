@@ -1187,6 +1187,7 @@ object(self)
              (fun () -> Lwt_io.with_file ~mode:Input temp_fn Lwt_io.read)
              (fun s  ->
                 let s = Zed_utf8.rstrip s in
+                Zed_edit.goto_bot self#context;
                 Zed_edit.replace self#context (Zed_rope.length (Zed_edit.text self#edit))
                   (Zed_rope.of_string s);
                 Lwt.return ())
