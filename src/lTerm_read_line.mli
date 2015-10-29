@@ -79,6 +79,8 @@ type action =
       (** Raise [Sys.Break]. *)
   | Suspend
       (** Suspend the program. *)
+  | Edit_with_external_editor
+      (** Launch external editor. *)
 
 val bindings : action list Zed_input.Make(LTerm_key).t ref
   (** Bindings. *)
@@ -330,4 +332,8 @@ class virtual ['a] term : LTerm.t -> object
 
   val mutable visible : bool
     (** Whether the instance is visible. *)
+
+  method create_temporary_file_for_external_editor : string
+    (** Create a temporary file and return its path. Used for
+        editing input with an external command. *)
 end

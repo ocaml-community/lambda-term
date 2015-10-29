@@ -67,6 +67,7 @@ type action =
   | Cancel_search
   | Break
   | Suspend
+  | Edit_with_external_editor
 
 let doc_of_action = function
   | Edit action -> LTerm_edit.doc_of_action action
@@ -86,6 +87,7 @@ let doc_of_action = function
   | Cancel_search -> "cancel search mode."
   | Break -> "cancel edition."
   | Suspend -> "suspend edition."
+  | Edit_with_external_editor -> "edit input with external editor command."
 
 let actions = [
   Interrupt_or_delete_next_char, "interrupt-or-delete-next-char";
@@ -104,6 +106,7 @@ let actions = [
   Cancel_search, "cancel-search";
   Break, "break";
   Suspend, "suspend";
+  Edit_with_external_editor, "edit-with-external-editor";
 ]
 
 let actions_to_names = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> Pervasives.compare a1 a2) actions)
@@ -178,7 +181,10 @@ let () =
   bind [{ control = false; meta = true; shift = false; code = Tab }] [Complete_bar];
   bind [{ control = false; meta = true; shift = false; code = Down }] [Complete_bar];
   bind [{ control = false; meta = true; shift = false; code = Enter }] [Edit (LTerm_edit.Zed Zed_edit.Newline)];
-  bind [{ control = false; meta = false; shift = false; code = Escape }] [Cancel_search]
+  bind [{ control = false; meta = false; shift = false; code = Escape }] [Cancel_search];
+  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }
+       ;{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'e') }]
+    [Edit_with_external_editor]
 
 (* +-----------------------------------------------------------------+
    | The read-line engine                                            |
@@ -1103,6 +1109,9 @@ object(self)
       | _ ->
           self#loop
 
+  method create_temporary_file_for_external_editor =
+    Filename.temp_file "lambda-term" ".txt"
+
   method private exec = function
     | Accept :: _ when S.value self#mode = Edition ->
         Zed_macro.add self#macro Accept;
@@ -1144,6 +1153,62 @@ object(self)
           (if is_visible then self#show else return ()) >>= fun () ->
           self#exec actions
         end
+    | Edit_with_external_editor :: actions -> begin
+        let is_visible = visible in
+        self#hide >>= fun () ->
+        LTerm.flush term >>= fun () ->
+        begin
+          match mode with
+          | Some mode ->
+            LTerm.leave_raw_mode term mode
+          | None ->
+            return ()
+        end >>= fun () ->
+        let temp_fn = self#create_temporary_file_for_external_editor in
+        let input = Zed_rope.to_string (Zed_edit.text self#edit) in
+        Lwt_io.with_file ~mode:Output temp_fn (fun oc -> Lwt_io.write_line oc input)
+        >>= fun () ->
+        let editor =
+          match Sys.getenv "EDITOR" with
+          | exception Not_found -> "vi"
+          | editor -> editor
+        in
+        Printf.ksprintf Lwt_unix.system "%s %s" editor (Filename.quote temp_fn)
+        >>= fun status ->
+        (if status <> WEXITED 0 then
+           Lwt_io.eprintf "`%s %s' exited with status %d\n"
+             editor temp_fn
+             (match status with
+              | WEXITED n -> n
+              | _         -> 255)
+         else
+           Lwt.try_bind
+             (fun () -> Lwt_io.with_file ~mode:Input temp_fn Lwt_io.read)
+             (fun s  ->
+                let s = Zed_utf8.rstrip s in
+                Zed_edit.replace self#context (Zed_rope.length (Zed_edit.text self#edit))
+                  (Zed_rope.of_string s);
+                Lwt.return ())
+             (function
+               | Unix.Unix_error (err, _, _) ->
+                 Lwt_io.eprintf "%s: %s\n" temp_fn (Unix.error_message err)
+               | exn -> Lwt.fail exn)
+        )
+        >>= fun () ->
+        begin
+          match LTerm.is_a_tty term with
+          | true ->
+            LTerm.enter_raw_mode term >>= fun m ->
+            mode <- Some m;
+            return ()
+          | false ->
+            return ()
+        end
+        >>= fun () ->
+        (if is_visible then self#show else return ())
+        >>= fun () ->
+        self#exec actions
+      end
     | action :: actions ->
         self#send_action action;
         self#exec actions
