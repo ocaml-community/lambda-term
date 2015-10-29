@@ -1112,6 +1112,11 @@ object(self)
   method create_temporary_file_for_external_editor =
     Filename.temp_file "lambda-term" ".txt"
 
+  method external_editor =
+    match Sys.getenv "EDITOR" with
+    | exception Not_found -> "vi"
+    | editor -> editor
+
   method private exec = function
     | Accept :: _ when S.value self#mode = Edition ->
         Zed_macro.add self#macro Accept;
@@ -1168,11 +1173,7 @@ object(self)
         let input = Zed_rope.to_string (Zed_edit.text self#edit) in
         Lwt_io.with_file ~mode:Output temp_fn (fun oc -> Lwt_io.write_line oc input)
         >>= fun () ->
-        let editor =
-          match Sys.getenv "EDITOR" with
-          | exception Not_found -> "vi"
-          | editor -> editor
-        in
+        let editor = self#external_editor in
         Printf.ksprintf Lwt_unix.system "%s %s" editor (Filename.quote temp_fn)
         >>= fun status ->
         (if status <> WEXITED 0 then

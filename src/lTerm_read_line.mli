@@ -336,4 +336,7 @@ class virtual ['a] term : LTerm.t -> object
   method create_temporary_file_for_external_editor : string
     (** Create a temporary file and return its path. Used for
         editing input with an external command. *)
+
+  method external_editor : string
+    (** External editor command. *)
 end
