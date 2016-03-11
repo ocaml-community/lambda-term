@@ -43,7 +43,7 @@ To build the documentation:
 
 It will then be installed by `make install`.
 
-### Tests _(optionnal)_
+### Tests _(optional)_
 
 To build and execute tests:
 
