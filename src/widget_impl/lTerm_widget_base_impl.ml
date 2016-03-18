@@ -15,6 +15,8 @@ class t initial_resource_class : object
   method parent : t option
   method set_parent : t option -> unit
   method can_focus : bool
+  method focus : (t option * t option * t option * t option) option
+  method set_focus : ?left:t -> ?right:t -> ?up:t -> ?down:t -> unit -> unit
   method queue_draw : unit
   method set_queue_draw : (unit -> unit) -> unit
   method draw : LTerm_draw.context -> t -> unit
@@ -34,6 +36,13 @@ end = object(self)
   method children : t list = []
 
   method can_focus = false
+
+  val mutable focus = None
+  method focus = focus
+  method set_focus ?left ?right ?up ?down () = 
+    focus <- 
+      (if left=None && right=None && up=None && down=None then None
+      else Some(left,right,up,down))
 
   val mutable parent : t option = None
   method parent = parent

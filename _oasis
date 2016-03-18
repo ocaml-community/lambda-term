@@ -142,6 +142,13 @@ Executable buttons
   MainIs: buttons.ml
   BuildDepends: lambda-term
 
+Executable focus
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: focus.ml
+  BuildDepends: lambda-term
+
 Executable checkbuttons
   Path: examples
   Install: false
