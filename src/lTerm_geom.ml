@@ -57,3 +57,11 @@ type vert_alignment =
   | V_align_top
   | V_align_center
   | V_align_bottom
+
+type 'a directions = {
+  left : 'a;
+  right : 'a;
+  up : 'a;
+  down : 'a;
+}
+

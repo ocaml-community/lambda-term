@@ -49,8 +49,8 @@ let main () =
     widget it points to the 'right' button and we jump there. *)
   begin
     match mode with
-    | "set" -> top#set_focus ~down:(left :> t) ()
-    | "glue" -> glue#set_focus ~down:(right :> t) ()
+    | "set" -> top#set_focus { top#focus with LTerm_geom.down = Some(left :> t) }
+    | "glue" -> glue#set_focus { glue#focus with LTerm_geom.down = Some(right :> t) }
     | _ -> ()
   end;
 

@@ -20,14 +20,11 @@ class t = LTerm_widget_base_impl.t
 *)
 let get_focus x dir = 
   let f = function None -> `none | Some(x) -> `set_focus(x) in
-  match x with 
-  | None -> `none
-  | Some(left,right,up,down) ->
-    match dir with
-    | `left -> f left
-    | `right -> f right
-    | `up -> f up
-    | `down -> f down
+  match dir with
+  | `left -> f x.left
+  | `right -> f x.right
+  | `up -> f x.up
+  | `down -> f x.down
 
 let make_widget_matrix root dir =
   let { rows; cols } = LTerm_geom.size_of_rect root#allocation in
@@ -44,7 +41,7 @@ let make_widget_matrix root dir =
     in
     if widget#can_focus then begin
       set widget#allocation (`can_focus widget)
-    end else if widget#focus <> None then begin
+    end else begin
       set widget#allocation (get_focus widget#focus dir)
     end;
     List.iter loop widget#children

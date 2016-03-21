@@ -15,8 +15,8 @@ class t initial_resource_class : object
   method parent : t option
   method set_parent : t option -> unit
   method can_focus : bool
-  method focus : (t option * t option * t option * t option) option
-  method set_focus : ?left:t -> ?right:t -> ?up:t -> ?down:t -> unit -> unit
+  method focus : t option LTerm_geom.directions
+  method set_focus : t option LTerm_geom.directions -> unit
   method queue_draw : unit
   method set_queue_draw : (unit -> unit) -> unit
   method draw : LTerm_draw.context -> t -> unit
@@ -37,12 +37,9 @@ end = object(self)
 
   method can_focus = false
 
-  val mutable focus = None
+  val mutable focus = LTerm_geom.({ left=None; right=None; up=None; down=None })
   method focus = focus
-  method set_focus ?left ?right ?up ?down () = 
-    focus <- 
-      (if left=None && right=None && up=None && down=None then None
-      else Some(left,right,up,down))
+  method set_focus f = focus <- f
 
   val mutable parent : t option = None
   method parent = parent
