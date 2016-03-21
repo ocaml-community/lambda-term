@@ -45,12 +45,17 @@ let main () =
     through the 'glue' and hit exit.
 
     We can fix this two ways.  In the "set" mode when 'top' is focussed and down is 
-    pressed we jump to 'left'.  In glue mode when we search down though the glue 
-    widget it points to the 'right' button and we jump there. *)
+    pressed we jump to 'left'.  In "glue" mode when we search down though the 'glue' 
+    widget it points to the 'right' button and we jump there. 
+    
+    Finally, in "error" mode an exception is raised as focus is set to a widget with 
+    can_focus=false.
+    *)
   begin
     match mode with
     | "set" -> top#set_focus { top#focus with LTerm_geom.down = Some(left :> t) }
     | "glue" -> glue#set_focus { glue#focus with LTerm_geom.down = Some(right :> t) }
+    | "error" -> top#set_focus { top#focus with LTerm_geom.left = Some(glue :> t) }
     | _ -> ()
   end;
 

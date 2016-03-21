@@ -31,7 +31,7 @@ class t initial_resource_class : object
   method resource_class : string
   method set_resource_class : string -> unit
   method update_resources : unit
-end = object(self)
+end = object(self) 
 
   method children : t list = []
 
@@ -39,7 +39,15 @@ end = object(self)
 
   val mutable focus = LTerm_geom.({ left=None; right=None; up=None; down=None })
   method focus = focus
-  method set_focus f = focus <- f
+  method set_focus f = 
+    let check = 
+      function None -> () 
+             | Some(x) -> 
+                if not ((x : t)#can_focus) then 
+                  failwith "set_focus: target widget must have can_focus=true"
+    in
+    check f.left; check f.right; check f.up; check f.down;
+    focus <- f
 
   val mutable parent : t option = None
   method parent = parent
