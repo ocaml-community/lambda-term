@@ -152,6 +152,9 @@ class modal_frame : object
   inherit frame
 end
 
+(** A widget used for layout control within boxes *)
+class spacer : ?rows:int -> ?cols:int -> unit -> t
+
 (** {6 Lines} *)
 
 (** A horizontal line. *)
@@ -252,6 +255,22 @@ class ['a] radiobutton : 'a radiogroup -> string -> 'a -> object
    to use {!radiogroup.on_state_change} instead. *)
 
 end
+
+(** {6 Scrollbars} *)
+
+class type scrollable = object
+  method full_size : LTerm_geom.size
+  method offset : LTerm_geom.coord
+  method set_offset : LTerm_geom.coord -> unit
+end
+
+class vscrollbar : 
+  ?scroll_bar_size:int -> ?scroll_window_size:int -> ?scroll_bar_thickness:int ->
+  scrollable:scrollable -> t
+
+class hscrollbar : 
+  ?scroll_bar_size:int -> ?scroll_window_size:int -> ?scroll_bar_thickness:int ->
+  scrollable:scrollable -> t
 
 (** {6 Running in a terminal} *)
 
