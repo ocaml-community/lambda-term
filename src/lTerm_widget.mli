@@ -33,6 +33,13 @@ class t : string -> object
   method can_focus : bool
     (** Whether the widget can receive the focus or not. *)
 
+  method focus : t option LTerm_geom.directions
+    (** Specify a target widget to the left, right, up and/or down 
+        when changing focus. *)
+
+  method set_focus : t option LTerm_geom.directions -> unit
+    (** Sets the target widgets when changing focus. *)
+
   method queue_draw : unit
     (** Enqueue a redraw operation. If the widget has a parent, this
         is the same as calling the {!queue_draw} method of the parent,

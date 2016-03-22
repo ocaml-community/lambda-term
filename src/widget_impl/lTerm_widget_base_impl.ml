@@ -15,6 +15,8 @@ class t initial_resource_class : object
   method parent : t option
   method set_parent : t option -> unit
   method can_focus : bool
+  method focus : t option LTerm_geom.directions
+  method set_focus : t option LTerm_geom.directions -> unit
   method queue_draw : unit
   method set_queue_draw : (unit -> unit) -> unit
   method draw : LTerm_draw.context -> t -> unit
@@ -29,11 +31,23 @@ class t initial_resource_class : object
   method resource_class : string
   method set_resource_class : string -> unit
   method update_resources : unit
-end = object(self)
+end = object(self) 
 
   method children : t list = []
 
   method can_focus = false
+
+  val mutable focus = LTerm_geom.({ left=None; right=None; up=None; down=None })
+  method focus = focus
+  method set_focus f = 
+    let check = 
+      function None -> () 
+             | Some(x) -> 
+                if not ((x : t)#can_focus) then 
+                  failwith "set_focus: target widget must have can_focus=true"
+    in
+    check f.left; check f.right; check f.up; check f.down;
+    focus <- f
 
   val mutable parent : t option = None
   method parent = parent

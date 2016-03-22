@@ -3,17 +3,46 @@ open LTerm_key
 
 class t = LTerm_widget_base_impl.t
 
-let make_widget_matrix root =
+(* About focus; widgets may specify an optional target widget in each direction.  
+   The focus specification is intepreted in two ways based on can_focus.
+
+   can_focus=true
+
+      If the currently focussed widget has a focus specification in the required
+      direction that widget is jumped to.  Otherwise a search is performed.
+
+   can_focus=false
+
+      Widgets with can_focus=false will never be the current focus, however, 
+      they can take part in search for a widget.  When we search over such
+      a widget, if it has an appropriate focus specification then we jump
+      there.
+*)
+let get_focus x dir = 
+  let f = function None -> `none | Some(x) -> `set_focus(x) in
+  match dir with
+  | `left -> f x.left
+  | `right -> f x.right
+  | `up -> f x.up
+  | `down -> f x.down
+
+let make_widget_matrix root dir =
   let { rows; cols } = LTerm_geom.size_of_rect root#allocation in
-  let m = Array.make_matrix rows cols None in
+  let m = Array.make_matrix rows cols `none in
   let rec loop widget =
-    if widget#can_focus then begin
-      let rect = widget#allocation in
-      for r = rect.row1 to rect.row2 - 1 do
-        for c = rect.col1 to rect.col2 - 1 do
-          m.(r).(c) <- Some widget
+    let set rect widget = 
+      if widget <> `none then begin
+        for r = rect.row1 to rect.row2 - 1 do
+          for c = rect.col1 to rect.col2 - 1 do
+            m.(r).(c) <- widget
+          done
         done
-      done
+      end
+    in
+    if widget#can_focus then begin
+      set widget#allocation (`can_focus widget)
+    end else begin
+      set widget#allocation (get_focus widget#focus dir)
     end;
     List.iter loop widget#children
   in
@@ -25,31 +54,45 @@ let right coord = { coord with col = succ coord.col }
 let up coord = { coord with row = pred coord.row }
 let down coord = { coord with row = succ coord.row }
 
-let focus_to dir f root focused coord =
-  let rect = root#allocation in
-  let m = make_widget_matrix root in
-  let rec loop coord =
-    if coord.row < rect.row1 || coord.row >= rect.row2 || coord.col < rect.col1 || coord.col >= rect.col2 then
-      None
-    else
-      match m.(coord.row).(coord.col) with
-      | None ->
-          loop (dir coord)
-      | Some widget when widget = focused ->
-          loop (dir coord)
-      | Some widget ->
-          let rect = widget#allocation in
-          Some (widget, f rect coord)
+let focus_to (dir,incr_dir) f root focused coord =
+  let get_coord widget = 
+    let rect = widget#allocation in
+    { col = (rect.col1 + rect.col2) / 2; 
+      row = (rect.row1 + rect.row2) / 2 }
   in
-  loop coord
+  match get_focus focused#focus dir with
+  | `set_focus(widget) -> 
+    (* If the currently focused widget has a focus specification for
+       the given direction jump directly to that widget *)
+    Some(widget, get_coord widget)
+  | `none ->
+    (* Otherwise project a line in the appropriate direction until we hit a widget. *)
+    let rect = root#allocation in
+    let m = make_widget_matrix root dir in
+    let rec loop coord =
+      if coord.row < rect.row1 || coord.row >= rect.row2 || coord.col < rect.col1 || coord.col >= rect.col2 then
+        None
+      else
+        match m.(coord.row).(coord.col) with
+        | `none ->
+            loop (incr_dir coord)
+        | `can_focus widget when widget = focused ->
+            loop (incr_dir coord)
+        | `can_focus widget ->
+            let rect = widget#allocation in
+            Some (widget, f rect coord)
+        | `set_focus widget -> (* note; this allows widget=focused, if specified *)
+            Some (widget, get_coord widget)
+    in
+    loop coord
 
 let avg_col rect coord = { coord with col = (rect.col1 + rect.col2) / 2 }
 let avg_row rect coord = { coord with row = (rect.row1 + rect.row2) / 2 }
 
-let focus_left (* root focused coord *) = focus_to left avg_col
-let focus_right (* root focused coord *) = focus_to right avg_col
-let focus_up (* root focused coord *) = focus_to up avg_row
-let focus_down (* root focused coord *) = focus_to down avg_row
+let focus_left (* root focused coord *) = focus_to (`left,left) avg_col
+let focus_right (* root focused coord *) = focus_to (`right,right) avg_col
+let focus_up (* root focused coord *) = focus_to (`up,up) avg_row
+let focus_down (* root focused coord *) = focus_to (`down,down) avg_row
 
 class toplevel focused widget = object(self)
   inherit t "toplevel" as super
