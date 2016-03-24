@@ -10,6 +10,7 @@
 open CamomileLibraryDyn.Camomile
 open LTerm_geom
 open LTerm_key
+open LTerm_mouse
 open LTerm_widget_callbacks
 
 let section = Lwt_log.Section.make "lambda-term(buttons_impl)"
@@ -44,6 +45,10 @@ class button initial_label = object(self)
     self#on_event
       (function
          | LTerm_event.Key { control = false; meta = false; shift = false; code = Enter } ->
+             exec_callbacks click_callbacks ();
+             true
+         | LTerm_event.Mouse m when
+            m.button = Button1 && in_rect self#allocation (coord m) ->
              exec_callbacks click_callbacks ();
              true
          | _ ->
@@ -143,16 +148,21 @@ class ['a] radiobutton (group : 'a radiogroup) initial_label (id : 'a) = object(
 
   initializer
     self#on_event
-    (function
+    (fun ev ->
+      let update () = 
+        if state
+        (* no need to do anything if the button is on already *)
+        then ()
+        else group#switch_to id;
+        (* event is consumed in any case *)
+        exec_callbacks click_callbacks ();
+        true
+      in
+      match ev with
       | LTerm_event.Key { control = false; meta = false; shift = false; code }
-        when (code = Enter || code = space) ->
-          if state
-          (* no need to do anything if the button is on already *)
-          then ()
-          else group#switch_to id;
-          (* event is consumed in any case *)
-          exec_callbacks click_callbacks ();
-          true
+        when (code = Enter || code = space) -> update ()
+      | LTerm_event.Mouse m when
+        m.button = Button1 && in_rect self#allocation (coord m) -> update ()
       | _ -> false);
     self#set_resource_class "radiobutton";
     group#register_object (self :> 'a radio)

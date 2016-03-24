@@ -47,6 +47,7 @@ val meta : t -> bool
 val button : t -> button
 val row : t -> int
 val col : t -> int
+val coord : t -> LTerm_geom.coord
 
 val to_string : t -> string
   (** Returns the string representation of the given mouse event. *)

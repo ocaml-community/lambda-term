@@ -15,16 +15,23 @@ let main () =
 
   let vbox = new vbox in
   let button = new button "exit" in
+  let label = new label "_" in
   button#on_click (wakeup wakener);
   vbox#add button;
+  vbox#add label;
 
   for i = 0 to 2 do
     let hbox = new hbox in
-    hbox#add (new button ("button" ^ string_of_int (i * 3 + 1)));
+    let button i = 
+      let button = new button ("button" ^ string_of_int i) in
+      button#on_click (fun () -> label#set_text (string_of_int i));
+      button
+    in
+    hbox#add (button (i * 3 + 1));
     hbox#add ~expand:false (new vline);
-    hbox#add (new button ("button" ^ string_of_int (i * 3 + 2)));
+    hbox#add (button (i * 3 + 2));
     hbox#add ~expand:false (new vline);
-    hbox#add (new button ("button" ^ string_of_int (i * 3 + 3)));
+    hbox#add (button (i * 3 + 3));
     vbox#add ~expand:false (new hline);
     vbox#add hbox
   done;
@@ -32,8 +39,11 @@ let main () =
   let frame = new frame in
   frame#set vbox;
 
-  Lazy.force LTerm.stdout
-  >>= fun term ->
-  run term frame waiter
+  Lazy.force LTerm.stdout >>= fun term ->
+  LTerm.enable_mouse term >>= fun () ->
+  Lwt.finalize 
+    (fun () -> run term frame waiter)
+    (fun () -> LTerm.disable_mouse term)
+
 
 let () = Lwt_main.run (main ())

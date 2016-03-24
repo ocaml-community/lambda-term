@@ -34,6 +34,7 @@ let meta m = m.meta
 let button m = m.button
 let row m = m.row
 let col m = m.col
+let coord m = { LTerm_geom.row = row m; col = col m }
 
 let string_of_button = function
   | Button1 -> "Button1"

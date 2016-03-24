@@ -121,14 +121,16 @@ class toplevel focused widget = object(self)
     coord <- { row = (rect.row1 + rect.row2) / 2;
                col = (rect.col1 + rect.col2) / 2 }
 
-  method private move_focus direction =
-    match direction (self :> t) !focused coord with
+  method move_focus_to = function
     | Some (widget, c) ->
       coord <- c;
       focused := widget;
       self#queue_draw
     | None ->
       ()
+
+  method private move_focus direction =
+    self#move_focus_to @@ direction (self :> t) !focused coord 
 
   method private process_arrows = function
     | LTerm_event.Key { control = false; meta = false; shift = false; code = Left } ->
@@ -143,6 +145,7 @@ class toplevel focused widget = object(self)
     | LTerm_event.Key { control = false; meta = false; shift = false; code = Down } ->
         self#move_focus focus_down;
         true
+
     | other_event ->
         false
 
