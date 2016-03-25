@@ -10,10 +10,10 @@
 (** Common types. *)
 
 (** Type of sizes. *)
-type size = {
-  rows : int;
-  cols : int;
-}
+type size =
+  { rows : int
+  ; cols : int
+  }
 
 val rows : size -> int
 val cols : size -> int
@@ -22,10 +22,10 @@ val string_of_size : size -> string
   (** Returns the string representation of the given size. *)
 
 (** Type of coordinates. *)
-type coord = {
-  row : int;
-  col : int;
-}
+type coord =
+  { row : int
+  ; col : int
+  }
 
 val row : coord -> int
 val col : coord -> int
@@ -34,12 +34,12 @@ val string_of_coord : coord -> string
   (** Returns the string representation of the given coordinates. *)
 
 (** Type of rectangles. *)
-type rect = {
-  row1 : int;
-  col1 : int;
-  row2 : int;
-  col2 : int;
-}
+type rect =
+  { row1 : int
+  ; col1 : int
+  ; row2 : int
+  ; col2 : int
+  }
 
 val row1 : rect -> int
 val col1 : rect -> int
@@ -56,22 +56,26 @@ val in_rect : rect -> coord -> bool
   (** Test if coord is within rect *)
 
 (** Horizontal alignment. *)
-type horz_alignment =
-  | H_align_left
-  | H_align_center
-  | H_align_right
+module Horz_alignment : sig
+  type t =
+    | Left
+    | Center
+    | Right
+end
 
 (** Vertical alignement. *)
-type vert_alignment =
-  | V_align_top
-  | V_align_center
-  | V_align_bottom
+module Vert_alignment : sig
+  type t =
+    | Top
+    | Center
+    | Bottom
+end
 
 (** Movement directions. *)
-type 'a directions = {
-  left : 'a;
-  right : 'a;
-  up : 'a;
-  down : 'a;
-}
+type 'a directions =
+  { left  : 'a
+  ; right : 'a
+  ; up    : 'a
+  ; down  : 'a
+  }
 

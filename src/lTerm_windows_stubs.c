@@ -13,11 +13,11 @@
 #include <caml/alloc.h>
 #include <caml/memory.h>
 #include <caml/fail.h>
+#include <caml/unixsupport.h>
 
 #if defined(_WIN32) || defined(_WIN64)
 
 #include <windows.h>
-#include <lwt_unix.h>
 
 /* +-----------------------------------------------------------------+
    | Codepage functions                                              |
@@ -89,80 +89,16 @@ static WORD code_table[] = {
   VK_BACK
 };
 
-struct job_read_console_input {
-  struct lwt_unix_job job;
-  HANDLE handle;
-  INPUT_RECORD input;
-  DWORD error_code;
-};
-
 #define Job_read_console_input_val(v) *(struct job_read_console_input**)Data_custom_val(v)
 
-static void worker_read_console_input(struct job_read_console_input *job)
-{
-  DWORD event_count;
-  INPUT_RECORD *input = &(job->input);
-  WORD code;
-  int i;
-  DWORD bs;
-
-  for (;;) {
-    if (!ReadConsoleInputW(job->handle, input, 1, &event_count)) {
-      job->error_code = GetLastError();
-      return;
-    }
-
-    switch (input->EventType) {
-    case KEY_EVENT:
-      if (input->Event.KeyEvent.bKeyDown) {
-        if (input->Event.KeyEvent.uChar.UnicodeChar)
-          return;
-        code = input->Event.KeyEvent.wVirtualKeyCode;
-        for (i = 0; i < sizeof(code_table)/sizeof(code_table[0]); i++)
-          if (code == code_table[i])
-            return;
-      }
-      break;
-    case MOUSE_EVENT: {
-      bs = input->Event.MouseEvent.dwButtonState;
-      if (!(input->Event.MouseEvent.dwEventFlags & MOUSE_MOVED) &&
-          bs & (FROM_LEFT_1ST_BUTTON_PRESSED |
-                FROM_LEFT_2ND_BUTTON_PRESSED |
-                FROM_LEFT_3RD_BUTTON_PRESSED |
-                FROM_LEFT_4TH_BUTTON_PRESSED |
-                RIGHTMOST_BUTTON_PRESSED))
-        return;
-      break;
-    }
-    case WINDOW_BUFFER_SIZE_EVENT:
-      return;
-    }
-  }
-}
-
-CAMLprim value lt_windows_read_console_input_job(value val_fd)
-{
-  struct job_read_console_input *job = lwt_unix_new(struct job_read_console_input);
-  job->job.worker = (lwt_unix_job_worker)worker_read_console_input;
-  job->handle = Handle_val(val_fd);
-  job->error_code = 0;
-  return lwt_unix_alloc_job(&(job->job));
-}
-
-CAMLprim value lt_windows_read_console_input_result(value val_job)
+static value interpret_input(INPUT_RECORD *input)
 {
   INPUT_RECORD *input;
   DWORD cks, bs;
   WORD code;
   int i;
-  CAMLparam1(val_job);
+  CAMLparam0();
   CAMLlocal3(result, x, y);
-  struct job_read_console_input *job = Job_read_console_input_val(val_job);
-  if (job->error_code) {
-    win32_maperr(job->error_code);
-    uerror("ReadConsoleInput", Nothing);
-  }
-  input = &(job->input);
   switch (input->EventType) {
   case KEY_EVENT: {
     result = caml_alloc(1, 0);
@@ -212,10 +148,47 @@ CAMLprim value lt_windows_read_console_input_result(value val_job)
   CAMLreturn(Val_int(0));
 }
 
-CAMLprim value lt_windows_read_console_input_free(value val_job)
+CAMLprim value lt_windows_read_console_input_job(value val_fd)
 {
-  lwt_unix_free_job(&(Job_read_console_input_val(val_job))->job);
-  return Val_unit;
+  HANDLE handle = Handle_val(val_fd);
+  DWORD event_count;
+  INPUT_RECORD *input = &(job->input);
+  WORD code;
+  int i;
+  DWORD bs;
+
+  for (;;) {
+    if (!ReadConsoleInputW(handle, input, 1, &event_count)) {
+      win32_maperr(GetLastError);
+      uerror("ReadConsoleInput", Nothing);
+    }
+
+    switch (input->EventType) {
+    case KEY_EVENT:
+      if (input->Event.KeyEvent.bKeyDown) {
+        if (input->Event.KeyEvent.uChar.UnicodeChar)
+          return interpret_input (input);
+        code = input->Event.KeyEvent.wVirtualKeyCode;
+        for (i = 0; i < sizeof(code_table)/sizeof(code_table[0]); i++)
+          if (code == code_table[i])
+            return interpret_input (input);
+      }
+      break;
+    case MOUSE_EVENT: {
+      bs = input->Event.MouseEvent.dwButtonState;
+      if (!(input->Event.MouseEvent.dwEventFlags & MOUSE_MOVED) &&
+          bs & (FROM_LEFT_1ST_BUTTON_PRESSED |
+                FROM_LEFT_2ND_BUTTON_PRESSED |
+                FROM_LEFT_3RD_BUTTON_PRESSED |
+                FROM_LEFT_4TH_BUTTON_PRESSED |
+                RIGHTMOST_BUTTON_PRESSED))
+        return interpret_input (input);
+      break;
+    }
+    case WINDOW_BUFFER_SIZE_EVENT:
+      return interpret_input (input);
+    }
+  }
 }
 
 /* +-----------------------------------------------------------------+
@@ -409,7 +382,7 @@ CAMLprim value lt_windows_write_console_output(value val_fd, value val_chars, va
   SMALL_RECT rect;
 
   /* Convert characters */
-  CHAR_INFO *buffer = (CHAR_INFO*)lwt_unix_malloc(lines * columns * sizeof (CHAR_INFO));
+  CHAR_INFO *buffer = (CHAR_INFO*)caml_stat_alloc(lines * columns * sizeof (CHAR_INFO));
   int l, c;
   CHAR_INFO *dst = buffer;
   for (l = 0; l < lines; l++) {
@@ -483,12 +456,12 @@ CAMLprim value lt_windows_fill_console_output_character(value val_fd, value val_
    | For unix                                                        |
    +-----------------------------------------------------------------+ */
 
-#include <lwt_unix.h>
+#include <errno.h>
 
 #define NA(name, feature)                       \
   CAMLprim value lt_windows_##name()            \
   {                                             \
-    lwt_unix_not_available(feature);            \
+    unix_error(ENOSYS, feature, Nothing);           \
     return Val_unit;                            \
   }
 
@@ -497,9 +470,7 @@ NA(get_console_cp, "GetConsoleCP")
 NA(set_console_cp, "SetConsoleCP")
 NA(get_console_output_cp, "GetConsoleOutputCP")
 NA(set_console_output_cp, "SetConsoleOutputCP")
-NA(read_console_input_job, "ReadConsoleInput")
-NA(read_console_input_result, "ReadConsoleInput")
-NA(read_console_input_free, "ReadConsoleInput")
+NA(read_console_input, "ReadConsoleInput")
 NA(set_console_text_attribute, "SetConsoleTextAttribute")
 NA(get_console_screen_buffer_info, "GetConsoleScreenBufferInfo")
 NA(get_console_cursor_info, "GetConsoleCursorInfo")

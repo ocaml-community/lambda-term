@@ -7,1387 +7,1268 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDyn.Camomile
-open Lwt_react
-open LTerm_geom
+module Screen = struct
+  type t = Main | Alternative
+end
 
-let return, (>>=) = Lwt.return, Lwt.(>>=)
+module Mode = struct
+  type t =
+    { echo    : bool
+    ; raw     : bool
+    ; signals : bool
+    ; mouse   : bool
+    ; screen  : Screen.t
+    }
 
-let uspace = UChar.of_char ' '
+  let default =
+    { echo    = true
+    ; raw     = false
+    ; signals = true
+    ; mouse   = false
+    ; screen  = Main
+    }
+
+  let termios_fields_equal a b =
+    a.echo    = b.echo    &&
+    a.raw     = b.raw     &&
+    a.signals = b.signals
+  ;;
+
+  let non_termios_fields_equal a b =
+    a.mouse  = b.mouse &&
+    a.screen = b.screen
+  ;;
+
+  let copy_non_termios_fields t ~from =
+    { t with mouse = from.mouse; screen = from.screen }
+  ;;
+
+  let erase_non_termios_fields t = copy_non_termios_fields t ~from:default
+end
+
+module Cursor = struct
+  type t = Visible | Hidden [@@deriving sexp_of]
+end
+
+module Terminal_io = struct
+  let rec get_attr fd =
+    try
+      Unix.tcgetattr fd
+    with Unix.Unix_error (EINTR, _, _) ->
+      get_attr fd
+  ;;
+
+  let rec set_attr fd attr =
+    try
+      Unix.tcsetattr fd TCSAFLUSH attr
+    with Unix.Unix_error (EINTR, _, _) ->
+      set_attr fd attr
+  ;;
+end
 
 (* +-----------------------------------------------------------------+
    | TTYs sizes                                                      |
    +-----------------------------------------------------------------+ *)
 
-external get_size_from_fd : Unix.file_descr -> size = "lt_term_get_size_from_fd"
-external set_size_from_fd : Unix.file_descr -> size -> unit = "lt_term_set_size_from_fd"
-
-let get_size_from_fd fd =
-  Lwt_unix.check_descriptor fd;
-  get_size_from_fd (Lwt_unix.unix_file_descr fd)
-
-let set_size_from_fd fd size =
-  Lwt_unix.check_descriptor fd;
-  set_size_from_fd (Lwt_unix.unix_file_descr fd) size
+external get_size_from_fd : Unix.file_descr -> LTerm_geom.size
+  = "lt_term_get_size_from_fd"
+(*
+  external set_size_from_fd : Unix.file_descr -> LTerm_geom.size -> unit
+  = "lt_term_set_size_from_fd"
+*)
 
 (* +-----------------------------------------------------------------+
    | The terminal type                                               |
    +-----------------------------------------------------------------+ *)
 
-exception Not_a_tty
+module Sync = struct
+  type t =
+    { len            : int
+    ; end_of_display : [ `Do_not_change | `Set of int option ]
+    ; mode           : Mode.t
+    ; cursor         : Cursor.t
+    }
+  [@@deriving sexp_of]
 
-let () =
-  Printexc.register_printer
-    (function
-       | Not_a_tty -> Some "terminal is not a tty"
-       | _ -> None)
+  let refresh ~mode ~cursor =
+    { len = 0
+    ; end_of_display = `Do_not_change
+    ; mode
+    ; finished = Ivar.create ()
+    ; cursor
+    }
+  ;;
 
-module Int_map = Map.Make(struct type t = int let compare a b = a - b end)
+  let merge l =
+    match l with
+    | [] -> assert false
+    | [t] -> t
+    | first :: rest ->
+      let ivars = List.map l ~f:(fun t -> t.finished) in
+      let finished = Ivar.create () in
+      upon (Ivar.read finished) (fun () ->
+        List.iter ivars ~f:(fun ivar -> Ivar.fill ivar ()));
+      List.fold rest ~init:{ first with finished } ~f:(fun acc t ->
+        { acc with
+           len = acc.len + t.len
+         ; end_of_display = (match t.end_of_display with
+           | `Do_not_change -> acc.end_of_display
+           | `Set _ as x -> x)
+         ; mode = t.mode
+         ; cursor = t.cursor })
+  ;;
+end
 
-type t = {
-  model : string;
-  colors : int;
-  windows : bool;
-  bold_is_bright : bool;
-  color_map : LTerm_color_mappings.map;
-  (* Informations. *)
+module Async_queue : sig
+  type 'a t [@@deriving sexp_of]
 
-  mutable raw_mode : bool;
-  (* Whether the terminal is currently in raw mode. *)
+  val create : unit -> _ t
 
-  mutable incoming_fd : Lwt_unix.file_descr;
-  mutable outgoing_fd : Lwt_unix.file_descr;
-  (* File descriptors. *)
+  val send : 'a t -> 'a -> unit
 
-  mutable ic : Lwt_io.input_channel;
-  mutable oc : Lwt_io.output_channel;
-  (* Channels. *)
+  val wait : 'a t -> 'a Deferred.t
 
-  mutable input_stream : char Lwt_stream.t;
-  (* Stream of characters read from the terminal. *)
+  val pop_all : 'a t -> 'a list
+end = struct
+  type 'a t =
+    { data           : 'a Queue.t
+    ; mutable waiter : 'a Ivar.t option
+    }
+  [@@deriving sexp_of]
 
-  mutable next_event : LTerm_event.t Lwt.t option;
-  (* Thread reading the next event from the terminal. We cannot cancel
-     the reading of an event, so we keep the last thread to reuse it
-     in case the user cancels [read_event]. *)
+  let create () =
+    { data   = Queue.create ()
+    ; waiter = None
+    }
+  ;;
 
-  mutable read_event : bool;
-  (* Whether a thread is currently reading an event. *)
+  let pop t = Queue.dequeue t.data
 
-  mutable last_reported_size : size;
-  (* The last size reported by [read_event]. *)
+  let wait t =
+    match pop t, t.waiter with
+    | None   , Some ivar -> Ivar.read ivar
+    | Some _ , Some _    -> assert false
+    | Some x , None      -> return x
+    | None   , None      ->
+      let ivar = Ivar.create () in
+      t.waiter <- Some ivar;
+      Ivar.read ivar
+  ;;
 
-  mutable size : size;
-  (* The current size of the terminal. *)
+  let rec pop_all t =
+    match pop t with
+    | None   -> []
+    | Some x -> x :: pop_all t
+  ;;
 
-  incoming_encoding : CharEncoding.t;
-  outgoing_encoding : CharEncoding.t;
-  (* Characters encodings. *)
+  let send t x =
+    match t.waiter with
+    | None      -> Queue.enqueue t.data x
+    | Some ivar -> t.waiter <- None; Ivar.fill ivar x
+  ;;
+end
 
-  outgoing_is_utf8 : bool;
-  (* Whether the outgoing encoding is UTF-8. *)
+module State = struct
+  type t = Active | Inactive | Closed [@@deriving sexp_of]
 
-  notify : LTerm_event.t Lwt_condition.t;
-  (* Condition used to send a spontaneous event. *)
+  let is_closed = function
+    | Closed -> true
+    | _      -> false
+end
 
-  mutable event : unit event;
-  (* Event which handles SIGWINCH. *)
+module Event_queue : sig
+  type t [@@deriving sexp_of]
 
-  mutable incoming_is_a_tty : bool;
-  mutable outgoing_is_a_tty : bool;
-  (* Whether input/output are tty devices. *)
+  val create : unit -> t
 
-  mutable escape_time : float;
-  (* Time to wait before returning the escape key. *)
-}
+  val send : t -> LTerm_event.t -> unit
+  val wait : t -> LTerm_event.t Deferred.t
+  val pop  : t -> LTerm_event.t option
+
+  val set_active : t -> bool -> unit
+  val close      : t -> unit
+end = struct
+  module Queue : sig
+    (* Event queue with the following invariants:
+
+       - it contains at most one Resize
+       - it contains at most one Resume
+       - it never contains a Resume followed (immediately or not) by a Resize
+
+       It can however contains a Resize followed (immediately or not) by a Resume. *)
+    type t [@@deriving sexp_of]
+    val create : unit -> t
+    val enqueue : t -> LTerm_event.t -> unit
+    val dequeue : t -> LTerm_event.t option
+    val clear : t -> unit
+  end = struct
+    type t =
+      { queue : LTerm_event.t Queue.t
+      ; mutable resume_in_queue : bool
+      ; mutable resize_in_queue : bool
+      } [@@deriving sexp_of]
+
+    let create () =
+      { queue = Queue.create ()
+      ; resume_in_queue = false
+      ; resize_in_queue = false
+      }
+    ;;
+
+    let enqueue t (ev : LTerm_event.t) =
+      match ev with
+      | Resize ->
+        (* If the user already has to handle a Resize/Resume there is no need to queue
+           another Resize. This avoid accumulating events when the terminal is not in
+           use. *)
+        if not (t.resize_in_queue || t.resume_in_queue) then begin
+          t.resize_in_queue <- true;
+          Queue.enqueue t.queue ev
+        end;
+      | Resume ->
+        if not t.resume_in_queue then begin
+          t.resume_in_queue <- true;
+          Queue.enqueue t.queue ev
+        end
+      | _ ->
+        Queue.enqueue t.queue ev
+    ;;
+
+    let dequeue t =
+      let ev = Queue.dequeue t.queue in
+      (match ev with
+       | Some Resize -> t.resize_in_queue <- false
+       | Some Resume -> t.resume_in_queue <- false
+       | _           -> ());
+      ev
+    ;;
+
+    let clear t =
+      Queue.clear t.queue;
+      t.resume_in_queue <- false;
+      t.resize_in_queue <- false;
+    ;;
+  end
+
+   type t =
+    { pending_events : Queue.t
+    ; mutable waiter : LTerm_event.t Ivar.t option
+    ; mutable state  : State.t
+    } [@@deriving sexp_of]
+
+  let create () =
+    { pending_events  = Queue.create ()
+    ; waiter          = None
+    ; state           = Active
+    }
+  ;;
+
+  let send t ev =
+    match t.state with
+    | Closed   -> assert false
+    | Inactive -> Queue.enqueue t.pending_events ev
+    | Active   ->
+      match t.waiter with
+      | None      -> Queue.enqueue t.pending_events ev
+      | Some ivar -> t.waiter <- None; Ivar.fill ivar ev
+  ;;
+
+  let pop t =
+    match t.state with
+    | Closed   -> assert false
+    | Inactive -> None
+    | Active   -> Queue.dequeue t.pending_events
+  ;;
+
+  let really_wait t =
+    let ivar = Ivar.create () in
+    t.waiter <- Some ivar;
+    Ivar.read ivar
+  ;;
+
+  let wait t =
+    match t.state with
+    | Closed   -> assert false
+    | Inactive -> really_wait t
+    | Active   ->
+      match Queue.dequeue t.pending_events, t.waiter with
+      | None    , Some ivar -> Ivar.read ivar
+      | Some _  , Some _    -> assert false
+      | Some ev , None      -> return ev
+      | None    , None      -> really_wait t
+  ;;
+
+  let set_active t active =
+    match t.state, active with
+    | Closed   , _     -> assert false
+    | Active   , true  -> ()
+    | Inactive , false -> ()
+    | Active   , false -> t.state <- Inactive
+    | Inactive , true  ->
+      t.state <- Active;
+      match t.waiter with
+      | None -> ()
+      | Some ivar ->
+        match Queue.dequeue t.pending_events with
+        | None -> ()
+        | Some ev ->
+          t.waiter <- None;
+          Ivar.fill ivar ev
+  ;;
+
+  let close t =
+    assert (not (State.is_closed t.state));
+    t.state <- Closed;
+    Queue.clear t.pending_events;
+    match t.waiter with
+    | None      -> ()
+    | Some ivar -> Ivar.fill ivar Closed
+  ;;
+end
+
+type write_result = [ `Error of exn | `Already_closed | `Ok of unit ] [@@deriving sexp_of]
+
+type t =
+  { mutable state              : State.t
+  ; windows                    : bool
+  ; model                      : string
+  ; colors                     : int
+  ; bold_is_bright             : bool
+  ; color_map                  : LTerm_color_mappings.map sexp_opaque
+  ; fd                         : Fd.t
+  ; mutable out_buf            : Bigstring.t sexp_opaque
+  ; mutable out_pos            : int
+  ; mutable size               : LTerm_geom.size
+  ; event_parser               : LTerm_unix.Event_parser.t
+  ; mutable current_write      : write_result Deferred.t
+  ; mutable sync_mutex         : Mutex.t
+  ; mutable syncing_up_to      : int
+  ; mutable reading_event      : bool
+  ; mutable initial_attr       : Unix.Terminal_io.t sexp_opaque option
+  ; mutable attr_modified      : bool (* Whether the current term attributes are different
+                                         from the initial ones *)
+  ; mutable end_of_display     : int option
+  ; mutable events             : Event_queue.t
+  ; mutable real_mode          : Mode.t (* Real mode of the terminal                *)
+  ; mutable mode_when_synced   : Mode.t (* Mode after all the current sync are done *)
+  ; mutable mode               : Mode.t
+  (* We handle cursor outside of [mode] as the position of the [show]/[hide] instructions
+     are important for rendering, so it is not something that can be managed the same way
+     as [mode] fields. *)
+  ; mutable real_cursor        : Cursor.t
+  ; mutable cursor_when_synced : Cursor.t
+  ; mutable cursor             : Cursor.t
+  ; mutable closed             : unit Ivar.t
+  }
+[@@deriving fields, sexp_of]
+
+let suspending = ref None
+let terminals = ref []
+
+let add_event t ev =
+  match t.state with
+  | Closed -> ()
+  | _      -> Event_queue.send t.events ev
+
+let escape_time t = LTerm_unix.Event_parser.escape_time t.event_parser
+let set_escape_time t span = LTerm_unix.Event_parser.set_escape_time t.event_parser span
 
 (* +-----------------------------------------------------------------+
    | Signals                                                         |
    +-----------------------------------------------------------------+ *)
 
-let resize_event, send_resize = E.create ()
-let send_resize () = send_resize ()
+module Signals = struct
+  module State = struct
+    type t =
+      | Not_managed
+      | Generate_event
+      | Handled
+    [@@deriving sexp]
+  end
+
+  type t =
+    { intr : State.t
+    ; quit : State.t
+    ; susp : State.t
+    }
+  [@@deriving sexp]
+
+  let t = ref { intr = Not_managed
+              ; quit = Not_managed
+              ; susp = Not_managed }
+
+  let handled = { intr = Handled
+                ; quit = Handled
+                ; susp = Handled }
+
+  let get () = !t
+
+  (* We do not use async in these functions. Intr and Quit are for emergency so it doesn't
+     really matters and even for Ctrl+Z, using async seems to create some visual delay. *)
+
+  let get_attr t =
+    try
+      Some (Terminal_io.get_attr (Fd.file_descr_exn t.fd))
+    with _ ->
+      None
+  ;;
+
+  let set_attr t attr =
+    try
+      Terminal_io.set_attr (Fd.file_descr_exn t.fd) attr
+    with _ ->
+      ()
+  ;;
+
+  let send t s =
+    try
+      let i = ref 0 in
+      let len = String.length s in
+      while !i < len do
+        let n =
+          try
+            Unix.write (Fd.file_descr_exn t.fd) s !i (len - !i)
+          with Unix.Unix_error (EINTR, _, _) ->
+            ()
+        in
+        i := !i + n
+      done
+    with _ -> ()
+  ;;
+
+  let reset t =
+    (match t.initial_attr with
+     | Some attr -> if t.attr_modified then set_attr t attr
+     | None -> ());
+    let cmd =
+      let mode = t.real_mode in
+      String.concat ~sep:""
+        [ if mode.mouse                then "\027[?1000l" else ""
+        ; if mode.screen = Alternative then "\027[?1049l" else ""
+        ; if t.real_cursor = Hidden    then "\027[?25h"   else ""
+        ; match t.end_of_display with
+          | None -> ""
+          | Some ofs ->
+            (* Move down, beginning of line *)
+            Printf.sprintf "\027[%dB\r" ofs
+        ]
+    in
+    if cmd <> "" then send t cmd
+  ;;
+
+  let rec abort () =
+    match !terminals with
+    | [] -> ()
+    | t :: l ->
+      match t.state with
+      | Closed | Inactive -> ()
+      | Active ->
+        t.state <- Inactive;
+        terminals := l;
+        (try reset t with _ -> ());
+        abort ()
+  ;;
+
+  let () = Caml.at_exit abort
+
+  let got_intr = ref false
+  let got_quit = ref false
+  let got_susp = ref false
+
+  (* No way it's safe to call at_exit handler from a signal handler. It's supposed to be a
+     dirty exit anyway. *)
+  external sys_exit : int -> unit = "caml_sys_exit"
+
+  let notify_async () =
+    (* SIGWINCH is managed by async *)
+    Option.iter LTerm_unix.sigwinch ~f:(fun signum ->
+      Signal.send_i signum (`Pid (Unix.getpid ())))
+  ;;
+
+  let handler signo =
+    let got, state =
+      if signo = Signal.int then
+        got_intr, !t.intr
+      else if signo = Signal.quit then
+        got_quit, !t.quit
+      else if signo = Signal.tstp then
+        got_susp, !t.susp
+      else
+        assert false
+    in
+    match state with
+    | Not_managed -> ()
+    | Generate_event -> got := true; notify_async ()
+    | Handled ->
+      if signo = Signal.tstp then
+        (* This one is just impossible to get right in a concurrent context. If the
+           program is stuck, Ctrl+Z will just not work. *)
+        (got := true; notify_async ())
+      else begin
+        abort ();
+        sys_exit 1
+      end
+  ;;
+
+  let prev_intr = ref `Default
+  let prev_quit = ref `Default
+  let prev_susp = ref `Default
+
+  let set_one prev signo (old_state:State.t) (new_state:State.t) =
+    match old_state, new_state with
+    | Not_managed, Not_managed ->
+      ()
+    | _, Not_managed ->
+      Core.Std.Signal.Expert.set signo !prev;
+      prev := `Default;
+    | Not_managed, _ ->
+      prev := Core.Std.Signal.Expert.signal signo (`Handle handler)
+    | _ ->
+      ()
+  ;;
+
+  let set new_t =
+    let old_t = !t in
+    set_one prev_intr Signal.int  old_t.intr new_t.intr;
+    set_one prev_quit Signal.quit old_t.quit new_t.quit;
+    set_one prev_susp Signal.tstp old_t.susp new_t.susp;
+    t := new_t;
+  ;;
+
+  let got_resume = ref false
+
+  let rec suspend () =
+    match !suspending with
+    | Some ivar -> Ivar.read ivar >>> suspend
+    | None ->
+      let resume_ivar = Ivar.create () in
+      suspending := Some resume_ivar;
+      let terminals = !terminals in
+      (* Wait for everybody to finish drawing *)
+      Deferred.all (List.map terminals ~f:current_write)
+      >>> fun (_ : write_result list) ->
+      let saved_attrs = List.map terminals ~f:get_attr in
+      List.iter terminals ~f:reset;
+
+      let behavior = Signal.Expert.signal Signal.tstp `Default in
+      Signal.send_i Signal.tstp (`Pid (Unix.getpid ()));
+      Signal.Expert.set Signal.tstp behavior;
+
+      List.iter2_exn terminals saved_attrs ~f:(fun t attr ->
+        t.real_mode   <- Mode.erase_non_termios_fields t.real_mode;
+        t.real_cursor <- Visible;
+        Option.iter attr ~f:(set_attr t));
+
+      suspending := None;
+      Ivar.fill resume_ivar ();
+      got_resume := true;
+      notify_async ();
+  ;;
+end
+
+let abort = Signals.abort
+
+let handle_signals t =
+  match t.state with
+  | Closed | Inactive -> ()
+  | Active ->
+    if !Signals.got_resume then begin
+      add_event t Resume;
+      (* Be sure that if the program does nothing to restore this terminal, we restore
+         at least some basic stuff. *)
+      Deferred.unit
+      >>> fun () ->
+      let sync = Sync.refresh ~mode:t.mode_when_synced ~cursor:t.cursor_when_synced in
+      Async_queue.send t.syncs sync;
+    end;
+    if !Signals.got_intr then add_event t (Signal Intr);
+    if !Signals.got_quit then add_event t (Signal Quit);
+    if !Signals.got_susp then begin
+      match !Signals.t.susp with
+      | Not_managed | Handled -> ()
+      | Generate_event -> add_event t (Signal Susp);
+    end;
+    match get_size_from_fd (Fd.file_descr_exn t.fd) with
+    | size ->
+      if size <> t.size then begin
+        t.size <- size;
+        add_event t Resize;
+      end
+    | exception _ -> ()
+;;
 
 let () =
-  match LTerm_unix.sigwinch with
-    | None ->
-        (* Check for size when something happen. *)
-        ignore (Lwt_sequence.add_r send_resize Lwt_main.enter_iter_hooks)
-    | Some signum ->
-        try
-          ignore (Lwt_unix.on_signal signum (fun _ -> send_resize ()))
-        with Not_found ->
-          ignore (Lwt_sequence.add_r send_resize Lwt_main.enter_iter_hooks)
-
-(* +-----------------------------------------------------------------+
-   | Creation                                                        |
-   +-----------------------------------------------------------------+ *)
-
-let default_model, term_defined =
-  try
-    (Sys.getenv "TERM", true)
-  with Not_found ->
-    ("dumb", false)
-
-let colors_of_term = function
-  | "Eterm-256color" -> 256
-  | "Eterm-88color" -> 88
-  | "gnome-256color" -> 256
-  | "iTerm.app" -> 256
-  | "konsole-256color" -> 256
-  | "mlterm-256color" -> 256
-  | "mrxvt-256color" -> 256
-  | "putty-256color" -> 256
-  | "rxvt-256color" -> 256
-  | "rxvt-88color" -> 88
-  | "rxvt-unicode-256color" -> 256
-  | "rxvt-unicode" -> 88
-  | "screen-256color" -> 256
-  | "screen-256color-bce" -> 256
-  | "screen-256color-bce-s" -> 256
-  | "screen-256color-s" -> 256
-  | "st-256color" -> 256
-  | "vte-256color" -> 256
-  | "xterm-256color" -> 256
-  | "xterm+256color" -> 256
-  | "xterm-88color" -> 88
-  | "xterm+88color" -> 88
-  | _ -> 16
-
-exception No_such_encoding of string
-
-let char_encoding_of_name name =
-  try
-    CharEncoding.of_name name
-  with Not_found ->
-    raise (No_such_encoding name)
-
-(* UTF-8 on windows. *)
-let () = CharEncoding.alias "CP65001" "UTF-8"
-
-let empty_stream = Lwt_stream.from (fun () -> return None)
-
-let create
-      ?(windows=Sys.win32)
-      ?(model=default_model)
-      ?incoming_encoding
-      ?outgoing_encoding
-      incoming_fd incoming_channel outgoing_fd outgoing_channel
-  =
-  Lwt.catch (fun () ->
-    (* Colors stuff. *)
-    let colors = if windows then 16 else colors_of_term model in
-    let bold_is_bright =
-      match model with
-        | "linux" (* The linux frame buffer *)
-        | "xterm-color" (* The MacOS-X terminal *) ->
-            true
-        | _ ->
-            false
-    in
-    let color_map =
-      match colors with
-        | 16 -> LTerm_color_mappings.colors_16
-        | 88 -> LTerm_color_mappings.colors_88
-        | 256 -> LTerm_color_mappings.colors_256
-        | n -> Printf.ksprintf failwith "LTerm.create: unknown number of colors (%d)" n
-    in
-    (* Encodings. *)
-    let incoming_encoding =
-      char_encoding_of_name
-        (match incoming_encoding with
-           | Some name ->
-               name
-           | None ->
-               if windows then
-                 Printf.sprintf "CP%d" (LTerm_windows.get_console_cp ())
-               else
-                 LTerm_unix.system_encoding)
-    and outgoing_encoding =
-      char_encoding_of_name
-        (match outgoing_encoding with
-           | Some name ->
-               name
-           | None ->
-               if windows then
-                 Printf.sprintf "CP%d" (LTerm_windows.get_console_output_cp ())
-               else
-                 LTerm_unix.system_encoding) in
-    (* Check if fds are ttys. *)
-    Lwt_unix.isatty incoming_fd >>= fun incoming_is_a_tty ->
-    Lwt_unix.isatty outgoing_fd >>= fun outgoing_is_a_tty ->
-    (* Create the terminal. *)
-    let term = {
-      model;
-      colors;
-      windows;
-      bold_is_bright;
-      color_map;
-      raw_mode = false;
-      incoming_fd;
-      outgoing_fd;
-      ic = incoming_channel;
-      oc = outgoing_channel;
-      input_stream = empty_stream;
-      next_event = None;
-      read_event = false;
-      incoming_encoding;
-      outgoing_encoding;
-      outgoing_is_utf8 = CharEncoding.name_of outgoing_encoding = "UTF-8";
-      notify = Lwt_condition.create ();
-      event = E.never;
-      incoming_is_a_tty;
-      outgoing_is_a_tty;
-      escape_time = 0.1;
-      size = { rows = 0; cols = 0 };
-      last_reported_size = { rows = 0; cols = 0 };
-    } in
-    term.input_stream <- Lwt_stream.from (fun () -> Lwt_io.read_char_opt term.ic);
-    (* Setup initial size and size updater. *)
-    if term.outgoing_is_a_tty then begin
-      let check_size () =
-        let size = get_size_from_fd term.outgoing_fd in
-        if size <> term.size then begin
-          term.size <- size;
-          Lwt_condition.signal term.notify (LTerm_event.Resize size)
-        end
-      in
-      term.size <- get_size_from_fd term.outgoing_fd;
-      term.last_reported_size <- term.size;
-      term.event <- E.map check_size resize_event
+  let check () =
+    if !Signals.got_susp then begin
+      match !Signals.t.susp with
+      | Not_managed | Generate_event -> ()
+      | Handled -> Signals.suspend ()
     end;
-    return term)
-    Lwt.fail
-
-let set_io ?incoming_fd ?incoming_channel ?outgoing_fd ?outgoing_channel term =
-  let get opt x =
-    match opt with
-      | Some x -> x
-      | None -> x
+    List.iter !terminals ~f:handle_signals;
+    Signals.got_resume := false;
+    Signals.got_intr := false;
+    Signals.got_quit := false;
+    Signals.got_susp := false;
   in
-  let incoming_fd = get incoming_fd term.incoming_fd
-  and outgoing_fd = get outgoing_fd term.outgoing_fd
-  and incoming_channel = get incoming_channel term.ic
-  and outgoing_channel = get outgoing_channel term.oc in
-  (* Check if fds are ttys. *)
-  Lwt_unix.isatty incoming_fd >>= fun incoming_is_a_tty ->
-  Lwt_unix.isatty outgoing_fd >>= fun outgoing_is_a_tty ->
-  (* Apply changes. *)
-  term.incoming_fd <- incoming_fd;
-  term.outgoing_fd <- outgoing_fd;
-  term.ic <- incoming_channel;
-  term.oc <- outgoing_channel;
-  term.incoming_is_a_tty <- incoming_is_a_tty;
-  term.outgoing_is_a_tty <- outgoing_is_a_tty;
-  return ()
-
-let model t = t.model
-let colors t = t.colors
-let windows t = t.windows
-let is_a_tty t = t.incoming_is_a_tty && t.outgoing_is_a_tty
-let incoming_is_a_tty t = t.incoming_is_a_tty
-let outgoing_is_a_tty t = t.outgoing_is_a_tty
-let escape_time t = t.escape_time
-let set_escape_time t time = t.escape_time <- time
-
-let size term =
-  if term.outgoing_is_a_tty then begin
-    let size = get_size_from_fd term.outgoing_fd in
-    if size <> term.size then begin
-      term.size <- size;
-      Lwt_condition.signal term.notify (LTerm_event.Resize size)
-    end;
-    size
-  end else
-    raise Not_a_tty
-
-let get_size term =
-  Lwt.catch (fun () -> return (size term)) Lwt.fail
-
-let set_size term size = Lwt.fail (Failure "LTerm.set_size is deprecated")
+  Deferred.unit
+  >>> fun () ->
+  match LTerm_unix.sigwinch with
+  | None ->
+    Clock.every (sec 1.0) check
+  | Some signum ->
+    Signal.handle [signum] ~f:(fun _ -> check ())
+;;
 
 (* +-----------------------------------------------------------------+
    | Events                                                          |
    +-----------------------------------------------------------------+ *)
 
-class output_single (cell : UChar.t option ref) = object
-  method put char = cell := Some char
-  method flush () = ()
-  method close_out () = ()
-end
-
-let read_char term =
-  begin
-    Lwt_stream.get term.input_stream >>= fun byte_opt ->
-    match byte_opt with
-      | Some byte -> return byte
-      | None -> Lwt.fail End_of_file
-  end >>= fun first_byte ->
-  let cell = ref None in
-  let output = new CharEncoding.convert_uchar_output term.incoming_encoding (new output_single cell) in
-  let rec loop st =
-    match !cell with
-      | Some char ->
-          return char
-      | None ->
-          Lwt_stream.next st >>= fun byte ->
-          assert (output#output (String.make 1 byte) 0 1 = 1);
-          output#flush ();
-          loop st
-  in
-  Lwt.catch (fun () ->
-      assert (output#output (String.make 1 first_byte) 0 1 = 1);
-      Lwt_stream.parse term.input_stream loop)
-    (function
-    | CharEncoding.Malformed_code | Lwt_stream.Empty ->
-      return (UChar.of_char first_byte)
-    | exn -> Lwt.fail exn) >>= fun char ->
-  return (LTerm_event.Key {
-            LTerm_key.control = false;
-            LTerm_key.meta = false;
-            LTerm_key.shift = false;
-            LTerm_key.code = LTerm_key.Char char;
-          })
-
-let rec next_event term =
-  if term.windows then
-    LTerm_windows.read_console_input term.incoming_fd >>= fun input ->
-    match input with
-      | LTerm_windows.Resize ->
-          if term.outgoing_is_a_tty then
-            let size = get_size_from_fd term.outgoing_fd in
-            if size <> term.size then begin
-              term.size <- size;
-              return (LTerm_event.Resize size)
-            end else
-              next_event term
-          else
-            next_event term
-      | LTerm_windows.Key key ->
-          return (LTerm_event.Key key)
-      | LTerm_windows.Mouse mouse ->
-          let window = (LTerm_windows.get_console_screen_buffer_info term.outgoing_fd).LTerm_windows.window in
-          return (LTerm_event.Mouse {
-                    mouse with
-                      LTerm_mouse.row = mouse.LTerm_mouse.row - window.row1;
-                      LTerm_mouse.col = mouse.LTerm_mouse.col - window.col1;
-                  })
-  else
-    LTerm_unix.parse_event ~escape_time:term.escape_time term.incoming_encoding term.input_stream
-
-let wrap_next_event next_event term =
-  match term.next_event with
-    | Some thread ->
-        thread
-    | None ->
-        (* Create a non-cancelable thread. *)
-        let waiter, wakener = Lwt.wait () in
-        term.next_event <- Some waiter;
-        (* Connect the [next_event term] thread to [waiter]. *)
-        ignore
-          (Lwt.try_bind
-             (fun () -> next_event term)
-             (fun v ->
-                term.next_event <- None;
-                Lwt.wakeup wakener v;
-                return ())
-             (fun e ->
-                term.next_event <- None;
-                Lwt.wakeup_exn wakener e;
-                return ()));
-        waiter
-
-let read_event term =
-  if term.read_event then
-    Lwt.fail (Failure "LTerm.read_event: cannot read events from two thread at the same time")
-  else if term.size <> term.last_reported_size then begin
-    term.last_reported_size <- term.size;
-    return (LTerm_event.Resize term.last_reported_size)
-  end else begin
-    term.read_event <- true;
-    Lwt.finalize (fun () ->
-      if term.incoming_is_a_tty then
-        Lwt.pick [wrap_next_event next_event term; Lwt_condition.wait term.notify] >>= fun ev ->
-        match ev with
-          | LTerm_event.Resize size ->
-              term.last_reported_size <- size;
-              return (LTerm_event.Resize size)
-          | ev ->
-              return ev
-      else
-        wrap_next_event read_char term)
-      (fun () ->
-        term.read_event <- false;
-        return ())
-  end
-
-(* +-----------------------------------------------------------------+
-   | Modes                                                           |
-   +-----------------------------------------------------------------+ *)
-
-type mode =
-  | Mode_fake
-  | Mode_unix of Unix.terminal_io
-  | Mode_windows of LTerm_windows.console_mode
-
-let enter_raw_mode term =
-  if term.incoming_is_a_tty then
-    if term.raw_mode then
-      return Mode_fake
-    else if term.windows then begin
-      let mode = LTerm_windows.get_console_mode term.incoming_fd in
-      LTerm_windows.set_console_mode term.incoming_fd {
-        mode with
-          LTerm_windows.cm_echo_input = false;
-          LTerm_windows.cm_line_input = false;
-          LTerm_windows.cm_mouse_input = true;
-          LTerm_windows.cm_processed_input = false;
-          LTerm_windows.cm_window_input = true;
-      };
-      term.raw_mode <- true;
-      return (Mode_windows mode)
-    end else begin
-      Lwt_unix.tcgetattr term.incoming_fd >>= fun attr ->
-      Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH {
-        attr with
-          (* Inspired from Python-3.0/Lib/tty.py: *)
-          Unix.c_brkint = false;
-          Unix.c_inpck = false;
-          Unix.c_istrip = false;
-          Unix.c_ixon = false;
-          Unix.c_csize = 8;
-          Unix.c_parenb = false;
-          Unix.c_echo = false;
-          Unix.c_icanon = false;
-          Unix.c_vmin = 1;
-          Unix.c_vtime = 0;
-          Unix.c_isig = false;
-      } >>= fun () ->
-      term.raw_mode <- true;
-      return (Mode_unix attr)
-    end
-  else
-    Lwt.fail Not_a_tty
-
-let leave_raw_mode term mode =
-  if term.incoming_is_a_tty then
-    match mode with
-      | Mode_fake ->
-          return ()
-      | Mode_unix attr ->
-          term.raw_mode <- false;
-          Lwt_unix.tcsetattr term.incoming_fd Unix.TCSAFLUSH attr
-      | Mode_windows mode ->
-          term.raw_mode <- false;
-          LTerm_windows.set_console_mode term.incoming_fd mode;
-          return ()
-  else
-    Lwt.fail Not_a_tty
-
-let enable_mouse term =
-  if term.outgoing_is_a_tty then
-    if term.windows then
-      return ()
-    else
-      Lwt_io.write term.oc "\027[?1000h"
-  else
-    Lwt.fail Not_a_tty
-
-let disable_mouse term =
-  if term.outgoing_is_a_tty then
-    if term.windows then
-      return ()
-    else
-      Lwt_io.write term.oc "\027[?1000l"
-  else
-    Lwt.fail Not_a_tty
-
-(* +-----------------------------------------------------------------+
-   | Cursor                                                          |
-   +-----------------------------------------------------------------+ *)
-
-let show_cursor term =
-  if term.outgoing_is_a_tty then
-    if term.windows then begin
-      let size, _ = LTerm_windows.get_console_cursor_info term.outgoing_fd in
-      LTerm_windows.set_console_cursor_info term.outgoing_fd size true;
-      return ()
-    end else
-      Lwt_io.write term.oc "\027[?25h"
-  else
-    Lwt.fail Not_a_tty
-
-let hide_cursor term =
-  if term.outgoing_is_a_tty then
-    if term.windows then begin
-      let size, _ = LTerm_windows.get_console_cursor_info term.outgoing_fd in
-      LTerm_windows.set_console_cursor_info term.outgoing_fd size false;
-      return ()
-    end else
-      Lwt_io.write term.oc "\027[?25l"
-  else
-    Lwt.fail Not_a_tty
-
-let goto term coord =
-  if term.outgoing_is_a_tty then
-    if term.windows then begin
-      Lwt_io.flush term.oc >>= fun () ->
-      let window = (LTerm_windows.get_console_screen_buffer_info term.outgoing_fd).LTerm_windows.window in
-      LTerm_windows.set_console_cursor_position term.outgoing_fd {
-        row = window.row1 + coord.row;
-        col = window.col1 + coord.col;
-      };
-      return ()
-    end else begin
-      Lwt_io.fprint term.oc "\027[H" >>= fun () ->
-      (if coord.row > 0 then Lwt_io.fprintf term.oc "\027[%dB" coord.row
-                        else return ()) >>= fun () ->
-      (if coord.col > 0 then Lwt_io.fprintf term.oc "\027[%dC" coord.col
-                        else return ()) >>= fun () ->
-      return ()
-    end
-  else
-    Lwt.fail Not_a_tty
-
-let move term rows cols =
-  if term.outgoing_is_a_tty then
-    if term.windows then begin
-      Lwt_io.flush term.oc >>= fun () ->
-      let pos = (LTerm_windows.get_console_screen_buffer_info term.outgoing_fd).LTerm_windows.cursor_position in
-      LTerm_windows.set_console_cursor_position term.outgoing_fd {
-        row = pos.row + rows;
-        col = pos.col + cols;
-      };
-      return ()
-    end else
-      begin
-        match rows with
-          | n when n < 0 ->
-              Lwt_io.fprintf term.oc "\027[%dA" (-n)
-          | n when n > 0 ->
-              Lwt_io.fprintf term.oc "\027[%dB" n
-          | _ ->
-              return ()
-      end >>= fun () ->
-      begin
-        match cols with
-          | n when n < 0 ->
-              Lwt_io.fprintf term.oc "\027[%dD" (-n)
-          | n when n > 0 ->
-              Lwt_io.fprintf term.oc "\027[%dC" n
-          | _ ->
-              return ()
+let read_event ?(no_text=false) t : LTerm_event.t Deferred.t =
+  if State.is_closed t.state then
+    failwiths "Term.read_event called on closed terminal" t sexp_of_t;
+  match Event_queue.pop t.events with
+  | Some ev -> return ev
+  | None ->
+    if t.reading_event then
+      Event_queue.wait t.events
+    else begin
+      let next_event = LTerm_unix.Event_parser.read ~no_text t.event_parser in
+      if Deferred.is_determined next_event then
+        next_event
+      else begin
+        t.reading_event <- true;
+        upon next_event (fun ev ->
+          t.reading_event <- false;
+          add_event t ev);
+        Event_queue.wait t.events
       end
-  else
-    Lwt.fail Not_a_tty
-
-(* +-----------------------------------------------------------------+
-   | Erasing text                                                    |
-   +-----------------------------------------------------------------+ *)
-
-let clear_screen term =
-  if term.outgoing_is_a_tty then
-    if term.windows then begin
-      let info = LTerm_windows.get_console_screen_buffer_info term.outgoing_fd in
-      let _ =
-        LTerm_windows.fill_console_output_character
-          term.outgoing_fd
-          uspace
-          (info.LTerm_windows.size.cols * info.LTerm_windows.size.rows)
-          { row = 0; col = 0 }
-      in
-      return ()
-    end else
-      Lwt_io.write term.oc "\027[2J"
-  else
-    Lwt.fail Not_a_tty
-
-let clear_screen_next term =
-  if term.outgoing_is_a_tty then
-    if term.windows then begin
-      let info = LTerm_windows.get_console_screen_buffer_info term.outgoing_fd in
-      let _ =
-        LTerm_windows.fill_console_output_character
-          term.outgoing_fd
-          uspace
-          (info.LTerm_windows.size.cols * (info.LTerm_windows.size.rows - info.LTerm_windows.cursor_position.row)
-           + info.LTerm_windows.size.cols - info.LTerm_windows.cursor_position.col)
-          info.LTerm_windows.cursor_position
-      in
-      return ()
-    end else
-      Lwt_io.write term.oc "\027[J"
-  else
-    Lwt.fail Not_a_tty
-
-let clear_screen_prev term =
-  if term.outgoing_is_a_tty then
-    if term.windows then begin
-      let info = LTerm_windows.get_console_screen_buffer_info term.outgoing_fd in
-      let _ =
-        LTerm_windows.fill_console_output_character
-          term.outgoing_fd
-          uspace
-          (info.LTerm_windows.size.cols * info.LTerm_windows.cursor_position.row
-           + info.LTerm_windows.cursor_position.col)
-          { row = 0; col = 0 }
-      in
-      return ()
-    end else
-      Lwt_io.write term.oc "\027[1J"
-  else
-    Lwt.fail Not_a_tty
-
-let clear_line term =
-  if term.outgoing_is_a_tty then
-    if term.windows then begin
-      let info = LTerm_windows.get_console_screen_buffer_info term.outgoing_fd in
-      let _ =
-        LTerm_windows.fill_console_output_character
-          term.outgoing_fd
-          uspace
-          info.LTerm_windows.size.cols
-          { row = info.LTerm_windows.cursor_position.row; col = 0 }
-      in
-      return ()
-    end else
-      Lwt_io.write term.oc "\027[2K"
-  else
-    Lwt.fail Not_a_tty
-
-let clear_line_next term =
-  if term.outgoing_is_a_tty then
-    if term.windows then begin
-      let info = LTerm_windows.get_console_screen_buffer_info term.outgoing_fd in
-      let _ =
-        LTerm_windows.fill_console_output_character
-          term.outgoing_fd
-          uspace
-          (info.LTerm_windows.size.cols - info.LTerm_windows.cursor_position.col)
-          info.LTerm_windows.cursor_position
-      in
-      return ()
-    end else
-      Lwt_io.write term.oc "\027[K"
-  else
-    Lwt.fail Not_a_tty
-
-let clear_line_prev term =
-  if term.outgoing_is_a_tty then
-    if term.windows then begin
-      let info = LTerm_windows.get_console_screen_buffer_info term.outgoing_fd in
-      let _ =
-        LTerm_windows.fill_console_output_character
-          term.outgoing_fd
-          uspace
-          info.LTerm_windows.cursor_position.col
-          { row = info.LTerm_windows.cursor_position.row; col = 0 }
-      in
-      return ()
-    end else
-      Lwt_io.write term.oc "\027[1K"
-  else
-    Lwt.fail Not_a_tty
-
-(* +-----------------------------------------------------------------+
-   | State                                                           |
-   +-----------------------------------------------------------------+ *)
-
-let save_state term =
-  if term.outgoing_is_a_tty then
-    if term.windows then
-      return ()
-    else
-      Lwt_io.write term.oc "\027[?1049h"
-  else
-    Lwt.fail Not_a_tty
-
-let load_state term =
-  if term.outgoing_is_a_tty then
-    if term.windows then
-      return ()
-    else
-      Lwt_io.write term.oc "\027[?1049l"
-  else
-    Lwt.fail Not_a_tty
+    end
+;;
 
 (* +-----------------------------------------------------------------+
    | String recoding                                                 |
    +-----------------------------------------------------------------+ *)
 
-let vline = UChar.of_char '|'
-let vlline = UChar.of_char '+'
-let dlcorner = UChar.of_char '+'
-let urcorner = UChar.of_char '+'
-let huline = UChar.of_char '+'
-let hdline = UChar.of_char '+'
-let vrline = UChar.of_char '+'
-let hline = UChar.of_char '-'
-let cross = UChar.of_char '+'
-let ulcorner = UChar.of_char '+'
-let drcorner = UChar.of_char '+'
-let question = UChar.of_char '?'
-
-module UNF = UNF.Make (UText)
+(* Generated by gen/gen_pieces.ml *)
+let ucode_to_ascii_approx = "--||........++++++++++++++++++++\
+                             ++++++++++++++++++++++++++++++++\
+                             ++++++++++++....-|++++++++++++++\
+                             +++++++++++++.......++++++++-|-|"
 
 (* Map characters that cannot be encoded to ASCII ones. *)
-let map_char char =
-  match UChar.code char with
-    | 0x2500 -> hline
-    | 0x2501 -> hline
-    | 0x2502 -> vline
-    | 0x2503 -> vline
-    | 0x2504 -> hline
-    | 0x2505 -> hline
-    | 0x2506 -> vline
-    | 0x2507 -> vline
-    | 0x2508 -> hline
-    | 0x2509 -> hline
-    | 0x250a -> vline
-    | 0x250b -> vline
-    | 0x250c -> drcorner
-    | 0x250d -> drcorner
-    | 0x250e -> drcorner
-    | 0x250f -> drcorner
-    | 0x2510 -> dlcorner
-    | 0x2511 -> dlcorner
-    | 0x2512 -> dlcorner
-    | 0x2513 -> dlcorner
-    | 0x2514 -> urcorner
-    | 0x2515 -> urcorner
-    | 0x2516 -> urcorner
-    | 0x2517 -> urcorner
-    | 0x2518 -> ulcorner
-    | 0x2519 -> ulcorner
-    | 0x251a -> ulcorner
-    | 0x251b -> ulcorner
-    | 0x251c -> vrline
-    | 0x251d -> vrline
-    | 0x251e -> vrline
-    | 0x251f -> vrline
-    | 0x2520 -> vrline
-    | 0x2521 -> vrline
-    | 0x2522 -> vrline
-    | 0x2523 -> vrline
-    | 0x2524 -> vlline
-    | 0x2525 -> vlline
-    | 0x2526 -> vlline
-    | 0x2527 -> vlline
-    | 0x2528 -> vlline
-    | 0x2529 -> vlline
-    | 0x252a -> vlline
-    | 0x252b -> vlline
-    | 0x252c -> hdline
-    | 0x252d -> hdline
-    | 0x252e -> hdline
-    | 0x252f -> hdline
-    | 0x2530 -> hdline
-    | 0x2531 -> hdline
-    | 0x2532 -> hdline
-    | 0x2533 -> hdline
-    | 0x2534 -> huline
-    | 0x2535 -> huline
-    | 0x2536 -> huline
-    | 0x2537 -> huline
-    | 0x2538 -> huline
-    | 0x2539 -> huline
-    | 0x253a -> huline
-    | 0x253b -> huline
-    | 0x253c -> cross
-    | 0x253d -> cross
-    | 0x253e -> cross
-    | 0x253f -> cross
-    | 0x2540 -> cross
-    | 0x2541 -> cross
-    | 0x2542 -> cross
-    | 0x2543 -> cross
-    | 0x2544 -> cross
-    | 0x2545 -> cross
-    | 0x2546 -> cross
-    | 0x2547 -> cross
-    | 0x2548 -> cross
-    | 0x2549 -> cross
-    | 0x254a -> cross
-    | 0x254b -> cross
-    | 0x254c -> hline
-    | 0x254d -> hline
-    | 0x254e -> vline
-    | 0x254f -> vline
-    | 0x2550 -> hline
-    | 0x2551 -> vline
-    | _ ->
-        match UNF.nfd_decompose char with
-          | char :: _ ->
-              if UChar.code char <= 127 then
-                char
-              else
-                question
-          | [] ->
-              question
-
-class output_to_buffer buf res = object
-  method output str ofs len =
-    Buffer.add_substring buf str ofs len;
-    len
-  method flush () = ()
-  method close_out () =
-    res := Buffer.contents buf
-end
-
-let encode_string term str =
-  if term.outgoing_is_utf8 then
-    (* Do not recode [str] if the output is UTF-8. *)
-    str
+let ascii_approx char =
+  let c = Uchar.code char in
+  if c >= 0x2500 && c <= 0x257f then
+    match ucode_to_ascii_approx.[c - 0x2500] with
+    | '.' -> char
+    | ch  -> Uchar.of_char ch
   else
-    let buf = Buffer.create (String.length str) in
-    let res = ref "" in
-    let output = new CharEncoding.uchar_output_channel_of term.outgoing_encoding (new output_to_buffer buf res) in
-    let rec loop ofs =
-      if ofs = String.length str then begin
-        output#close_out ();
-        !res
-      end else begin
-        let ch, ofs = Zed_utf8.unsafe_extract_next str ofs in
-        (try
-           output#put ch
-         with CharEncoding.Out_of_range | UChar.Out_of_range ->
-           output#put (map_char ch));
-        loop ofs
-      end
-    in
-    loop 0
+    char
+;;
 
-let encode_char term ch =
-  if term.outgoing_is_utf8 then
-    Zed_utf8.singleton ch
-  else begin
-    let res = ref "" in
-    let output = new CharEncoding.uchar_output_channel_of term.outgoing_encoding (new output_to_buffer (Buffer.create 8) res) in
-    (try
-       output#put ch
-     with CharEncoding.Out_of_range | UChar.Out_of_range ->
-       output#put (map_char ch));
-    output#close_out ();
-    !res
-  end
+let map_char =
+  if LTerm_unix.system_encoding = "UTF-8" then Fn.id else ascii_approx
+;;
 
 (* +-----------------------------------------------------------------+
-   | Styled printing                                                 |
+   | Output buffer                                                   |
    +-----------------------------------------------------------------+ *)
 
-module Codes = struct
-  let bold = ";1"
-  let underline = ";4"
-  let blink = ";5"
-  let reverse = ";7"
-  let foreground = 30
-  let background = 40
-end
+let grow_out_buf t len =
+  let _f () = () in (* prevents inlining *)
+  if State.is_closed t.state then failwiths "closed terminal" t sexp_of_t;
+  let new_buf = Bigstring.create (Int.ceil_pow2 (len * 2)) in
+  Bigstring.blit ~src:t.out_buf ~dst:new_buf ~src_pos:0 ~dst_pos:0 ~len:t.out_pos;
+  t.out_buf <- new_buf;
+;;
 
-let fprint term str =
-  Lwt_io.fprint term.oc (encode_string term str)
+let reserve t n =
+  let len = t.out_pos + n in
+  if len > Bigstring.length t.out_buf then grow_out_buf t len;
+;;
 
-let fprintl term str =
-  fprint term (str ^ "\n")
+let add_char t c =
+  reserve t 1;
+  let pos = t.out_pos in
+  t.out_buf.{pos} <- c;
+  t.out_pos <- pos + 1;
+;;
 
-let fprintf term fmt =
-  Printf.ksprintf (fun str -> fprint term str) fmt
+let add_2chars t a b =
+  reserve t 2;
+  let buf = t.out_buf in
+  let pos = t.out_pos in
+  buf.{pos    } <- a;
+  buf.{pos + 1} <- b;
+  t.out_pos <- pos + 2;
+;;
 
-let fprintlf term fmt =
-  Printf.ksprintf (fun str -> fprintl term str) fmt
+let add_3chars t a b c =
+  reserve t 3;
+  let buf = t.out_buf in
+  let pos = t.out_pos in
+  buf.{pos    } <- a;
+  buf.{pos + 1} <- b;
+  buf.{pos + 2} <- c;
+  t.out_pos <- pos + 3;
+;;
 
-let add_int buf n =
-  let rec loop = function
-    | 0 ->
-        ()
-    | n ->
-        loop (n / 10);
-        Buffer.add_char buf (Char.unsafe_chr (48 + (n mod 10)))
-  in
-  if n = 0 then
-    Buffer.add_char buf '0'
-  else
-    loop n
+let add_substring t s ~pos ~len =
+  reserve t len;
+  let out_pos = t.out_pos in
+  Bigstring.From_string.blit ~src:s ~dst:t.out_buf ~src_pos:pos ~dst_pos:out_pos ~len;
+  t.out_pos <- out_pos + len;
+;;
 
-let map_color term r g b =
-  let open LTerm_color_mappings in
-  let map = term.color_map in
-  (* The [String.unsafe_get]s are safe because the private type
-     [LTerm_style.color] ensure that all components are in the range
-     [0..255]. *)
-  Char.code
-    (String.unsafe_get map.map
-       (Char.code (String.unsafe_get map.index_r r)
-        + map.count_r * (Char.code (String.unsafe_get map.index_g g)
-                         + map.count_g * Char.code (String.unsafe_get map.index_b b))))
+let add_string t s = add_substring t s ~pos:0 ~len:(String.length s)
 
-let add_index term buf base n =
-  if n < 8 then begin
-    Buffer.add_char buf ';';
-    add_int buf (base + n)
-  end else if n < 16 &&  term.bold_is_bright then
-    if base = Codes.foreground then begin
-      Buffer.add_string buf ";1;";
-      add_int buf (base + n - 8)
-    end else begin
-      Buffer.add_char buf ';';
-      add_int buf (base + n - 8)
-    end
+let digit n = Char.of_int_exn (Char.to_int '0' + n)
+
+let add_int t n =
+  if n < 0 || n > 999 then
+    add_string t (string_of_int n)
   else begin
-    Buffer.add_char buf ';';
-    add_int buf (base + 8);
-    Buffer.add_string buf ";5;";
-    add_int buf n
-  end
-
-let add_color term buf base = function
-  | LTerm_style.Default ->
-      ()
-  | LTerm_style.Index n ->
-      add_index term buf base n
-  | LTerm_style.RGB(r, g, b) ->
-      add_index term buf base (map_color term  r g b)
-
-let add_style term buf style =
-  let open LTerm_style in
-  Buffer.add_string buf "\027[0";
-  (match style.bold with Some true -> Buffer.add_string buf Codes.bold | _ -> ());
-  (match style.underline with Some true -> Buffer.add_string buf Codes.underline | _ -> ());
-  (match style.blink with Some true -> Buffer.add_string buf Codes.blink | _ -> ());
-  (match style.reverse with Some true -> Buffer.add_string buf Codes.reverse | _ -> ());
-  (match style.foreground with Some color -> add_color term buf Codes.foreground color | None -> ());
-  (match style.background with Some color -> add_color term buf Codes.background color | None -> ());
-  Buffer.add_char buf 'm'
-
-let expand term text =
-  if Array.length text = 0 then
-    ""
-  else begin
-    let buf = Buffer.create 256 in
-    Buffer.add_string buf "\027[0m";
-    let rec loop idx prev_style =
-      if idx = Array.length text then begin
-        Buffer.add_string buf "\027[0m";
-        Buffer.contents buf
-      end else begin
-        let ch, style = Array.unsafe_get text idx in
-        if not (LTerm_style.equal style prev_style) then add_style term buf style;
-        Buffer.add_string buf (Zed_utf8.singleton ch);
-        loop (idx + 1) style
-      end
-    in
-    loop 0 LTerm_style.none
-  end
-
-let windows_fg_color term = function
-  | LTerm_style.Default -> 7
-  | LTerm_style.Index n -> n
-  | LTerm_style.RGB(r, g, b) -> map_color term r g b
-
-let windows_bg_color term = function
-  | LTerm_style.Default -> 0
-  | LTerm_style.Index n -> n
-  | LTerm_style.RGB(r, g, b) -> map_color term r g b
-
-let windows_default_attributes = { LTerm_windows.foreground = 7; LTerm_windows.background = 0 }
-
-let windows_attributes_of_style term style =
-  let open LTerm_style in
-  if style.reverse = Some true then {
-    LTerm_windows.foreground = (match style.background with Some color -> windows_bg_color term color | None -> 0);
-    LTerm_windows.background = (match style.foreground with Some color -> windows_fg_color term color | None -> 7);
-  } else {
-    LTerm_windows.foreground = (match style.foreground with Some color -> windows_fg_color term color | None -> 7);
-    LTerm_windows.background = (match style.background with Some color -> windows_bg_color term color | None -> 0);
-  }
-
-let fprints_windows term oc text =
-  let rec loop idx prev_attr =
-    if idx = Array.length text then begin
-      Lwt_io.flush oc >>= fun () ->
-      LTerm_windows.set_console_text_attribute term.outgoing_fd windows_default_attributes;
-      return ()
-    end else begin
-      let ch, style = Array.unsafe_get text idx in
-      let attr = windows_attributes_of_style term style in
-      begin
-        if attr <> prev_attr then
-          Lwt_io.flush oc >>= fun () ->
-          LTerm_windows.set_console_text_attribute term.outgoing_fd attr;
-          return ()
-        else
-          return ()
-      end >>= fun () ->
-      Lwt_io.write oc (encode_char term ch) >>= fun () ->
-      loop (idx + 1) attr
-    end
-  in
-  Lwt_io.flush oc >>= fun () ->
-  LTerm_windows.set_console_text_attribute term.outgoing_fd windows_default_attributes;
-  loop 0 windows_default_attributes
-
-let fprints term text =
-  if term.outgoing_is_a_tty then
-    if term.windows then
-      Lwt_io.atomic (fun oc -> fprints_windows term oc text) term.oc
+    (* Fast path for the common case *)
+    if n < 10 then
+      add_char t (digit n)
+    else if n < 100 then
+      let i = n / 10 in
+      add_2chars t
+        (digit i)
+        (digit (n - i * 10))
     else
-      fprint term (expand term text)
-  else
-    fprint term (LTerm_text.to_string text)
-
-let fprintls term text =
-  fprints term (Array.append text (LTerm_text.of_string "\n"))
-
-(* +-----------------------------------------------------------------+
-   | Printing with contexts                                          |
-   +-----------------------------------------------------------------+ *)
-
-type context = {
-  ctx_term : t;
-  ctx_oc : Lwt_io.output_channel;
-  mutable ctx_style : LTerm_style.t;
-  mutable ctx_attr : LTerm_windows.text_attributes;
-}
-
-let clear_styles term oc =
-  if term.outgoing_is_a_tty then
-    if term.windows then
-      Lwt_io.flush oc >>= fun () ->
-      LTerm_windows.set_console_text_attribute term.outgoing_fd windows_default_attributes;
-      return ()
-    else
-      Lwt_io.write oc "\027[0m"
-  else
-    return ()
-
-let with_context term f =
-  Lwt_io.atomic
-    (fun oc ->
-       let ctx = {
-         ctx_term = term;
-         ctx_oc = oc;
-         ctx_style = LTerm_style.none;
-         ctx_attr = windows_default_attributes;
-       } in
-       clear_styles term oc >>= fun () ->
-       Lwt.finalize
-         (fun () -> f ctx)
-         (fun () -> clear_styles term oc))
-    term.oc
-
-let update_style ctx style =
-  if ctx.ctx_term.outgoing_is_a_tty then begin
-    if ctx.ctx_term.windows then begin
-      let attr = windows_attributes_of_style ctx.ctx_term style in
-      if attr <> ctx.ctx_attr then
-        Lwt_io.flush ctx.ctx_oc >>= fun () ->
-        LTerm_windows.set_console_text_attribute ctx.ctx_term.outgoing_fd attr;
-        ctx.ctx_attr <- attr;
-        return ()
-      else
-        return ()
-    end else begin
-      if not (LTerm_style.equal style ctx.ctx_style) then begin
-        let buf = Buffer.create 16 in
-        add_style ctx.ctx_term buf style;
-        Lwt_io.write ctx.ctx_oc (Buffer.contents buf) >>= fun () ->
-        ctx.ctx_style <- style;
-        return ()
-      end else
-        return ()
-    end
-  end else
-    return ()
-
-let context_term ctx = ctx.ctx_term
-let context_oc ctx = ctx.ctx_oc
+      let i = n /     100 in
+      let j = n - i * 100 in
+      let k = j /      10 in
+      add_3chars t
+        (digit i)
+        (digit k)
+        (digit (j - k * 10))
+  end;
+;;
 
 (* +-----------------------------------------------------------------+
-   | Styles setting                                                  |
+   | State                                                           |
    +-----------------------------------------------------------------+ *)
 
-let set_style term style =
-  if term.outgoing_is_a_tty then
-    if term.windows then begin
-      let attr = windows_attributes_of_style term style in
-      Lwt_io.atomic
-        (fun oc ->
-           Lwt_io.flush oc >>= fun () ->
-           LTerm_windows.set_console_text_attribute term.outgoing_fd attr;
-           return ())
-        term.oc
-    end else begin
-      let buf = Buffer.create 16 in
-      add_style term buf style;
-      Lwt_io.fprint term.oc (Buffer.contents buf)
-    end
-  else
-    return ()
+let show_cursor t = t.cursor <- Visible; add_string t "\027[?25h"
+let hide_cursor t = t.cursor <- Hidden ; add_string t "\027[?25l"
+
+let cursor_visible t =
+  match t.cursor with
+  | Visible -> true
+  | Hidden  -> false
+;;
+
+let set_mode t mode =
+  if t.mode.mouse <> mode.mouse then
+    add_string t
+      (match mode.mouse with
+       | true  -> "\027[?1000h"
+       | false -> "\027[?1000l");
+  if t.mode.screen <> mode.screen then
+    add_string t
+      (match mode.screen with
+       | Main        -> "\027[?1049l"
+       | Alternative -> "\027[?1049h");
+  t.mode <- mode
+;;
+
+let reset t =
+  set_mode t Mode.default;
+  if not (cursor_visible t) then show_cursor t;
+;;
+
+let add_move t n c =
+  add_2chars t '\027' '[';
+  add_int t n;
+  add_char t c
+;;
+
+let goto t (coord : LTerm_geom.coord) =
+  add_string t "\027[H";
+  if coord.row > 0 then add_move t coord.row 'B';
+  if coord.col > 0 then add_move t coord.col 'C';
+;;
+
+let move t ~rows ~cols =
+  (match rows with
+   | n when n < 0 -> add_move t (-n) 'A'
+   | n when n > 0 -> add_move t   n  'B'
+   | _ -> ());
+  (match cols with
+   | n when n < 0 -> add_move t (-n) 'D'
+   | n when n > 0 -> add_move t   n  'C'
+   | _ -> ());
+;;
+
+let clear_screen t = add_string t "\027[2J"
+
+let clear_screen_next t = add_string t "\027[J"
+let clear_screen_prev t = add_string t "\027[1J"
+
+let clear_line t = add_string t "\027[2K"
+
+let clear_line_next t = add_string t "\027[K"
+let clear_line_prev t = add_string t "\027[1K"
+
+let print = add_string
+let print_sub = add_substring
 
 (* +-----------------------------------------------------------------+
    | Rendering                                                       |
    +-----------------------------------------------------------------+ *)
 
-let same_style p1 p2 =
-  let open LTerm_draw in
-  p1.bold = p2.bold &&
-      p1.underline = p2.underline &&
-      p1.blink = p2.blink &&
-      p1.reverse = p2.reverse &&
-      p1.foreground = p2.foreground &&
-      p1.background = p2.background
+module Codes = struct
+  let reset      = '0'
+  let bold       = '1'
+  let underline  = '4'
+  let blink      = '5'
+  let reverse    = '7'
+  let foreground = 30
+  let background = 40
+end
 
-let unknown_char = UChar.of_int 0xfffd
-let unknown_utf8 = Zed_utf8.singleton unknown_char
-
-let render_style term buf old_point new_point =
-  let open LTerm_draw in
-  if not (same_style new_point old_point) then begin
-    (* Reset styles if they are different from the previous point. *)
-    Buffer.add_string buf "\027[0";
-    if new_point.bold then Buffer.add_string buf Codes.bold;
-    if new_point.underline then Buffer.add_string buf Codes.underline;
-    if new_point.blink then Buffer.add_string buf Codes.blink;
-    if new_point.reverse then Buffer.add_string buf Codes.reverse;
-    add_color term buf Codes.foreground new_point.foreground;
-    add_color term buf Codes.background new_point.background;
-    Buffer.add_char buf 'm';
+let add_index t base n =
+  if n < 8 then begin
+    add_char t ';';
+    add_int t (base + n)
+  end else if n < 16 &&  t.bold_is_bright then
+    if base = Codes.foreground then begin
+      add_3chars t ';' Codes.bold ';';
+      add_int t (base + n - 8)
+    end else begin
+      add_char t ';';
+      add_int t (base + n - 8)
+    end
+  else begin
+    add_char t ';';
+    add_int t (base + 8);
+    add_3chars t ';' '5' ';';
+    add_int t n
   end
+;;
 
-let render_point term buf old_point new_point =
-  render_style term buf old_point new_point;
+let add_color t base col =
+  match LTerm_style.Color.kind col with
+  | Transparent | Default -> ()
+  | Index | RGB -> add_index t base (LTerm_style.Color.get_index col t.color_map)
+;;
+
+let is_on : LTerm_style.Switch.t -> bool = function
+  | On -> true
+  | Off | Unset -> false
+;;
+
+let add_style t ~style =
+  add_3chars t '\027' '[' Codes.reset;
+  if is_on (LTerm_style.bold      style) then add_2chars t ';' Codes.bold;
+  if is_on (LTerm_style.underline style) then add_2chars t ';' Codes.underline;
+  if is_on (LTerm_style.blink     style) then add_2chars t ';' Codes.blink;
+  if is_on (LTerm_style.reverse   style) then add_2chars t ';' Codes.reverse;
+  add_color t Codes.foreground (LTerm_style.foreground style);
+  add_color t Codes.background (LTerm_style.background style);
+  add_char t 'm'
+;;
+
+let set_style t style = add_style t ~style
+
+let add_uchar t c =
+  let code = Uchar.code c in
+  if code < 128 then
+    add_char t (Char.of_int_exn code)
+  else begin
+    reserve t 4;
+    t.out_pos <- Zed_utf8.encode_to_bigstring t.out_buf c ~pos:t.out_pos
+  end
+;;
+
+let unknown_char = Uchar.of_int 0xfffd
+
+let render_char t ~char =
   (* Skip control characters, otherwise output will be messy. *)
-  if UChar.code new_point.LTerm_draw.char < 32 then
-    Buffer.add_string buf unknown_utf8
+  if Uchar.code char < 32 then
+    add_uchar t unknown_char
   else
-    Buffer.add_string buf (Zed_utf8.singleton new_point.LTerm_draw.char)
+    add_uchar t (map_char char)
+;;
 
 type render_kind = Render_screen | Render_box
 
-let render_update_unix term kind old_matrix matrix =
-  let open LTerm_draw in
-  let buf = Buffer.create 16 in
-  Buffer.add_string buf
+let render_gen t kind ?(old=[||]) (matrix : LTerm_draw.matrix) =
+  add_string t
     (match kind with
-       | Render_screen ->
-           (* Go the the top-left and reset attributes *)
-           "\027[H\027[0m"
-       | Render_box ->
-           (* Go the the beginnig of line and reset attributes *)
-           "\r\027[0m");
-  (* The last displayed point. *)
-  let last_point = ref {
-    char = uspace;
-    bold = false;
-    underline = false;
-    blink = false;
-    reverse = false;
-    foreground = LTerm_style.default;
-    background = LTerm_style.default;
-  } in
-  let rows = Array.length matrix and old_rows = Array.length old_matrix in
+     | Render_screen -> "\027[H\027[0m" (* Go the top-left and reset attributes *)
+     | Render_box    -> "\r\027[0m"     (* Go the beginnig of line and reset attributes *)
+    );
+  (* The last displayed style. *)
+  let curr_style = ref LTerm_style.default in
+  let rows = Array.length matrix in
+  let old_rows =
+    let old_rows = Array.length old in
+    if rows = 0 || old_rows <> rows ||
+       Array.length matrix.(0) <> Array.length old.(0) then
+      0 (* No update if dimmensions changed *)
+    else
+      old_rows
+  in
   for y = 0 to rows - 1 do
-    let line = Array.unsafe_get matrix y in
+    let line = matrix.(y) in
     (* If the current line is equal to the displayed one, skip it *)
-    if y >= old_rows || line <> Array.unsafe_get old_matrix y then begin
+    if y >= old_rows || line <> old.(y) then begin
       for x = 0 to Array.length line - 1 do
-        let point = Array.unsafe_get line x in
-        render_point term buf !last_point point;
-        last_point := point
+        let point = line.(x) in
+        let style = LTerm_style.on_default point.style in
+        if not (LTerm_style.equal !curr_style style) then begin
+          curr_style := style;
+          add_style t ~style;
+        end;
+        render_char t ~char:point.char;
+        curr_style := style
       done
     end;
-    if y < rows - 1 then Buffer.add_char buf '\n'
+    if y < rows - 1 then add_char t '\n'
   done;
-  Buffer.add_string buf "\027[0m";
-  (* Go to the beginning of the line if rendering a box. *)
-  if kind = Render_box then Buffer.add_char buf '\r';
-  fprint term (Buffer.contents buf)
+  add_string t
+    (match kind with
+     | Render_screen -> "\027[0m"
+     | Render_box    -> "\027[0m\r");
+;;
 
-let blank_windows = {
-  LTerm_windows.ci_char = uspace;
-  LTerm_windows.ci_foreground = 7;
-  LTerm_windows.ci_background = 0;
-}
+let render t ?old matrix = render_gen t Render_screen ?old matrix
 
-let windows_char_info term point char =
-  if point.LTerm_draw.reverse then {
-    LTerm_windows.ci_char = char;
-    LTerm_windows.ci_foreground = windows_bg_color term point.LTerm_draw.background;
-    LTerm_windows.ci_background = windows_fg_color term point.LTerm_draw.foreground;
-  } else {
-    LTerm_windows.ci_char = char;
-    LTerm_windows.ci_foreground = windows_fg_color term point.LTerm_draw.foreground;
-    LTerm_windows.ci_background = windows_bg_color term point.LTerm_draw.background;
-  }
-
-let render_windows term kind handle_newlines matrix =
-  (* Build the matrix of char infos *)
-  let matrix =
-    Array.map
-      (fun line ->
-         let len = Array.length line - (if handle_newlines then 1 else 0) in
-         if len < 0 then invalid_arg "LTerm.print_box_with_newlines";
-         let res = Array.make len blank_windows in
-         let rec loop i =
-           if i = len then
-             res
-           else begin
-             let point = Array.unsafe_get line i in
-             let code = UChar.code point.LTerm_draw.char in
-             if handle_newlines && code = 10 then begin
-               (* Copy styles. *)
-               Array.unsafe_set res i (windows_char_info term point uspace);
-               for i = i + 1 to len - 1 do
-                 let point = Array.unsafe_get line i in
-                 Array.unsafe_set res i (windows_char_info term point uspace)
-               done;
-               res
-             end else begin
-               let char = if code < 32 then unknown_char else point.LTerm_draw.char in
-               Array.unsafe_set res i (windows_char_info term point char);
-               loop (i + 1)
-             end
-           end
-         in
-         loop 0)
-      matrix
-  in
-  let rows = Array.length matrix in
-  begin
-    match kind with
-      | Render_screen ->
-          return ()
-      | Render_box ->
-          (* Ensure that there is enough place to display the box. *)
-          fprint term "\r" >>= fun () ->
-          fprint term (String.make (rows - 1) '\n') >>= fun () ->
-          Lwt_io.flush term.oc
-  end >>= fun () ->
-  let info = LTerm_windows.get_console_screen_buffer_info term.outgoing_fd in
-  let window_rect = info.LTerm_windows.window in
-  let rect =
-    match kind with
-      | Render_screen ->
-          window_rect
-      | Render_box ->
-          { window_rect with
-              row1 = info.LTerm_windows.cursor_position.row - (rows - 1);
-              row2 = info.LTerm_windows.cursor_position.row + 1 }
-  in
-  ignore (
-    LTerm_windows.write_console_output
-      term.outgoing_fd
-      matrix
-      { rows = Array.length matrix; cols = if matrix = [||] then 0 else Array.length matrix.(0) }
-      { row = 0; col = 0 }
-      rect
-  );
-  return ()
-
-let render_update term old_matrix matrix =
-  if term.outgoing_is_a_tty then
-    if term.windows then
-      render_windows term Render_screen false matrix
-    else
-      render_update_unix term Render_screen old_matrix matrix
+let print_box t ?old matrix =
+  if Array.length matrix > 0 then
+    render_gen t Render_box ?old matrix
   else
-    Lwt.fail Not_a_tty
+    add_char t '\r'
+;;
 
-let render term m = render_update term [||] m
+let nothing_from line mark =
+  let rec nothing_until_eol (line:LTerm_draw.point array) x =
+    if x = Array.length line then
+      true
+    else
+      let c = Uchar.code line.(x).char in
+      c = 10 || (c = 32 && nothing_until_eol line (x + 1))
+  in
+  let rec nothing_before (line:LTerm_draw.point array) x mark =
+    if x = mark then
+      nothing_until_eol line x
+    else
+      let c = Uchar.code line.(x).char in
+      c = 10 || (c = 32 && nothing_before line (x + 1) mark)
+  in
+  nothing_before line 0 mark
+;;
 
-let print_box term matrix =
-  if term.outgoing_is_a_tty then begin
-    if Array.length matrix > 0 then begin
-      if term.windows then
-        render_windows term Render_box false matrix
-      else
-        render_update_unix term Render_box [||] matrix
-    end else
-      fprint term "\r"
-  end else
-    Lwt.fail Not_a_tty
-
-let print_box_with_newlines_unix term matrix =
-  let open LTerm_draw in
-  let buf = Buffer.create 16 in
+let print_box_with_newlines t ?(old=[||]) (matrix : LTerm_draw.matrix) =
   (* Go the the beginnig of line and reset attributes *)
-  Buffer.add_string buf "\r\027[0m";
-  (* The last displayed point. *)
-  let last_point = ref {
-    char = uspace;
-    bold = false;
-    underline = false;
-    blink = false;
-    reverse = false;
-    foreground = LTerm_style.default;
-    background = LTerm_style.default;
-  } in
+  add_string t "\r\027[0m";
+  (* The last displayed style. *)
+  let curr_style = ref LTerm_style.default in
   let rows = Array.length matrix in
+  let old_rows =
+    let old_rows = Array.length old in
+    if rows = 0 || old_rows <> rows ||
+       Array.length matrix.(0) <> Array.length old.(0) then
+      0 (* No update if dimmensions changed *)
+    else
+      old_rows
+  in
   for y = 0 to rows - 1 do
-    let line = Array.unsafe_get matrix y in
-    let cols = Array.length line - 1 in
-    if cols < 0 then invalid_arg "LTerm.print_box_with_newlines";
-    let rec loop x =
-      let point = Array.unsafe_get line x in
-      let code = UChar.code point.char in
-      if x = cols then begin
-        if code = 10 && y < rows - 1 then
-          Buffer.add_char buf '\n'
-      end else if code = 10 then begin
-        (* Use the style of the newline for the rest of the line. *)
-        render_style term buf !last_point point;
-        last_point := point;
-        (* Erase everything until the end of line. *)
-        Buffer.add_string buf "\027[K";
-        if y < rows - 1 then Buffer.add_char buf '\n'
-      end else begin
-        render_point term buf !last_point point;
-        last_point := point;
-        loop (x + 1)
-      end
-    in
-    loop 0
+    let line = matrix.(y) in
+    (* If the current line is equal to the displayed one, skip it *)
+    if y >= old_rows || line <> old.(y) then begin
+      let cols = Array.length line - 1 in
+      if cols < 0 then invalid_arg "LTerm.print_box_with_newlines";
+      let x = ref 0 in
+      let continue = ref true in
+      while !x < cols && !continue do
+        let point = line.(!x) in
+        let style = LTerm_style.on_default point.style in
+        if not (LTerm_style.equal !curr_style style) then begin
+          curr_style := style;
+          add_style t ~style;
+        end;
+        let code = Uchar.code point.char in
+        if code = 10 then begin
+          (* Erase everything until the end of line, if needed. *)
+          if not (y < old_rows && nothing_from old.(y) !x) then
+            add_3chars t '\027' '[' 'K';
+          continue := false;
+        end else begin
+          render_char t ~char:point.char;
+          incr x;
+        end
+      done;
+      let point = line.(!x) in
+      if Uchar.code point.char = 10 && y < rows - 1 then add_char t '\n'
+    end
   done;
-  Buffer.add_string buf "\027[0m\r";
-  fprint term (Buffer.contents buf)
+  add_string t "\027[0m\r"
+;;
 
-let print_box_with_newlines term matrix =
-  if term.outgoing_is_a_tty then begin
-    if Array.length matrix > 0 then begin
-      if term.windows then
-        render_windows term Render_box true matrix
-      else
-        print_box_with_newlines_unix term matrix
-    end else
-      fprint term "\r"
+let print_box_with_newlines t ?old matrix =
+  if Array.length matrix > 0 then
+    print_box_with_newlines t ?old matrix
+  else
+    add_char t '\r'
+;;
+
+(* +-----------------------------------------------------------------+
+   | Writing                                                         |
+   +-----------------------------------------------------------------+ *)
+
+(* Compare attributes that we care about *)
+let attr_equal (a : Unix.Terminal_io.t) (b : Unix.Terminal_io.t) =
+  a.c_echo   = b.c_echo   &&
+  a.c_isig   = b.c_isig   &&
+  a.c_brkint = b.c_brkint &&
+  a.c_inpck  = b.c_inpck  &&
+  a.c_istrip = b.c_istrip &&
+  a.c_ixon   = b.c_ixon   &&
+  a.c_inlcr  = b.c_inlcr  &&
+  a.c_icrnl  = b.c_icrnl  &&
+  a.c_csize  = b.c_csize  &&
+  a.c_parenb = b.c_parenb &&
+  a.c_icanon = b.c_icanon &&
+  a.c_vmin   = b.c_vmin   &&
+  a.c_vtime  = b.c_vtime
+;;
+
+external write : Unix.file_descr -> buf:bigstring -> pos:int -> len:int -> int
+  = "lt_term_bigarray_read"
+
+let rec really_write fd ~buf ~pos ~len =
+  if len > 0 then
+    match write fd ~buf ~pos ~len with
+    | n -> really_write fd ~buf ~pos:(pos + n) ~len:(len - n)
+    | exception Unix.Unix_error(EINTR, _, _) ->
+      really_write fd ~buf ~pos ~len
+
+let do_sync ?end_of_display t =
+  let to_write  = t.out_pos   in
+  let new_mode  = t.mode      in
+  let real_mode = t.real_mode in
+  let new_mode_termios_only =
+    Mode.copy_non_termios_fields mode ~from:t.real_mode
+  in
+  if not (new_mode_termios_only <> real_mode) then begin
+    let attr = Terminal_io.get_attr t.fd_in in
+    let init_attr =
+      match t.initial_attr with
+      | Some x -> x
+      | None ->
+        let copy = { attr with c_isig = attr.c_isig } in
+        t.initial_attr <- Some copy;
+        copy
+    in
+    attr.c_echo <- mode.echo;
+    attr.c_isig <- mode.signals;
+    if mode.raw then begin
+      (* Inspired from Python-3.0/Lib/tty.py: *)
+      attr.c_brkint <- false;
+      attr.c_inpck  <- false;
+      attr.c_istrip <- false;
+      attr.c_ixon   <- false;
+      attr.c_inlcr  <- false;
+      attr.c_icrnl  <- false;
+      attr.c_csize  <- 8;
+      attr.c_parenb <- false;
+      attr.c_icanon <- false;
+      attr.c_vmin   <- 1;
+      attr.c_vtime  <- 0;
+    end else begin
+      (* We assume that initially the terminal is not in raw mode *)
+      attr.c_brkint <- init_attr.c_brkint;
+      attr.c_inpck  <- init_attr.c_inpck;
+      attr.c_istrip <- init_attr.c_istrip;
+      attr.c_ixon   <- init_attr.c_ixon;
+      attr.c_inlcr  <- init_attr.c_inlcr;
+      attr.c_icrnl  <- init_attr.c_icrnl;
+      attr.c_csize  <- init_attr.c_csize;
+      attr.c_parenb <- init_attr.c_parenb;
+      attr.c_icanon <- init_attr.c_icanon;
+      attr.c_vmin   <- init_attr.c_vmin;
+      attr.c_vtime  <- init_attr.c_vtime;
+    end;
+    Terminal_io.set_attr fd attr;
+    t.real_mode <- new_mode_termios_only;
+    t.attr_modified <- not (attr_equal attr init_attr);
+  end;
+  let cursor = t.cursor in
+  really_write fd ~buf:t.out_buf ~pos:0 ~len:to_write;
+  assert (t.out_pos = to_write);
+  t.out_pos        <- 0;
+  t.real_mode      <- new_mode;
+  t.real_cursor    <- cursor;
+  t.end_of_display <- end_of_display;
+;;
+
+let sync ?end_of_display t =
+  match t.state with
+  | Inactive -> ()
+  | Closed -> failwiths "Term.sync called on closed terminal"
+  | Active ->
+  let mode        = t.mode                        in
+  let cursor      = t.cursor                      in
+  let current_pos = t.out_pos                     in
+  let len         = current_pos - t.syncing_up_to in
+  t.  mode_when_synced <- mode;
+  t.cursor_when_synced <- cursor;
+  t.syncing_up_to      <- current_pos;
+  do_sync ?end_of_display t
+;;
+
+(* +-----------------------------------------------------------------+
+   | Creation                                                        |
+   +-----------------------------------------------------------------+ *)
+
+let default_model = Option.value (Sys.getenv "TERM") ~default:"dumb"
+
+let colors_of_term = function
+  | "Eterm-256color"        -> 256
+  | "Eterm-88color"         ->  88
+  | "gnome-256color"        -> 256
+  | "iTerm.app"             -> 256
+  | "konsole-256color"      -> 256
+  | "mlterm-256color"       -> 256
+  | "mrxvt-256color"        -> 256
+  | "putty-256color"        -> 256
+  | "rxvt-256color"         -> 256
+  | "rxvt-88color"          ->  88
+  | "rxvt-unicode-256color" -> 256
+  | "rxvt-unicode"          ->  88
+  | "screen-256color"       -> 256
+  | "screen-256color-bce"   -> 256
+  | "screen-256color-bce-s" -> 256
+  | "screen-256color-s"     -> 256
+  | "st-256color"           -> 256
+  | "vte-256color"          -> 256
+  | "xterm-256color"        -> 256
+  | "xterm+256color"        -> 256
+  | "xterm-88color"         ->  88
+  | "xterm+88color"         ->  88
+  | _                       ->  16
+
+let bold_is_bright = function
+  | "linux"       (* The linux frame buffer *)
+  | "xterm-color" (* The MacOS-X terminal   *) ->
+    true
+  | _ ->
+    false
+
+let check_utf8 = lazy(
+  match LTerm_unix.system_encoding with
+  | "UTF-8" -> ()
+  | _ ->
+    Core.Std.Printf.eprintf
+      "Warning: the detected system character encoding is not UTF-8.\n\
+       Lambda term work best when it is UTF-8.\n%!"
+)
+;;
+
+let create ?(model=default_model) fd =
+  Lazy.force check_utf8;
+  if Core.Std.Unix.isatty (Fd.file_descr_exn fd) then begin
+    (* Colors stuff. *)
+    let colors = colors_of_term model in
+    let color_map =
+      match colors with
+      | 16  -> LTerm_color_mappings.colors_16
+      | 88  -> LTerm_color_mappings.colors_88
+      | 256 -> LTerm_color_mappings.colors_256
+      | _   -> assert false
+    in
+    let size = get_size_from_fd (Fd.file_descr_exn fd) in
+    let t =
+      { state = Active
+      ; model
+      ; colors
+      ; bold_is_bright = bold_is_bright model
+      ; color_map
+      ; fd
+      ; out_buf = Bigstring.create 16384
+      ; out_pos = 0
+      ; size
+      ; event_parser = LTerm_unix.Event_parser.create ~escape_time:(sec 0.1) fd
+      ; current_write = return (`Ok ())
+      ; syncs = Async_queue.create ()
+      ; syncing_up_to = 0
+      ; reading_event = false
+      ; end_of_display = None
+      ; initial_attr = None
+      ; attr_modified = false
+      ; events = Event_queue.create ()
+      ; real_mode = Mode.default
+      ; mode_when_synced = Mode.default
+      ; mode = Mode.default
+      ; real_cursor = Visible
+      ; cursor_when_synced = Visible
+      ; cursor = Visible
+      ; closed = Ivar.create ()
+      }
+    in
+    terminals := t :: !terminals;
+    sync_forever t;
+    Ok t
   end else
-    Lwt.fail Not_a_tty
+    Or_error.error "reader fd is not a TTY device" fd Fd.sexp_of_t
+;;
+
+let really_close t =
+  reset t;
+  let d = sync t in
+  t.state <- Closed;
+  Event_queue.close t.events;
+  LTerm_unix.Event_parser.set_active t.event_parser false;
+  d >>> fun () ->
+  (* We remove the terminal from the list only at the end so that Ctrl+C still does the
+     right thing until then. *)
+  terminals := List.filter !terminals ~f:(fun t' -> not (phys_equal t t'));
+  (* Free resources now *)
+  let buf = t.out_buf in
+  t.out_pos <- 0;
+  t.out_buf <- Bigstring.create 0;
+  Bigstring.unsafe_destroy buf;
+  Ivar.fill t.closed ()
+;;
+
+let close t =
+  if not (State.is_closed t.state) then really_close t;
+  Ivar.read t.closed
+;;
+
+let set_active t active =
+  match t.state, active with
+  | Closed   ,  _    -> failwiths "Called Term.set_active on closed terminal" t sexp_of_t
+  | Active   , true  -> ()
+  | Inactive , false -> ()
+  | Active   , false ->
+    t.state <- Inactive;
+    terminals := List.filter !terminals ~f:(fun t' -> not (phys_equal t t'));
+    Event_queue.set_active t.events false;
+    LTerm_unix.Event_parser.set_active t.event_parser false;
+  | Inactive , true  ->
+    t.state <- Active;
+    terminals := t :: !terminals;
+    LTerm_unix.Event_parser.set_active t.event_parser true;
+    Event_queue.set_active t.events true;
+    let size = get_size_from_fd (Fd.file_descr_exn t.fd) in
+    if size <> t.size then begin
+      add_event t Resize;
+      t.size <- size;
+    end;
+;;
 
 (* +-----------------------------------------------------------------+
-   | Misc                                                            |
+   | Standard terminal                                               |
    +-----------------------------------------------------------------+ *)
 
-let flush term = Lwt_io.flush term.oc
-
-let get_size_from_fd fd = return (get_size_from_fd fd)
-let set_size_from_fd fd size = return (set_size_from_fd fd size)
-
-(* +-----------------------------------------------------------------+
-   | Standard terminals                                              |
-   +-----------------------------------------------------------------+ *)
-
-let stdout = lazy(create Lwt_unix.stdin Lwt_io.stdin Lwt_unix.stdout Lwt_io.stdout)
-let stderr = lazy(create Lwt_unix.stdin Lwt_io.stdin Lwt_unix.stderr Lwt_io.stderr)
-
-let print str = Lazy.force stdout >>= fun term -> fprint term str
-let printl str = Lazy.force stdout >>= fun term -> fprintl term str
-let printf fmt = Printf.ksprintf print fmt
-let prints str = Lazy.force stdout >>= fun term -> fprints term str
-let printlf fmt = Printf.ksprintf printl fmt
-let printls str = Lazy.force stdout >>= fun term -> fprintls term str
-let eprint str = Lazy.force stderr >>= fun term -> fprint term str
-let eprintl str = Lazy.force stderr >>= fun term -> fprintl term str
-let eprintf fmt = Printf.ksprintf eprint fmt
-let eprints str = Lazy.force stderr >>= fun term -> fprints term str
-let eprintlf fmt = Printf.ksprintf eprintl fmt
-let eprintls str = Lazy.force stderr >>= fun term -> fprintls term str
+let std = lazy(
+  if Sys.win32 then
+    create (Unix.stdin, Unix.stdout)
+  else
+    create (Unix.stdin, Unix.stdin)
+)

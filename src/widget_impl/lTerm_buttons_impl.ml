@@ -17,7 +17,7 @@ let section = Lwt_log.Section.make "lambda-term(buttons_impl)"
 
 class t = LTerm_widget_base_impl.t
 
-let space = Char(UChar.of_char ' ')
+let space = Char(Uchar.of_char ' ')
 
 class button initial_label = object(self)
   inherit t "button" as super

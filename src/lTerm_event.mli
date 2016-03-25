@@ -9,17 +9,79 @@
 
 (** Events *)
 
-(** Event from the terminal. *)
+(** The representation of events is optimized for pattern-matching. *)
+
+module Modifiers : sig
+  (** Modifiers: Control, Meta and Shift *)
+  type t =
+    | N
+    | C
+    | M
+    | S
+    | C_M
+    | C_S
+    | M_S
+    | C_M_S
+
+  val with_c : t -> t
+  val with_m : t -> t
+  val with_s : t -> t
+end
+
+module Key : sig
+  type t =
+    | Enter
+    | Escape
+    | Tab
+    | Up
+    | Down
+    | Left
+    | Right
+    | F1
+    | F2
+    | F3
+    | F4
+    | F5
+    | F6
+    | F7
+    | F8
+    | F9
+    | F10
+    | F11
+    | F12
+    | Next
+    | Prev
+    | Home
+    | End
+    | Insert
+    | Delete
+    | Backspace
+end
+
+module Signal : sig
+  type t =
+    | Intr (** Ctrl+C *)
+    | Quit (** Ctrl+Q *)
+    | Susp (** Ctrl+Z *)
+end
+
+(** The [Text] case could be split in multiple [Char] or [Uchar] events but this turn out
+    to be quite slow when pasting text with the mouse. *)
 type t =
-  | Resize of LTerm_geom.size
-      (** The terminal has been resized. *)
-  | Key of LTerm_key.t
-      (** A key has been pressed. *)
-  | Sequence of string
-      (** An uninterpreted escape sequence. *)
-  | Mouse of LTerm_mouse.t
-      (** A mouse button has been pressed. *)
+  | Text        of string (** Text without escape sequence (including newlines) *)
+  | Char        of Modifiers.t * char (** Ascii characters *)
+  | Uchar       of Modifiers.t * Uchar.t
+  | Key         of Modifiers.t * Key.t
+  | Sequence    of string
+  | Button_down of Modifiers.t * int * LTerm_geom.coord (** Mouse button pressed  *)
+  | Button_up   of Modifiers.t * int * LTerm_geom.coord (** Mouse button released *)
+  | Signal      of Signal.t (** Signal received             *)
+  | Resume                  (** Resuming from a TSTP signal *)
+  | Resize
+  | Closed
 
 val to_string : t -> string
-  (** [to_string event] returns the string representation of the given
-      event. *)
+val of_string : string -> t
+
+val with_coord   : t -> LTerm_geom.coord -> t
+val remove_coord : t -> t

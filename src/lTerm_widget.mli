@@ -34,7 +34,7 @@ class t : string -> object
     (** Whether the widget can receive the focus or not. *)
 
   method focus : t option LTerm_geom.directions
-    (** Specify a target widget to the left, right, up and/or down 
+    (** Specify a target widget to the left, right, up and/or down
         when changing focus. *)
 
   method set_focus : t option LTerm_geom.directions -> unit
@@ -69,10 +69,9 @@ class t : string -> object
     (** Send an event to the widget. If the widget cannot process the
         event, it is sent to the parent and so on. *)
 
-  method on_event : ?switch : LTerm_widget_callbacks.switch -> (LTerm_event.t -> bool) -> unit
-    (** [on_event ?switch f] calls [f] each time an event is
-        received. If [f] returns [true], the event is not passed to
-        other callbacks. *)
+  method on_event : (LTerm_event.t -> bool) -> unit
+  (** [on_event f] calls [f] each time an event is received. If [f] returns [true], the
+        event is not passed to other callbacks. *)
 
   method size_request : LTerm_geom.size
     (** The size wanted by the widget. *)
@@ -171,8 +170,8 @@ class button : string -> object
 
   method set_label : string -> unit
 
-  method on_click : ?switch : LTerm_widget_callbacks.switch -> (unit -> unit) -> unit
-    (** [on_click ?switch f] calls [f] when the button is clicked. *)
+  method on_click : (unit -> unit) -> unit
+    (** [on_click f] calls [f] when the button is clicked. *)
 end
 
 (** Checkbutton. A button that can be in active or inactive state. *)
@@ -187,8 +186,8 @@ class checkbutton : string -> bool -> object
 
   method set_label : string -> unit
 
-  method on_click : ?switch : LTerm_widget_callbacks.switch -> (unit -> unit) -> unit
-  (** [on_click ?switch f] calls [f] when the button state is changed. *)
+  method on_click : (unit -> unit) -> unit
+  (** [on_click f] calls [f] when the button state is changed. *)
 end
 
 class type ['a] radio = object
@@ -203,8 +202,8 @@ end
  of the objects in the "on" state and the rest are in the "off" state. *)
 class ['a] radiogroup : object
 
-  method on_state_change : ?switch : LTerm_widget_callbacks.switch -> ('a option -> unit) -> unit
-  (** [on_state_change ?switch f] calls [f] when the state of the group is changed. *)
+  method on_state_change : ('a option -> unit) -> unit
+  (** [on_state_change f] calls [f] when the state of the group is changed. *)
 
   method state : 'a option
   (** The state of the group. Contains [Some id] with the id of "on" object
@@ -247,15 +246,22 @@ class ['a] radiobutton : 'a radiogroup -> string -> 'a -> object
   method id : 'a
   (** The id of the button. *)
 
-  method on_click : ?switch:LTerm_widget_callbacks.switch -> (unit -> unit) -> unit
-  (** [on_click ?switch f] calls [f] when the button is clicked. You probably want
+  method on_click : (unit -> unit) -> unit
+  (** [on_click f] calls [f] when the button is clicked. You probably want
    to use {!radiogroup.on_state_change} instead. *)
 
 end
 
 (** {6 Running in a terminal} *)
 
-val run : LTerm.t -> ?save_state : bool -> ?load_resources : bool -> ?resources_file : string -> #t -> 'a Lwt.t -> 'a Lwt.t
+val run
+  :  LTerm.t
+  -> ?save_state : bool
+  -> ?load_resources : bool
+  -> ?resources_file : string
+  -> #t
+  -> 'a Lwt.t
+  -> 'a Lwt.t
   (** [run term ?save_state widget w] runs on the given terminal using
       [widget] as main widget. It returns when [w] terminates. If
       [save_state] is [true] (the default) then the state of the

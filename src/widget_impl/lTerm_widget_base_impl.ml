@@ -5,10 +5,15 @@
  * Licence   : BSD3
  *
  * This file is a part of Lambda-Term.
- *)
+*)
 
-open LTerm_widget_callbacks
 open LTerm_geom
+
+let rec exec_filters filters x =
+  match filters with
+  | [] -> false
+  | f :: filters ->
+    f x || exec_filters filters x
 
 class t initial_resource_class : object
   method children : t list
@@ -24,14 +29,14 @@ class t initial_resource_class : object
   method allocation : rect
   method set_allocation : rect -> unit
   method send_event : LTerm_event.t -> unit
-  method on_event : ?switch : switch -> (LTerm_event.t -> bool) -> unit
+  method on_event : (LTerm_event.t -> bool) -> unit
   method size_request : size
   method resources : LTerm_resources.t
   method set_resources : LTerm_resources.t -> unit
   method resource_class : string
   method set_resource_class : string -> unit
   method update_resources : unit
-end = object(self) 
+end = object(self)
 
   method children : t list = []
 
@@ -39,12 +44,12 @@ end = object(self)
 
   val mutable focus = LTerm_geom.({ left=None; right=None; up=None; down=None })
   method focus = focus
-  method set_focus f = 
-    let check = 
-      function None -> () 
-             | Some(x) -> 
-                if not ((x : t)#can_focus) then 
-                  failwith "set_focus: target widget must have can_focus=true"
+  method set_focus f =
+    let check =
+      function None -> ()
+             | Some(x) ->
+               if not ((x : t)#can_focus) then
+                 failwith "set_focus: target widget must have can_focus=true"
     in
     check f.left; check f.right; check f.up; check f.down;
     focus <- f
@@ -66,17 +71,17 @@ end = object(self)
   method allocation = allocation
   method set_allocation rect = allocation <- rect
 
-  val event_filters = Lwt_sequence.create ()
+  val mutable event_filters = []
 
   method send_event ev =
     if not (exec_filters event_filters ev) then
       match parent with
-        | Some widget ->
-            widget#send_event ev
-        | None ->
-            ()
+      | Some widget ->
+        widget#send_event ev
+      | None ->
+        ()
 
-  method on_event ?switch f = register switch event_filters f
+  method on_event f = event_filters <- f :: event_filters
 
   val size_request = { rows = 0; cols = 0 }
   method size_request = size_request

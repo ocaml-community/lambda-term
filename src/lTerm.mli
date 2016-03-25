@@ -7,376 +7,267 @@
  * This file is a part of Lambda-Term.
  *)
 
-(** Terminal definitions *)
+(** Terminal manipulation *)
 
-open CamomileLibrary
+(** Note: for simplicity and of the implementation and reasonable behavior across setups,
+    lambda term internally uses threads. For each terminal Lambda term uses two helper
+    threads: one for reading inputs and one for the rendering.
+
+    Only a few functions in this module might block the calling thread and are marked as
+    such. These functions are always safe to be called from any thread, all other are not.
+
+    Concretely, if you are using Lwt or Async, you can just send call blocking operations
+    via a [Lwt_preemptive.detach] or [Thread_safe.block_on_async_exn].
+*)
 
 type t
-  (** Type of terminals. *)
+(** Type of terminals. *)
 
 (** {6 Creation} *)
 
-exception No_such_encoding of string
-  (** Exception raised when an encoding does not exist. *)
+module Blocking : sig
+  type 'a t = private 'a
+  val get : 'a t -> 'a
+end
 
-val create :
-  ?windows : bool ->
-  ?model : string ->
-  ?incoming_encoding : string ->
-  ?outgoing_encoding : string ->
-  Lwt_unix.file_descr -> Lwt_io.input_channel ->
-  Lwt_unix.file_descr -> Lwt_io.output_channel -> t Lwt.t
-  (** [create ?windows ?model ?incoming_encoding ?outgoing_encoding
-      input_fd input_channel outout_fd output_channel] creates a new
-      terminal using [input_fd] and [input_channel] for inputs and
-      [output_fd] and [output_channel] for outputs.
+(** [create ?model (fd_in, fd_out)] creates a new terminal.
 
-      - [windows] indicates whether the terminal is a windows console
-      (not mintty, rxvt, ...). It defaults to [Sys.win32].
+    - [model] is the type of the terminal, such as "rxvt" or "xterm". It defaults to the
+    contents of the "TERM" environment variable, or to "dumb" if this one is not found. It
+    is used to determine capabilities of the terminal, such as the number of colors.
 
-      - [model] is the type of the terminal, such as "rxvt" or
-      "xterm". It defaults to the contents of the "TERM" environment
-      variable, or to "dumb" if this one is not found. It is used to
-      determine capabilities of the terminal, such as the number of
-      colors. This is not used if [windows] is [true].
+    - [windows] indicates whether the terminal is a windows console (not mintty, rxvt,
+    ...). It defaults to [Sys.win32].
+*)
+val create
+  :  ?windows : bool
+  -> ?model   : string
+  -> Unix.file_descr * Unix.file_descr
+  -> t Blocking.t
 
-      - [incoming_encoding] is the encoding used for incoming data. It
-      defaults to [LTerm_windows.get_console_cp] if [windows] is [true]
-      and [LTerm_unix.system_encoding] otherwise.
+(** Restore the initial state and stop updating the terminal state. This does not close
+    the underlying file descriptor. *)
+val close : t -> unit Blocking.t
 
-      - [outgoing_encoding] is the encoding used for outgoing data. It
-      defaults to [LTerm_windows.get_console_output_cp] if [windows] is
-      [true] and [LTerm_unix.system_encoding] otherwise. Note that
-      transliteration is used so printing unicode character on the
-      terminal will never fail.
+(** Enable/disable the terminal.
 
-      If one of the two given encodings does not exist, it raises
-      [No_such_encoding].
+    When deactivated, signals are not processed and events are not returned until
+    activated again. Note that when deactivated the terminal will be ignored by handlers
+    of Ctrl+C, Ctrl+\ and Ctrl+Z. So you should ensure the terminal is in a good state
+    before deactivating it.
 
-      Note about terminal resize: in the windows console resizes are
-      not automatically detected. Lambda-term will only check for
-      resize only when something happens. If you want it to poll just
-      write somewhere in your program:
+    [set_active t false] will also allow for [t] to be garbage collected.
+*)
+val set_active : t -> bool -> unit
 
-      {[
-      Lwt_engine.on_timer 1.0 true ignore
-      ]}
-  *)
+(** Warning: this function is blocking. It reset the status of all opened terminals. It is
+    automatically called in an [Pervasives.at_exit] handler. You can use it in case of
+    abnormal exit, for instance before printing an error message to ensure it is not
+    erased by the by the [at_exit] handler. *)
+val abort : unit -> unit
 
 (** {6 Informations} *)
 
 val model : t -> string
-  (** Returns the model of the terminal. *)
+(** Returns the model of the terminal. *)
+
+val default_model : string
+(** Default terminal model, as given by the TERM environment variable *)
 
 val colors : t -> int
-  (** Number of colors of the terminal. *)
-
-val windows : t -> bool
-  (** Whether the terminal is a windows console or not. *)
-
-val is_a_tty : t -> bool
-  (** [is_a_tty term] whether the intput and output of the given
-      terminal are connected to a tty device. *)
-
-val incoming_is_a_tty : t -> bool
-  (** [incoming_is_a_tty term] whether the input of [term] is a tty
-      device. *)
-
-val outgoing_is_a_tty : t -> bool
-  (** [incoming_is_a_tty term] whether the output of [term] is a tty
-      device. *)
+(** Number of colors of the terminal. *)
 
 val escape_time : t -> float
-  (** Time waited before returning the escape key. This is not used on
-      windows. *)
+(** Time waited before returning the escape key. This is not used on
+    windows. *)
 
 val set_escape_time : t -> float -> unit
-  (** Set the time waited before returning the escape key. *)
-
-exception Not_a_tty
-  (** Exception raised when trying to use a function that can only be
-      used on terminals. *)
+(** Set the time waited before returning the escape key. *)
 
 val size : t -> LTerm_geom.size
-  (** Returns the curent size of the terminal.
+(** Size of the terminal. *)
 
-      It raises {!Not_a_tty} if the output of the given terminal is
-      not a tty. *)
+(** {6 Signals} *)
 
-(** {6 Modes} *)
+module Signals : sig
+  module State : sig
+    type t =
+      (** The signal is not managed by lambda-term *)
+      | Not_managed
+      (** The signal will generate a [Signal] event on every terminal *)
+      | Generate_event
+      (** Handle it: INTR and QUIT restores terminal states and exit, TSTP restores
+          terminal states and suspend. *)
+      | Handled
+    [@@deriving sexp]
+  end
 
-type mode
-  (** Type of terminal modes. *)
+  (** Signals state *)
+  type t =
+    { intr : State.t (** Usually Ctrl+C *)
+    ; quit : State.t (** Usually Ctrl+\ *)
+    ; susp : State.t (** Usually Ctrl+Z *)
+    }
+  [@@deriving sexp]
 
-val enter_raw_mode : t -> mode Lwt.t
-  (** [enter_raw_mode term] puts the terminal in ``raw mode''. In this
-      mode keyboard events are returned as they happen. In normal mode
-      only complete line are returned. It returns the current terminal
-      mode that can be restored using {!leave_raw_mode}.
+  (** All fields are [State.Handled] *)
+  val handled : t
 
-      It raises {!Not_a_tty} if the input of the given terminal is not
-      tty. *)
-
-val leave_raw_mode : t -> mode -> unit Lwt.t
-  (** [leave_raw_mode term mode] leaves the raw mode by restoring the
-      given mode.
-
-      It raises {!Not_a_tty} if the input of the given terminal is not
-      tty. *)
-
-val enable_mouse : t -> unit Lwt.t
-  (** Enable mouse events reporting.
-
-      It raises {!Not_a_tty} if the output of the given terminal is
-      not a tty. *)
-
-val disable_mouse : t -> unit Lwt.t
-  (** Disable mouse events reporting.
-
-      It raises {!Not_a_tty} if the output of the given terminal is
-      not a tty. *)
-
-(** {6 Cursor} *)
-
-val show_cursor : t -> unit Lwt.t
-  (** Make the cursor visible.
-
-      It raises {!Not_a_tty} if the output of the given terminal is
-      not a tty. *)
-
-val hide_cursor : t -> unit Lwt.t
-  (** Make the cursor invisible.
-
-      It raises {!Not_a_tty} if the output of the given terminal is
-      not a tty. *)
-
-val goto : t -> LTerm_geom.coord -> unit Lwt.t
-  (** [goto term coord] moves the cursor to the given coordinates.
-
-      It raises {!Not_a_tty} if the output of the given terminal is
-      not a tty. *)
-
-val move : t -> int -> int -> unit Lwt.t
-  (** [move term rows columns] moves the cursor by the given number of
-      lines and columns. Both [rows] and [columns] may be negavite.
-
-      It raises {!Not_a_tty} if the output of the given terminal is
-      not a tty. *)
-
-(** {6 Erasing text} *)
-
-val clear_screen : t -> unit Lwt.t
-  (** [clear_screen term] clears the entire screen. *)
-
-val clear_screen_next : t -> unit Lwt.t
-  (** [clear_screen_next term] clears the screen from the cursor to
-      the bottom of the screen. *)
-
-val clear_screen_prev : t -> unit Lwt.t
-  (** [clear_screen_prev term] clears the screen from the cursor to
-      the top of the screen. *)
-
-val clear_line : t -> unit Lwt.t
-  (** [clear_line term] erases the current line. *)
-
-val clear_line_next : t -> unit Lwt.t
-  (** [clear_line_next term] erases the current line from the cursor
-      to the end of the line. *)
-
-val clear_line_prev : t -> unit Lwt.t
-  (** [clear_line_prev term] erases the current line from the cursor
-      to the beginning of the line. *)
-
-(** {6 State} *)
-
-val save_state : t -> unit Lwt.t
-  (** Save the current state of the terminal so it can be restored
-      latter.
-
-      It raises {!Not_a_tty} if the output of the given terminal is
-      not a tty. *)
-
-val load_state : t -> unit Lwt.t
-  (** Load the previously saved state of the terminal.
-
-      It raises {!Not_a_tty} if the output of the given terminal is
-      not a tty. *)
+  val get : unit -> t
+  val set : t -> unit
+end
 
 (** {6 Events} *)
 
-val read_event : t -> LTerm_event.t Lwt.t
-  (** Reads and returns one event. The terminal should be in raw mode
-      before calling this function, otherwise event will not be
-      reported as they happen. It does not fail if the terminal is not
-      a tty.
+(** Start watching for inputs. Concretelly this means that A thread is started reading
+    from the terminal input. *)
+val set_watching : t -> bool -> unit
 
-      Note: you must not call {!read_event} from multiple thread at
-      the same time, it will raise {!Failure} if you try to do so. *)
+(** Reads and returns one event. The terminal should be in raw mode before calling this
+    function, otherwise event will not be reported as they happen.
 
-(** {6 Printing} *)
+    If [no_text] is [true], [Text] events will be reported as multiple [Char] pr [Uchar]
+    events.
 
-(** All these functions accept only valid UTF-8 strings (or unicode
-    styled text). Strings are recoded on the fly using the terminal
-    output encoding (except if the terminal output encoding is already
-    UTF-8, in which case the string is just printed as-it).
+    Note: When multiple [read_event] are pending on the same terminal, they will all
+    return the same event when one becomes available. *)
+val read_event : ?no_text:bool (* default: false *) -> t -> LTerm_event.t
 
-    The general name of a printing function is [<prefix>print<suffixes>].
+(** {6 State change} *)
 
-    Where [<prefix>] is one of:
-    - ['f'], which means that the function takes as argument a terminal
-    - nothing, which means that the function prints on {!stdout}
-    - ['e'], which means that the function prints on {!stderr}
+(** All state change take effects only when [sync] is called. *)
 
-    and [<suffixes>] is a combination of:
-    - ['l'] which means that a new-line character is printed after the message
-    - ['f'] which means that the function takes as argument a {b format} instead
-      of a string
-    - ['s'] which means that the function takes as argument a styled
-      string instead of a string
+(** Sync with the terminal.
 
-    Note that if the terminal is not a tty, styles are stripped.
+    [end_of_display] is an hint indicating to lambda term how many lines after the cursor
+    position does the display extends to once synced. This is used in case the process
+    receive a [TSTP], [INT] or [QUIT] signal. The lambda term signal handler will move
+    down the cursor by [n] lines to leave things in a clean state.
 *)
+val sync : ?end_of_display:int -> t -> unit Blocking.t
 
-val fprint : t -> Zed_utf8.t -> unit Lwt.t
-val fprintl : t -> Zed_utf8.t -> unit Lwt.t
-val fprintf : t -> ('a, unit, Zed_utf8.t, unit Lwt.t) format4 -> 'a
-val fprints : t -> LTerm_text.t -> unit Lwt.t
-val fprintlf : t -> ('a, unit, Zed_utf8.t, unit Lwt.t) format4 -> 'a
-val fprintls : t -> LTerm_text.t -> unit Lwt.t
-val print : Zed_utf8.t -> unit Lwt.t
-val printl : Zed_utf8.t -> unit Lwt.t
-val printf : ('a, unit, Zed_utf8.t, unit Lwt.t) format4 -> 'a
-val prints : LTerm_text.t -> unit Lwt.t
-val printlf : ('a, unit, Zed_utf8.t, unit Lwt.t) format4 -> 'a
-val printls : LTerm_text.t -> unit Lwt.t
-val eprint : Zed_utf8.t -> unit Lwt.t
-val eprintl : Zed_utf8.t -> unit Lwt.t
-val eprintf : ('a, unit, Zed_utf8.t, unit Lwt.t) format4 -> 'a
-val eprints : LTerm_text.t -> unit Lwt.t
-val eprintlf : ('a, unit, Zed_utf8.t, unit Lwt.t) format4 -> 'a
-val eprintls : LTerm_text.t -> unit Lwt.t
+module Screen : sig
+  type t = Main | Alternative [@@deriving sexp]
+end
 
-(** {8 Printing contexts} *)
+module Mode : sig
+  (** Terminal modes. These modes are preserved after resuming from a Ctrl+Z. *)
+  type t =
+    { echo    : bool (** If [true], characters are printed on screen             *)
+    ; raw     : bool (** If [true], input is reported immediately                *)
+    ; signals : bool (** If [true], signals are generated on INTR, QUIT and SUSP *)
+    ; mouse   : bool (** If [true], mouse events are reported                    *)
+    ; screen  : Screen.t
+    }
+  [@@deriving sexp, fields]
 
-(** You shoud use these functions when you to print a lot of styled
-    text that does not entirely fit in a single {!LTerm_text.t}
-    value.
+  (**
+     {[
+       { echo    = true
+       ; raw     = false
+       ; signals = true
+       ; mouse   = false
+       ; screen  = Main
+       }
+     ]}
+  *)
+  val default : t
+end
 
-    This is more efficient than calling manually {!set_style} since
-    styles will be modified only when needed. *)
+val mode : t -> Mode.t
+val set_mode : t -> Mode.t -> unit
 
-type context
-  (** A context for styled printing. *)
+(** Make the cursor visible. *)
+val show_cursor : t -> unit
 
-val with_context : t -> (context -> 'a Lwt.t) -> 'a Lwt.t
-  (** [with_context term f] creates a new printing context and pass it
-      to [f]. Note that calls to [with_context] are serialized. *)
+(** Make the cursor invisible. *)
+val hide_cursor : t -> unit
 
-val update_style : context -> LTerm_style.t -> unit Lwt.t
-  (** [update_style ctx style] updates the style of the context with
-      [style]. If needed styles of the terminal are modified. *)
+val cursor_visible : t -> bool
 
-val context_term : context -> t
-  (** Returns the terminal used by the given context. *)
+(** Equivalent to:
 
-val context_oc : context -> Lwt_io.output_channel
-  (** Returns the output channel used by the given context. Note that
-      this channel cannot be used after {!with_context} has
-      terminated. *)
+    {[
+      set_mode t Mode.default;
+      show_cursor t;
+    ]}
+*)
+val reset : t -> unit
 
-val encode_string : t -> Zed_utf8.t -> string
-  (** [encode_string term str] encodes an UTF-8 string using the
-      terminal encoding. *)
+val goto : t -> LTerm_geom.coord -> unit
+(** [goto term coord] moves the cursor to the given coordinates. *)
 
-val encode_char : t -> UChar.t -> string
-  (** [encode_char term ch] encodes an unicode character using the
-      terminal encoding. *)
+val move : t -> rows:int -> cols:int -> unit
+(** [move term rows columns] moves the cursor by the given number of
+    lines and columns. Both [rows] and [columns] may be negavite. *)
 
-(** {6 Styles} *)
+val clear_screen : t -> unit
+(** [clear_screen term] clears the entire screen. *)
 
-val set_style : t -> LTerm_style.t -> unit Lwt.t
-  (** Change the style of the termina for subsequent unstyled
-      output. It does nothing if the output is not a tty. *)
+val clear_screen_next : t -> unit
+(** [clear_screen_next term] clears the screen from the cursor to
+    the bottom of the screen. *)
 
-(** {6 Rendering} *)
+val clear_screen_prev : t -> unit
+(** [clear_screen_prev term] clears the screen from the cursor to
+    the top of the screen. *)
 
-val render : t -> LTerm_draw.matrix -> unit Lwt.t
-  (** Render an offscreen array to the given terminal.
+val clear_line : t -> unit
+(** [clear_line term] erases the current line. *)
 
-      It raises {!Not_a_tty} if the output of the given terminal is
-      not a tty. *)
+val clear_line_next : t -> unit
+(** [clear_line_next term] erases the current line from the cursor
+    to the end of the line. *)
 
-val render_update : t -> LTerm_draw.matrix -> LTerm_draw.matrix -> unit Lwt.t
-  (** [render_update displayed to_display] does the same as [render
-      to_display] but assumes that [displayed] contains the current
-      displayed text. This reduces the amount of text sent to the
-      terminal.
+val clear_line_prev : t -> unit
+(** [clear_line_prev term] erases the current line from the cursor
+    to the beginning of the line. *)
 
-      It raises {!Not_a_tty} if the output of the given terminal is
-      not a tty. *)
+(** {8 Printing} *)
 
-val print_box : t -> LTerm_draw.matrix -> unit Lwt.t
-  (** [print_box term matrix] prints the contents of [matrix] starting
-      at current cursor row. Note that when you have the choice
-      between using {!fprints} and {!print_box} you should use
-      {!print_box} because it works better under windows and is more
-      efficient.
+val print : t -> string -> unit
+val print_sub : t -> string -> pos:int -> len:int -> unit
+val set_style : t -> LTerm_style.t -> unit
 
-      The cursor is moved to the beginning of the last displayed
-      line. *)
+(** {8 Rendering} *)
 
-val print_box_with_newlines : t -> LTerm_draw.matrix -> unit Lwt.t
-  (** [print_box term matrix] Same as {!print_box} but [matrix]
-      may contains newline characters. It must contain one more column
-      that the terminal (in case a line of the length of the terminal
-      ends with a newline).
+val render : t -> ?old:LTerm_draw.matrix -> LTerm_draw.matrix -> unit
+(** Render an offscreen array to the given terminal. [old] is the currently displayed
+    matrix. If specified it is used to reduce the amount of text send to the
+    terminal. *)
 
-      The difference between {!print_box} and
-      {!print_box_with_newlines} is that when the text is selected in
-      the terminal, with {!print_box} it will always be a box with the
-      dimensions of [matrix]. With {!print_box_with_newlines} it may
-      contains lines longer than the width of the terminal.
+val print_box : t -> ?old:LTerm_draw.matrix -> LTerm_draw.matrix -> unit
+(** [print_box term matrix] prints the contents of [matrix] starting
+    at current cursor row. Note that when you have the choice
+    between using {!fprints} and {!print_box} you should use
+    {!print_box} because it works better under windows and is more
+    efficient.
 
-      The contents of a line after the first newline character (if
-      any) in a row of [matrix] is ignored. The rest of the line get
-      the style of the newline character. *)
+    The cursor is moved to the beginning of the last displayed
+    line. *)
 
-(** {6 Misc} *)
+val print_box_with_newlines : t -> ?old:LTerm_draw.matrix -> LTerm_draw.matrix -> unit
+(** [print_box term matrix] Same as {!print_box} but [matrix]
+    may contains newline characters. It must contain one more column
+    that the terminal (in case a line of the length of the terminal
+    ends with a newline).
 
-val flush : t -> unit Lwt.t
-  (** Flushes the underlying output channel used by the terminal. *)
+    The difference between {!print_box} and
+    {!print_box_with_newlines} is that when the text is selected in
+    the terminal, with {!print_box} it will always be a box with the
+    dimensions of [matrix]. With {!print_box_with_newlines} it may
+    contains lines longer than the width of the terminal.
+
+    The contents of a line after the first newline character (if
+    any) in a row of [matrix] is ignored. The rest of the line get
+    the style of the newline character. *)
 
 (** {6 Well known instances} *)
 
-val stdout : t Lwt.t Lazy.t
-  (** Terminal using {!Lwt_unix.stdin} as input and {!Lwt_unix.stdout}
-      as output. *)
-
-val stderr : t Lwt.t Lazy.t
-  (** Terminal using {!Lwt_unix.stdin} as input and {!Lwt_unix.stderr}
-      as output. *)
-
-(** {6 Low-level functions} *)
-
-val get_size_from_fd : Lwt_unix.file_descr -> LTerm_geom.size Lwt.t
-  (** [get_size_from_fd fd] returns the size of the terminal accessible via
-      the given file descriptor. *)
-
-val set_size_from_fd : Lwt_unix.file_descr -> LTerm_geom.size -> unit Lwt.t
-  (** [set_size_from_fd fd size] tries to set the size of the terminal
-      accessible via the given file descriptor. *)
-
-(** {6 Modification} *)
-
-val set_io :
-  ?incoming_fd : Lwt_unix.file_descr -> ?incoming_channel : Lwt_io.input_channel ->
-  ?outgoing_fd : Lwt_unix.file_descr -> ?outgoing_channel : Lwt_io.output_channel -> t -> unit Lwt.t
-  (** Modifies file descriptors/channels of a terminal. Unspecified
-      arguments are kept unchanged.
-
-      Note: before modifying a terminal you should ensure that no
-      operation is pending on it. *)
+val std : t Lazy.t
+(** Terminal using [Fd.stdin]. *)
 
 (**/**)
-val get_size : t -> LTerm_geom.size Lwt.t
-val set_size : t -> LTerm_geom.size -> unit Lwt.t
+
+val colors_of_term : string -> int
+val bold_is_bright : string -> bool

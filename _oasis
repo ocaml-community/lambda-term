@@ -37,41 +37,38 @@ FilesAB: src/lTerm_config.h.ab
 Library "lambda-term"
   FindlibName: lambda-term
   BuildDepends:
-    lwt (>= 2.4.0),
-    lwt.unix,
-    lwt.react,
+    threads,
+    react,
     xdg-basedir (>= 0.0.2),
-    zed (>= 1.2)
+    zed2 (>= 2.0)
   XMETADescription: Cross-platform library for terminal manipulation
   Path: src
   Install: true
   Modules:
     LTerm,
-    LTerm_key,
     LTerm_event,
     LTerm_unix,
     LTerm_windows,
     LTerm_style,
     LTerm_geom,
     LTerm_draw,
-    LTerm_mouse,
-    LTerm_widget,
-    LTerm_widget_callbacks,
-    LTerm_edit,
-    LTerm_read_line,
-    LTerm_text,
-    LTerm_ui,
-    LTerm_resources,
-    LTerm_inputrc,
-    LTerm_history
+#    LTerm_widget,
+#    LTerm_edit,
+#    LTerm_read_line,
+    LTerm_text
+#    LTerm_ui,
+#    LTerm_resources,
+#    LTerm_inputrc,
+#    LTerm_history,
+#    LTerm_full_screen
   InternalModules:
-    LTerm_color_mappings,
-    LTerm_resource_lexer,
-    widget_impl/LTerm_widget_base_impl,
-    widget_impl/LTerm_buttons_impl,
-    widget_impl/LTerm_containers_impl,
-    widget_impl/LTerm_running_impl,
-    widget_impl/LTerm_toplevel_impl
+    LTerm_color_mappings
+#    LTerm_resource_lexer,
+#    widget_impl/LTerm_widget_base_impl,
+#    widget_impl/LTerm_buttons_impl,
+#    widget_impl/LTerm_containers_impl,
+#    widget_impl/LTerm_running_impl,
+#    widget_impl/LTerm_toplevel_impl
   CSources:
     lTerm_config.h,
     lTerm_term_stubs.c,

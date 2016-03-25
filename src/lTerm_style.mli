@@ -11,72 +11,122 @@
 
 (** {6 Colors} *)
 
-type color =
-    private
-  | Default
-      (** The default color of the terminal. *)
-  | Index of int
-      (** A color given by its index. Most terminal have at least 8
-          colors. *)
-  | RGB of int * int * int
-      (** A color given by its three component between 0 and 255. The
-          closest color will be used. *)
+module Color : sig
+  type t = private int
 
-val default : color
-val index : int -> color
-val rgb : int -> int -> int -> color
-  (** [rgb r g b] raises [Invalid_argument] if one of [r], [g] or [b]
-      is not in the range [0..255]. *)
+  val to_string : t -> string
+  val of_string : string -> t
 
-(** {8 Standard colors} *)
+  (** The default color of the terminal. *)
+  val default : t
 
-val black : color
-val red : color
-val green : color
-val yellow : color
-val blue : color
-val magenta : color
-val cyan : color
-val white : color
+  (** A color given by its index between 0 and 255. Most terminal have at least 8
+      colors. *)
+  val index   : int -> t
 
-(** {8 Light colors} *)
+  (** A color given by its three component between 0 and 255. The closest color will be
+      used. *)
+  val rgb     : int -> int -> int -> t
 
-val lblack : color
-val lred : color
-val lgreen : color
-val lyellow : color
-val lblue : color
-val lmagenta : color
-val lcyan : color
-val lwhite : color
+  (** The transparent color is used for styles that shouldn't override the color. For
+      instance if drawing text and the background style is [transparent], the background
+      will be the same as what was there before the text was drawn. *)
+  val transparent : t
+
+  module Kind : sig
+    type t =
+      | Transparent
+      | Default
+      | Index
+      | RGB
+    [@@deriving sexp]
+  end
+
+  val kind : t -> Kind.t
+
+  (** {8 Standard colors} *)
+
+  val black   : t
+  val red     : t
+  val green   : t
+  val yellow  : t
+  val blue    : t
+  val magenta : t
+  val cyan    : t
+  val white   : t
+
+  (** {8 Light colors} *)
+
+  val lblack   : t
+  val lred     : t
+  val lgreen   : t
+  val lyellow  : t
+  val lblue    : t
+  val lmagenta : t
+  val lcyan    : t
+  val lwhite   : t
+
+  val get_index : t -> LTerm_color_mappings.map -> int
+end
 
 (** {6 Styles} *)
 
+module Switch : sig
+  type t =
+    | On
+    | Off
+    | Unset (** [Unset] has the same role as [Color.transparent] *)
+  [@@deriving sexp]
+end
+
 (** Type of text styles. *)
-type t = {
-  bold : bool option;
-  underline : bool option;
-  blink : bool option;
-  reverse : bool option;
-  foreground : color option;
-  background : color option;
-}
+type t
 
-val bold : t -> bool option
-val underline : t -> bool option
-val blink : t -> bool option
-val reverse : t -> bool option
-val foreground : t -> color option
-val background : t -> color option
+val make
+  :  ?bold       : Switch.t (* default Unset *)
+  -> ?underline  : Switch.t (* default Unset *)
+  -> ?blink      : Switch.t (* default Unset *)
+  -> ?reverse    : Switch.t (* default Unset *)
+  -> ?foreground : Color.t  (* default transparent *)
+  -> ?background : Color.t  (* default transparent *)
+  -> unit
+  -> t
 
+val bold       : t -> Switch.t
+val underline  : t -> Switch.t
+val blink      : t -> Switch.t
+val reverse    : t -> Switch.t
+val foreground : t -> Color.t
+val background : t -> Color.t
+
+val set
+  :  ?bold       : Switch.t (* default Unset *)
+  -> ?underline  : Switch.t (* default Unset *)
+  -> ?blink      : Switch.t (* default Unset *)
+  -> ?reverse    : Switch.t (* default Unset *)
+  -> ?foreground : Color.t  (* default transparent *)
+  -> ?background : Color.t  (* default transparent *)
+  -> t
+  -> t
+
+val set_bold       : t -> Switch.t -> t
+val set_underline  : t -> Switch.t -> t
+val set_blink      : t -> Switch.t -> t
+val set_reverse    : t -> Switch.t -> t
+val set_foreground : t -> Color.t -> t
+val set_background : t -> Color.t -> t
+
+(** Style with all fields set to [Switch.Off] or [Color.default]. *)
+val default : t
+
+(** Style with all fields set to [Switch.Unset] or [Color.transparent]. *)
 val none : t
-  (** Style with all fields set to [None]. *)
 
+(** [merge t1 t2] is [t2] with all [Switch.Unset] or [Color.transparent] fields set to the
+    one of [t1]. *)
 val merge : t -> t -> t
-  (** [merge s1 s2] is [s2] with all undefined fields set to ones of
-      [s1]. *)
+
+(** [on_default t] is [merge default t]. *)
+val on_default : t -> t
 
 val equal : t -> t -> bool
-  (** [equal s1 s2] returns [true] iff [s1] and [s2] are equal after
-      having replaced all [None] fields by [Some false] or [Some
-      Default]. *)

@@ -9,106 +9,95 @@
 
 (** Styled text. *)
 
-open CamomileLibrary
+type point =
+  { mutable char  : Uchar.t
+  ; mutable style : LTerm_style.t }
+[@@deriving sexp]
 
-type t = (UChar.t * LTerm_style.t) array
-    (** Type of a string with styles for each characters. *)
+type t = point array [@@deriving sexp]
+  (** Type of a string with styles for each characters. *)
+
+val create : ?style:LTerm_style.t -> int -> t
 
 (** {6 Conversions} *)
 
-val of_string : Zed_utf8.t -> t
-  (** Creates a styled string from a string. All characters of the
-      string have no style. *)
-
+val of_string : ?style:LTerm_style.t -> Zed_utf8.t -> t
 val to_string : t -> Zed_utf8.t
-  (** Returns the string part of a styled string. *)
 
-val of_string_maybe_invalid : string -> t
+val of_string_maybe_invalid : ?style:LTerm_style.t -> string -> t
   (** Creates a styled string from a string. All characters of the
       string have no style. The string may contain invalid UTF-8
       sequences, in which case invalid bytes are escaped with the
-      syntax [\yXX]. *)
+      syntax [\NNN]. *)
 
-val of_rope : Zed_rope.t -> t
-  (** Creates a styled string from a rope. *)
-
+val of_rope : ?style:LTerm_style.t -> Zed_rope.t -> t
 val to_rope : t -> Zed_rope.t
-  (** Returns the string part of a styled string as a rope. *)
-
-val stylise : string -> LTerm_style.t -> t
-  (** [stylise string style] creates a styled string with all styles
-      set to [style]. *)
 
 (** {6 Parenthesis matching} *)
 
-val stylise_parenthesis : t -> ?paren : (UChar.t * UChar.t) list -> int -> LTerm_style.t -> unit
-  (** [stylise_parenthesis text ?paren pos style] searchs for
-      parenthesis group starting or ending at [pos] and apply them the
-      style [style]. [paren] is the list of parenthesis recognized. *)
+(** [stylise_parenthesis text ?paren pos style] searchs for parenthesis group starting or
+    ending at [pos] and apply them the style [style]. [paren] is the list of parenthesis
+    recognized. *)
+val stylise_parenthesis
+  :  t
+  -> ?paren : (Uchar.t * Uchar.t) list
+  -> pos:int
+  -> LTerm_style.t
+  -> unit
 
-(** {6 Markup strings} *)
+(** {6 Convenience} *)
 
-(** Markup strings are used to conveniently define styled strings. *)
+val mk
+  :  ?bold:LTerm_style.Switch.t
+  -> ?underline:LTerm_style.Switch.t
+  -> ?blink:LTerm_style.Switch.t
+  -> ?reverse:LTerm_style.Switch.t
+  -> ?fg:LTerm_style.Color.t
+  -> ?bg:LTerm_style.Color.t
+  -> string
+  -> t
 
-(** Type of an item in a markup string. *)
-type item =
-  | S of Zed_utf8.t
-      (** A UTF-8 encoded string. *)
-  | R of Zed_rope.t
-      (** A rope. *)
-  | B_bold of bool
-      (** Begins bold mode. *)
-  | E_bold
-      (** Ends bold mode. *)
-  | B_underline of bool
-      (** Begins underlined mode. *)
-  | E_underline
-      (** Ends underlined mode. *)
-  | B_blink of bool
-      (** Begins blinking mode. *)
-  | E_blink
-      (** Ends blinking mode. *)
-  | B_reverse of bool
-      (** Begins reverse video mode. *)
-  | E_reverse
-      (** Ends reverse video mode. *)
-  | B_fg of LTerm_style.color
-      (** Begins foreground color. *)
-  | E_fg
-      (** Ends foreground color. *)
-  | B_bg of LTerm_style.color
-      (** Begins background color. *)
-  | E_bg
-      (** Ends background color. *)
+val mkf
+  :  ?bold:LTerm_style.Switch.t
+  -> ?underline:LTerm_style.Switch.t
+  -> ?blink:LTerm_style.Switch.t
+  -> ?reverse:LTerm_style.Switch.t
+  -> ?fg:LTerm_style.Color.t
+  -> ?bg:LTerm_style.Color.t
+  -> ('a, unit, string, t) format4
+  -> 'a
 
-type markup = item list
-    (** Type of a markup string. *)
+val kmkf
+  :  (t -> 'b)
+  -> ?bold:LTerm_style.Switch.t
+  -> ?underline:LTerm_style.Switch.t
+  -> ?blink:LTerm_style.Switch.t
+  -> ?reverse:LTerm_style.Switch.t
+  -> ?fg:LTerm_style.Color.t
+  -> ?bg:LTerm_style.Color.t
+  -> ('a, unit, string, 'b) format4
+  -> 'a
 
-val eval : markup -> t
-  (** [eval makrup] evaluates a markup strings as a styled string. *)
+(** {6 Printf style} *)
 
+(** The format string accept the following tags separated by commas:
 
-(** {6 Styled formatters} *)
+    - [color]: foreground color
+    - [~color]: background color
+    - [attr]: enable the given attributes (bold, underline, blink or reverse)
 
-val make_formatter :
-  ?read_color:(Format.tag -> LTerm_style.t) -> unit -> (unit -> t) * Format.formatter
-(** Create a formatter on a styled string. Returns a tuple [get_content, fmt]. Calling [get_content ()] will flush the formatter and output the resulting styled string.
+    For instance:
 
-    If a [read_color] function is provided, Format's tag are enabled and [read_color] is used to transform tags into styles.
- *)
+    {[
+      tprintf "@{<red,bold>Warning!@}\n"
+    ]}
+*)
+val tprintf : ('a, unit, t) format -> 'a
 
-val pp_with_style :
-  (LTerm_style.t -> Format.tag) ->
-  (LTerm_style.t -> ('b, Format.formatter, unit, unit) format4 -> Format.formatter -> 'b)
-(** [pp_with_style f] will create a pretty printer analogous to {!stylise}, using f to encode style into tags. Will only work on a formatter with tag enabled. *)
+val ktprintf : (t -> 'a) -> ('b, unit, t, 'a) format4 -> 'b;;
 
-val styprintf :
-  ?read_color:(Format.tag -> LTerm_style.t) ->
-  ('a, Format.formatter, unit, t) format4 -> 'a
-(** Equivalent of {!Format.sprintf} for styled strings. *)
+(** {6 Ansi control sequence parsing} *)
 
-
-val kstyprintf :
-  ?read_color:(Format.tag -> LTerm_style.t) ->
-  (t -> 'a) -> ('b, Format.formatter, unit, 'a) format4 -> 'b
-(** Equivalent of {!Format.ksprintf} for styled strings. *)
+(** Parses a string containing ansi control sequences. It return the styled string and the
+    end style. *)
+val parse_ansi : start_style:LTerm_style.t -> Zed_utf8.t -> t * LTerm_style.t

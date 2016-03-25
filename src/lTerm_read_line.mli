@@ -12,12 +12,10 @@
 (** For a complete example of usage of this module, look at the shell
     example (examples/shell.ml) distributed with Lambda-Term. *)
 
-open CamomileLibrary
+open Zed
 open React
-
-exception Interrupt
-  (** Exception raised when the user presses [Ctrl^D] with an empty
-      input. *)
+open Core.Std
+open Async.Std
 
 type prompt = LTerm_text.t
     (** Type of prompts. *)
@@ -43,71 +41,37 @@ val lookup_assoc : Zed_utf8.t -> (Zed_utf8.t * 'a) list -> (Zed_utf8.t * 'a) lis
 
 (** Type of actions. *)
 type action =
-  | Edit of LTerm_edit.action
-      (** An edition action. *)
-  | Interrupt_or_delete_next_char
-      (** Interrupt if at the beginning of an empty line, or delete
-          the next character. *)
-  | Complete
-      (** Complete current input. *)
-  | Complete_bar_next
-      (** Go to the next possible completion in the completion bar. *)
-  | Complete_bar_prev
-      (** Go to the previous possible completion in the completion
-          bar. *)
-  | Complete_bar_first
-      (** Goto the beginning of the completion bar. *)
-  | Complete_bar_last
-      (** Goto the end of the completion bar. *)
-  | Complete_bar
-      (** Complete current input using the completion bar. *)
-  | History_prev
-      (** Go to the previous entry of the history. *)
-  | History_next
-      (** Go to the next entry of the history. *)
-  | Accept
-      (** Accept the current input. *)
-  | Clear_screen
-      (** Clear the screen. *)
-  | Prev_search
-      (** Search backward in the history. *)
-  | Next_search
-      (** Search forward in the history. *)
-  | Cancel_search
-      (** Cancel search mode. *)
-  | Break
-      (** Raise [Sys.Break]. *)
-  | Suspend
-      (** Suspend the program. *)
-  | Edit_with_external_editor
-      (** Launch external editor. *)
+  [ LTerm_edit.action
+  | `interrupt_or_delete_next_char
+  | `complete
+  | `complete_bar_next
+  | `complete_bar_prev
+  | `complete_bar_first
+  | `complete_bar_last
+  | `complete_bar
+  | `history_prev
+  | `history_next
+  | `accept
+  | `clear_screen
+  | `prev_search
+  | `next_search
+  | `cancel_search
+  | `break
+  ] [@@deriving sexp, enumerate]
 
-val bindings : action list Zed_input.Make(LTerm_key).t ref
+val bindings : action list Zed_input.Make(LTerm_event).t ref
   (** Bindings. *)
 
-val bind : LTerm_key.t list -> action list -> unit
+val bind : LTerm_event.t list -> action list -> unit
   (** [bind seq actions] associates [actions] to the given
       sequence. *)
 
-val unbind : LTerm_key.t list -> unit
+val unbind : LTerm_event.t list -> unit
   (** [unbind seq] unbinds [seq]. *)
-
-val actions : (action * string) list
-  (** List of actions with their names, except {!Edit}. *)
 
 val doc_of_action : action -> string
   (** [doc_of_action action] returns a short description of the
       action. *)
-
-val action_of_name : string -> action
-  (** [action_of_name str] converts the given action name into an
-      action. Action name are the same as variants name but lowercased
-      and with '_' replaced by '-'. It raises [Not_found] if the name
-      does not correspond to an action. It also recognizes edition
-      actions. *)
-
-val name_of_action : action -> string
-  (** [name_of_action act] returns the name of the given action. *)
 
 (** {6 The read-line engine} *)
 
@@ -137,8 +101,8 @@ class virtual ['a] engine : ?history : history -> ?clipboard : Zed_edit.clipboar
 
   (** {6 Actions} *)
 
-  method insert : UChar.t -> unit
-    (** Inserts the given character. Note that is it also possible to
+  method insert : Zed_utf8.t -> unit
+    (** Inserts the given string. Note that is it also possible to
         manipulate directly the edition context. *)
 
   method send_action : action -> unit
@@ -214,7 +178,7 @@ end
 class virtual ['a] abstract : object
   method virtual eval : 'a
   method virtual send_action : action -> unit
-  method virtual insert : UChar.t -> unit
+  method virtual insert : Zed_utf8.t -> unit
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
   method virtual clipboard : Zed_edit.clipboard
@@ -260,22 +224,13 @@ class read_password : unit -> object
     (** Returns the result as a UTF-8 encoded string. *)
 end
 
-(** The result of reading a keyword. *)
-type 'a read_keyword_result =
-  | Rk_value of 'a
-      (** The user typed a correct keyword and this is its associated
-          value. *)
-  | Rk_error of Zed_utf8.t
-      (** The user did not enter a correct keyword and this is what he
-          typed instead. *)
-
 (** Read a keyword. *)
 class ['a] read_keyword : ?history : history -> unit -> object
-  inherit ['a read_keyword_result] engine
+  inherit [('a, Zed_utf8.t) Result.t] engine
 
-  method eval : 'a read_keyword_result
-    (** If the input correspond to a keyword, returns its associated
-        value. otherwise returns [`Error input]. *)
+  method eval : ('a, Zed_utf8.t) Result.t
+  (** If the input correspond to a keyword, returns its associated value. otherwise
+      returns [Error input]. *)
 
   method keywords : (string * 'a) list
     (** List of keywords with their associated values. *)
@@ -283,27 +238,36 @@ end
 
 (** {6 Running in a terminal} *)
 
+module Res : sig
+  type 'a t =
+    | Ok of 'a
+    | Interrupt (** Ctrl+D *)
+    | Break     (** Ctrl+C *)
+    | Error of exn
+  [@@deriving sexp_of]
+end
+
 (** Class for read-line instances running in a terminal. *)
 class virtual ['a] term : LTerm.t -> object
   inherit ['a] abstract
 
-  method run : 'a Lwt.t
+  method run : 'a Res.t Deferred.t
     (** Run this read-line instance. *)
 
-  method private exec : action list -> 'a Lwt.t
+  method private exec : action list -> 'a Res.t Deferred.t
     (** Executes a list of actions. Rememver to call [Zed_macro.add
         self#macro action] if you overload this method. *)
 
-  method bind : LTerm_key.t list -> action list -> unit
+  method bind : LTerm_event.t list -> action list -> unit
 
-  method draw_update : unit Lwt.t
+  method private draw_update : unit Deferred.t
     (** Updates current display and put the cursor at current edition
         position. *)
 
-  method draw_success : unit Lwt.t
+  method private draw_success : unit Deferred.t
     (** Draws after accepting current input. *)
 
-  method draw_failure : unit Lwt.t
+  method private draw_failure : unit Deferred.t
     (** Draws after an exception has been raised. *)
 
   method prompt : prompt signal
@@ -316,27 +280,20 @@ class virtual ['a] term : LTerm.t -> object
     (** The size of the terminal. This can be used for computing the
         prompt. *)
 
-  method key_sequence : LTerm_key.t list signal
-    (** The currently typed key sequence. *)
+  method event_sequence : LTerm_event.t list signal
+    (** The current event sequence. *)
 
   method completion_start : int signal
     (** Index of the first displayed word in the completion bar. *)
 
-  method hide : unit Lwt.t
+  method hide : unit
     (** Hide this read-line instance. It remains invisible until
         {!show} is called. *)
 
-  method show : unit Lwt.t
+  method show : unit
     (** Show this read-line instance if it has been previously
         hidden. *)
 
   val mutable visible : bool
     (** Whether the instance is visible. *)
-
-  method create_temporary_file_for_external_editor : string
-    (** Create a temporary file and return its path. Used for
-        editing input with an external command. *)
-
-  method external_editor : string
-    (** External editor command. *)
 end

@@ -28,7 +28,7 @@ class t = LTerm_widget_base_impl.t
    | Labels                                                          |
    +-----------------------------------------------------------------+ *)
 
-let newline = UChar.of_char '\n'
+let newline = Uchar.of_char '\n'
 
 let text_size str =
   let rec loop ofs rows cols max_cols =

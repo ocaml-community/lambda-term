@@ -9,20 +9,40 @@
 
 (** Unix specific functions *)
 
-open CamomileLibraryDyn.Camomile
-
 val sigwinch : int option
-  (** The number of the signal used to indicate that the terminal size
-      have changed. It is [None] on windows. *)
+(** The number of the signal used to indicate that the terminal size have changed. It is
+    [None] on windows. *)
 
 val system_encoding : string
-  (** The encoding used by the system. *)
+(** The encoding used by the system. *)
 
-val parse_event : ?escape_time : float -> CharEncoding.t -> char Lwt_stream.t -> LTerm_event.t Lwt.t
-  (** [parse_event encoding stream] parses one event from the given
-      input stream. [encoding] is the character encoding used to
-      decode non-ascii characters. It must be a converter from the
-      stream encoding to "UCS-4BE". If an invalid sequence is
-      encountered in the input, it fallbacks to Latin-1. [escape_time]
-      is the time waited before returning the escape key. It defaults
-      to [0.1]. *)
+module Event_parser : sig
+  (** Parsing of escape sequence in input.
+
+      For non-ASCII characters, UTF-8 encoding is assumed. Invalid UTF-8 sequences are
+      treated as Latin-1. *)
+
+  type t
+
+  (** [escape_time] is the time waited before returning the escape key. *)
+  val create : Unix.file_descr -> escape_time:float -> t
+
+  val escape_time     : t -> float
+  val set_escape_time : t -> float -> unit
+
+  (** Discard all pending characters in the internal buffer. *)
+  val discard : t -> unit
+
+  (** Readers one event from the given [t]. This is a blocking operation, which in
+      particular might sleep for [escape_time] it it needs to after reading the escape
+      character.
+
+      When the parser is disabled, this function will eventually return [None], except if
+      it re-enabled in the meantime.
+
+      Calls to read for a given [t] must be serialized. *)
+  val read : t -> LTerm_event.t option
+
+  (** Enable/disable the event parser *)
+  val set_active : t -> bool -> unit
+end

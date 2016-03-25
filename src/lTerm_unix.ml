@@ -7,10 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDyn.Camomile
-open LTerm_key
-
-let return, (>>=), (>|=) = Lwt.return, Lwt.(>>=), Lwt.(>|=)
+open Bigarray
 
 external get_sigwinch : unit -> int option = "lt_unix_get_sigwinch"
 external get_system_encoding : unit -> string = "lt_unix_get_system_encoding"
@@ -306,666 +303,865 @@ let encoding_of_lang = function
 
 let system_encoding =
   match get_system_encoding () with
-    | "" -> begin
-        match try Some (Sys.getenv "LANG") with Not_found -> None with
-          | None ->
-              "ASCII"
-          | Some lang ->
-              match try Some (String.index lang '.') with Not_found -> None with
-                | None ->
-                    encoding_of_lang lang
-                | Some idx ->
-                    String.sub lang (idx + 1) (String.length lang - idx - 1)
+  | "" -> begin
+      match Sys.getenv "LANG" with
+      | None ->
+        "ASCII"
+      | Some lang ->
+        match String.index lang '.' with
+        | None ->
+          encoding_of_lang lang
+        | Some idx ->
+          String.sub lang ~pos:(idx + 1) ~len:(String.length lang - idx - 1)
+    end
+  | enc ->
+    enc
+;;
+
+module Event_parser = struct
+  open Bigarray
+
+  type bigstring = (char, int8_unsigned, c_layout) Array1.t
+
+  external read : Unix.file_descr -> buf:bigstring -> pos:int -> len:int -> int
+    = "lt_term_bigarray_read"
+
+  external blit
+    : src:bigstring -> src_pos:int -> dst:bigstring -> dst_pos:int -> len:int -> int
+    = "lt_term_bigarray_read"
+
+  type t =
+    { fd                     : Unix.file_descr
+    ; mutable escape_time    : float
+    ; mutable active         : bool
+    ; buffer                 : bigstring
+    ; mutable ofs            : int
+    ; mutable max            : int
+    ; mutable refilling      : bool
+    ; mutable button_pressed : int (* mouse event for button up doesn't include which one
+                                      it is, so we have to remember it *)
+    }
+
+  let create fd ~escape_time =
+    { fd
+    ; escape_time
+    ; active         = true
+    ; buffer         = Array1.create char c_layout 4096
+    ; ofs            = 0
+    ; max            = 0
+    ; button_pressed = -1
+    ; resume         = None
+    }
+  ;;
+
+  let discard t =
+    t.ofs <- 0;
+    t.max <- 0;
+  ;;
+
+  let shift_remaining t =
+    let len = t.max - t.ofs in
+    if 0 < t.ofs && len > 0 then
+      blit ~src:t.buffer ~dst:t.buffer ~src_pos:t.ofs ~dst_pos:0 ~len;
+    t.ofs <- 0;
+    t.max <- len;
+  ;;
+
+  (* Wait before reading so that we avoid eating data when the terminal is disabled *)
+  let rec wait_for_fd t fd =
+    try
+      let res = Unix.select [fd] [] [] (-1.0) in
+      if t.active then
+        `Ready
+      else
+        `Disabled
+    with Unix.Unix_error (EINTR, _, _) ->
+      if t.active then
+        wait_for_fd t fd
+      else
+        `Disabled
+
+  let rec wait_for_fd_with_timeout t fd ~timeout ~timeout_at =
+    try
+      let res = Unix.select [fd] [] [] timeout in
+      if t.active then
+        match res with
+        | [], [], [] -> `Timeout
+        | _ -> `Ready
+      else
+        `Disabled
+    with Unix.Unix_error (EINTR, _, _) ->
+      if t.active then
+        let now = Unix.gettimeofday () in
+        let timeout = timeout_at - now in
+        if now <= 0. then
+          `Timeout
+        else
+          wait_for_fd' t ~timeout ~timeout_at
+      else
+        `Disabled
+  ;;
+
+  let rec read_handle_eintr t =
+    match read fd t.buffer ~pos:t.max ~len:(Array1.dim t.buffer - t.max) with
+    | n ->
+      t.max <- t.max + n;
+      if t.active then `Read n else `Disabled
+    | exception (Unix.Unix_error (EINTR, _, _)) ->
+      if t.action then
+        read_handle_eintr t
+      else
+        `Disabled
+  ;;
+
+  let refill ?timeout t =
+    let timeout_at =
+      match timeout with
+      | None -> None
+      | Some span -> Unix.gettimeofday () +. span
+    in
+    shift_remaining t;
+    match
+      match timeout with
+      | None -> wait_for_fd t fd
+      | Some span ->
+        wait_for_fd_with_timeout t fd ~timeout:span
+          ~timeout_at:(Unix.gettimeofday () + span)
+    with
+    | `Disabled | `Timeout as x -> x
+    | `Ready -> read_handle_eintr t
+  ;;
+
+  exception Need_more
+  let need_more =
+    let exn = Need_more in
+    fun () -> Exn.raise_without_backtrace exn
+  ;;
+
+  exception Discard_event
+  let discard_event =
+    let exn = Discard_event in
+    fun () -> Exn.raise_without_backtrace exn
+  ;;
+
+  (* +---------------------------------------------------------------+
+     | Parsing of encoded characters                                 |
+     +---------------------------------------------------------------+ *)
+
+  let parse_uchar t first_byte ~can_refill ~start =
+    let len =
+      match first_byte with
+      | '\xc0' .. '\xdf' ->
+        2
+      | '\xe0' .. '\xef' ->
+        3
+      | '\xf0' .. '\xf7' ->
+        4
+      | _ ->
+        1
+    in
+    if len > t.max - start then begin
+      if can_refill then need_more () else begin
+        t.ofs <- start + 1;
+        Uchar.of_char first_byte
       end
-    | enc ->
-        enc
-
-(* +-----------------------------------------------------------------+
-   | Parsing of encoded characters                                   |
-   +-----------------------------------------------------------------+ *)
-
-class output_single (cell : UChar.t option ref) = object
-  method put char = cell := Some char
-  method flush () = ()
-  method close_out () = ()
-end
-
-let parse_char encoding st first_byte =
-  let cell = ref None in
-  let output = new CharEncoding.convert_uchar_output encoding (new output_single cell) in
-  let rec loop st =
-    match !cell with
-      | Some char ->
-          return char
-      | None ->
-          Lwt_stream.next st >>= fun byte ->
-          assert (output#output (String.make 1 byte) 0 1 = 1);
-          output#flush ();
-          loop st
-  in
-  Lwt.catch
-    (fun () ->
-      assert (output#output (String.make 1 first_byte) 0 1 = 1);
-      Lwt_stream.parse st loop)
-    (function
-    | CharEncoding.Malformed_code | Lwt_stream.Empty ->
-        return (UChar.of_char first_byte)
-    | exn -> Lwt.fail exn)
-
-(* +-----------------------------------------------------------------+
-   | Input of escape sequence                                        |
-   +-----------------------------------------------------------------+ *)
-
-exception Not_a_sequence
-
-let parse_escape escape_time st =
-  let buf = Buffer.create 32 in
-  (* Read one character and add it to [buf]: *)
-  let get () =
-    Lwt.pick [Lwt_stream.get st; Lwt_unix.sleep escape_time >>= fun () -> return None] >>= fun ch ->
-    match ch with
-      | None ->
-          (* If the rest is not immediatly available, conclude that
-             this is not an escape sequence but just the escape
-             key: *)
-          Lwt.fail Not_a_sequence
-      | Some('\x00' .. '\x1f' | '\x80' .. '\xff') ->
-          (* Control characters and non-ascii characters are not part
-             of escape sequences. *)
-          Lwt.fail Not_a_sequence
-      | Some ch ->
-          Buffer.add_char buf ch;
-          return ch
-  in
-
-  let rec loop () =
-    get () >>= function
-      | '0' .. '9' | ';' | '[' ->
-          loop ()
-      | ch ->
-          return (Buffer.contents buf)
-  in
-
-  get () >>= function
-    | '[' | 'O' ->
-        loop ()
-    | _ ->
-        Lwt.fail Not_a_sequence
-
-(* +-----------------------------------------------------------------+
-   | Escape sequences mapping                                        |
-   +-----------------------------------------------------------------+ *)
-
-let controls = [|
-  Char(UChar.of_char ' ');
-  Char(UChar.of_char 'a');
-  Char(UChar.of_char 'b');
-  Char(UChar.of_char 'c');
-  Char(UChar.of_char 'd');
-  Char(UChar.of_char 'e');
-  Char(UChar.of_char 'f');
-  Char(UChar.of_char 'g');
-  Char(UChar.of_char 'h');
-  Tab;
-  Enter;
-  Char(UChar.of_char 'k');
-  Char(UChar.of_char 'l');
-  Char(UChar.of_char 'm');
-  Char(UChar.of_char 'n');
-  Char(UChar.of_char 'o');
-  Char(UChar.of_char 'p');
-  Char(UChar.of_char 'q');
-  Char(UChar.of_char 'r');
-  Char(UChar.of_char 's');
-  Char(UChar.of_char 't');
-  Char(UChar.of_char 'u');
-  Char(UChar.of_char 'v');
-  Char(UChar.of_char 'w');
-  Char(UChar.of_char 'x');
-  Char(UChar.of_char 'y');
-  Char(UChar.of_char 'z');
-  Escape;
-  Char(UChar.of_char '\\');
-  Char(UChar.of_char ']');
-  Char(UChar.of_char '^');
-  Char(UChar.of_char '_');
-|]
-
-let sequences = [|
-  "[1~", { control = false; meta = false; shift = false; code = Home };
-  "[2~", { control = false; meta = false; shift = false; code = Insert };
-  "[3~", { control = false; meta = false; shift = false; code = Delete };
-  "[4~", { control = false; meta = false; shift = false; code = End };
-  "[5~", { control = false; meta = false; shift = false; code = Prev_page };
-  "[6~", { control = false; meta = false; shift = false; code = Next_page };
-  "[7~", { control = false; meta = false; shift = false; code = Home };
-  "[8~", { control = false; meta = false; shift = false; code = End };
-  "[11~", { control = false; meta = false; shift = false; code = F1 };
-  "[12~", { control = false; meta = false; shift = false; code = F2 };
-  "[13~", { control = false; meta = false; shift = false; code = F3 };
-  "[14~", { control = false; meta = false; shift = false; code = F4 };
-  "[15~", { control = false; meta = false; shift = false; code = F5 };
-  "[17~", { control = false; meta = false; shift = false; code = F6 };
-  "[18~", { control = false; meta = false; shift = false; code = F7 };
-  "[19~", { control = false; meta = false; shift = false; code = F8 };
-  "[20~", { control = false; meta = false; shift = false; code = F9 };
-  "[21~", { control = false; meta = false; shift = false; code = F10 };
-  "[23~", { control = false; meta = false; shift = false; code = F11 };
-  "[24~", { control = false; meta = false; shift = false; code = F12 };
-
-  "[1^", { control = true; meta = false; shift = false; code = Home };
-  "[2^", { control = true; meta = false; shift = false; code = Insert };
-  "[3^", { control = true; meta = false; shift = false; code = Delete };
-  "[4^", { control = true; meta = false; shift = false; code = End };
-  "[5^", { control = true; meta = false; shift = false; code = Prev_page };
-  "[6^", { control = true; meta = false; shift = false; code = Next_page };
-  "[7^", { control = true; meta = false; shift = false; code = Home };
-  "[8^", { control = true; meta = false; shift = false; code = End };
-  "[11^", { control = true; meta = false; shift = false; code = F1 };
-  "[12^", { control = true; meta = false; shift = false; code = F2 };
-  "[13^", { control = true; meta = false; shift = false; code = F3 };
-  "[14^", { control = true; meta = false; shift = false; code = F4 };
-  "[15^", { control = true; meta = false; shift = false; code = F5 };
-  "[17^", { control = true; meta = false; shift = false; code = F6 };
-  "[18^", { control = true; meta = false; shift = false; code = F7 };
-  "[19^", { control = true; meta = false; shift = false; code = F8 };
-  "[20^", { control = true; meta = false; shift = false; code = F9 };
-  "[21^", { control = true; meta = false; shift = false; code = F10 };
-  "[23^", { control = true; meta = false; shift = false; code = F11 };
-  "[24^", { control = true; meta = false; shift = false; code = F12 };
-
-  "[1$", { control = false; meta = false; shift = true; code = Home };
-  "[2$", { control = false; meta = false; shift = true; code = Insert };
-  "[3$", { control = false; meta = false; shift = true; code = Delete };
-  "[4$", { control = false; meta = false; shift = true; code = End };
-  "[5$", { control = false; meta = false; shift = true; code = Prev_page };
-  "[6$", { control = false; meta = false; shift = true; code = Next_page };
-  "[7$", { control = false; meta = false; shift = true; code = Home };
-  "[8$", { control = false; meta = false; shift = true; code = End };
-
-  "[1@", { control = true; meta = false; shift = true; code = Home };
-  "[2@", { control = true; meta = false; shift = true; code = Insert };
-  "[3@", { control = true; meta = false; shift = true; code = Delete };
-  "[4@", { control = true; meta = false; shift = true; code = End };
-  "[5@", { control = true; meta = false; shift = true; code = Prev_page };
-  "[6@", { control = true; meta = false; shift = true; code = Next_page };
-  "[7@", { control = true; meta = false; shift = true; code = Home };
-  "[8@", { control = true; meta = false; shift = true; code = End };
-
-  "[25~", { control = false; meta = false; shift = true; code = F3 };
-  "[26~", { control = false; meta = false; shift = true; code = F4 };
-  "[28~", { control = false; meta = false; shift = true; code = F5 };
-  "[29~", { control = false; meta = false; shift = true; code = F6 };
-  "[31~", { control = false; meta = false; shift = true; code = F7 };
-  "[32~", { control = false; meta = false; shift = true; code = F8 };
-  "[33~", { control = false; meta = false; shift = true; code = F9 };
-  "[34~", { control = false; meta = false; shift = true; code = F10 };
-  "[23$", { control = false; meta = false; shift = true; code = F11 };
-  "[24$", { control = false; meta = false; shift = true; code = F12 };
-
-  "[25^", { control = true; meta = false; shift = true; code = F3 };
-  "[26^", { control = true; meta = false; shift = true; code = F4 };
-  "[28^", { control = true; meta = false; shift = true; code = F5 };
-  "[29^", { control = true; meta = false; shift = true; code = F6 };
-  "[31^", { control = true; meta = false; shift = true; code = F7 };
-  "[32^", { control = true; meta = false; shift = true; code = F8 };
-  "[33^", { control = true; meta = false; shift = true; code = F9 };
-  "[34^", { control = true; meta = false; shift = true; code = F10 };
-  "[23@", { control = true; meta = false; shift = true; code = F11 };
-  "[24@", { control = true; meta = false; shift = true; code = F12 };
-
-  "[Z", { control = false; meta = false; shift = true; code = Tab };
-
-  "[A", { control = false; meta = false; shift = false; code = Up };
-  "[B", { control = false; meta = false; shift = false; code = Down };
-  "[C", { control = false; meta = false; shift = false; code = Right };
-  "[D", { control = false; meta = false; shift = false; code = Left };
-
-  "[a", { control = false; meta = false; shift = true; code = Up };
-  "[b", { control = false; meta = false; shift = true; code = Down };
-  "[c", { control = false; meta = false; shift = true; code = Right };
-  "[d", { control = false; meta = false; shift = true; code = Left };
-
-  "A", { control = false; meta = false; shift = false; code = Up };
-  "B", { control = false; meta = false; shift = false; code = Down };
-  "C", { control = false; meta = false; shift = false; code = Right };
-  "D", { control = false; meta = false; shift = false; code = Left };
-
-  "OA", { control = false; meta = false; shift = false; code = Up };
-  "OB", { control = false; meta = false; shift = false; code = Down };
-  "OC", { control = false; meta = false; shift = false; code = Right };
-  "OD", { control = false; meta = false; shift = false; code = Left };
-
-  "Oa", { control = true; meta = false; shift = false; code = Up };
-  "Ob", { control = true; meta = false; shift = false; code = Down };
-  "Oc", { control = true; meta = false; shift = false; code = Right };
-  "Od", { control = true; meta = false; shift = false; code = Left };
-
-  "OP", { control = false; meta = false; shift = false; code = F1 };
-  "OQ", { control = false; meta = false; shift = false; code = F2 };
-  "OR", { control = false; meta = false; shift = false; code = F3 };
-  "OS", { control = false; meta = false; shift = false; code = F4 };
-
-  "O2P", { control = false; meta = false; shift = true; code = F1 };
-  "O2Q", { control = false; meta = false; shift = true; code = F2 };
-  "O2R", { control = false; meta = false; shift = true; code = F3 };
-  "O2S", { control = false; meta = false; shift = true; code = F4 };
-
-  "O3P", { control = false; meta = true; shift = false; code = F1 };
-  "O3Q", { control = false; meta = true; shift = false; code = F2 };
-  "O3R", { control = false; meta = true; shift = false; code = F3 };
-  "O3S", { control = false; meta = true; shift = false; code = F4 };
-
-  "O4P", { control = false; meta = true; shift = true; code = F1 };
-  "O4Q", { control = false; meta = true; shift = true; code = F2 };
-  "O4R", { control = false; meta = true; shift = true; code = F3 };
-  "O4S", { control = false; meta = true; shift = true; code = F4 };
-
-  "O5P", { control = true; meta = false; shift = false; code = F1 };
-  "O5Q", { control = true; meta = false; shift = false; code = F2 };
-  "O5R", { control = true; meta = false; shift = false; code = F3 };
-  "O5S", { control = true; meta = false; shift = false; code = F4 };
-
-  "O6P", { control = true; meta = false; shift = true; code = F1 };
-  "O6Q", { control = true; meta = false; shift = true; code = F2 };
-  "O6R", { control = true; meta = false; shift = true; code = F3 };
-  "O6S", { control = true; meta = false; shift = true; code = F4 };
-
-  "O7P", { control = true; meta = true; shift = false; code = F1 };
-  "O7Q", { control = true; meta = true; shift = false; code = F2 };
-  "O7R", { control = true; meta = true; shift = false; code = F3 };
-  "O7S", { control = true; meta = true; shift = false; code = F4 };
-
-  "O8P", { control = true; meta = true; shift = true; code = F1 };
-  "O8Q", { control = true; meta = true; shift = true; code = F2 };
-  "O8R", { control = true; meta = true; shift = true; code = F3 };
-  "O8S", { control = true; meta = true; shift = true; code = F4 };
-
-  "[[A", { control = false; meta = false; shift = false; code = F1 };
-  "[[B", { control = false; meta = false; shift = false; code = F2 };
-  "[[C", { control = false; meta = false; shift = false; code = F3 };
-  "[[D", { control = false; meta = false; shift = false; code = F4 };
-  "[[E", { control = false; meta = false; shift = false; code = F5 };
-
-  "[H", { control = false; meta = false; shift = false; code = Home };
-  "[F", { control = false; meta = false; shift = false; code = End };
-
-  "OH", { control = false; meta = false; shift = false; code = Home };
-  "OF", { control = false; meta = false; shift = false; code = End };
-
-  "H", { control = false; meta = false; shift = false; code = Home };
-  "F", { control = false; meta = false; shift = false; code = End };
-
-  "[1;2A", { control = false; meta = false; shift = true; code = Up };
-  "[1;2B", { control = false; meta = false; shift = true; code = Down };
-  "[1;2C", { control = false; meta = false; shift = true; code = Right };
-  "[1;2D", { control = false; meta = false; shift = true; code = Left };
-
-  "[1;3A", { control = false; meta = true; shift = false; code = Up };
-  "[1;3B", { control = false; meta = true; shift = false; code = Down };
-  "[1;3C", { control = false; meta = true; shift = false; code = Right };
-  "[1;3D", { control = false; meta = true; shift = false; code = Left };
-
-  "[1;4A", { control = false; meta = true; shift = true; code = Up };
-  "[1;4B", { control = false; meta = true; shift = true; code = Down };
-  "[1;4C", { control = false; meta = true; shift = true; code = Right };
-  "[1;4D", { control = false; meta = true; shift = true; code = Left };
-
-  "[1;5A", { control = true; meta = false; shift = false; code = Up };
-  "[1;5B", { control = true; meta = false; shift = false; code = Down };
-  "[1;5C", { control = true; meta = false; shift = false; code = Right };
-  "[1;5D", { control = true; meta = false; shift = false; code = Left };
-
-  "[1;6A", { control = true; meta = false; shift = true; code = Up };
-  "[1;6B", { control = true; meta = false; shift = true; code = Down };
-  "[1;6C", { control = true; meta = false; shift = true; code = Right };
-  "[1;6D", { control = true; meta = false; shift = true; code = Left };
-
-  "[1;7A", { control = true; meta = true; shift = false; code = Up };
-  "[1;7B", { control = true; meta = true; shift = false; code = Down };
-  "[1;7C", { control = true; meta = true; shift = false; code = Right };
-  "[1;7D", { control = true; meta = true; shift = false; code = Left };
-
-  "[1;8A", { control = true; meta = true; shift = true; code = Up };
-  "[1;8B", { control = true; meta = true; shift = true; code = Down };
-  "[1;8C", { control = true; meta = true; shift = true; code = Right };
-  "[1;8D", { control = true; meta = true; shift = true; code = Left };
-
-  "[1;2P", { control = false; meta = false; shift = true; code = F1 };
-  "[1;2Q", { control = false; meta = false; shift = true; code = F2 };
-  "[1;2R", { control = false; meta = false; shift = true; code = F3 };
-  "[1;2S", { control = false; meta = false; shift = true; code = F4 };
-
-  "[1;3P", { control = false; meta = true; shift = false; code = F1 };
-  "[1;3Q", { control = false; meta = true; shift = false; code = F2 };
-  "[1;3R", { control = false; meta = true; shift = false; code = F3 };
-  "[1;3S", { control = false; meta = true; shift = false; code = F4 };
-
-  "[1;4P", { control = false; meta = true; shift = true; code = F1 };
-  "[1;4Q", { control = false; meta = true; shift = true; code = F2 };
-  "[1;4R", { control = false; meta = true; shift = true; code = F3 };
-  "[1;4S", { control = false; meta = true; shift = true; code = F4 };
-
-  "[1;5P", { control = true; meta = false; shift = false; code = F1 };
-  "[1;5Q", { control = true; meta = false; shift = false; code = F2 };
-  "[1;5R", { control = true; meta = false; shift = false; code = F3 };
-  "[1;5S", { control = true; meta = false; shift = false; code = F4 };
-
-  "[1;6P", { control = true; meta = false; shift = true; code = F1 };
-  "[1;6Q", { control = true; meta = false; shift = true; code = F2 };
-  "[1;6R", { control = true; meta = false; shift = true; code = F3 };
-  "[1;6S", { control = true; meta = false; shift = true; code = F4 };
-
-  "[1;7P", { control = true; meta = true; shift = false; code = F1 };
-  "[1;7Q", { control = true; meta = true; shift = false; code = F2 };
-  "[1;7R", { control = true; meta = true; shift = false; code = F3 };
-  "[1;7S", { control = true; meta = true; shift = false; code = F4 };
-
-  "[1;8P", { control = true; meta = true; shift = true; code = F1 };
-  "[1;8Q", { control = true; meta = true; shift = true; code = F2 };
-  "[1;8R", { control = true; meta = true; shift = true; code = F3 };
-  "[1;8S", { control = true; meta = true; shift = true; code = F4 };
-
-  "O1;2P", { control = false; meta = false; shift = true; code = F1 };
-  "O1;2Q", { control = false; meta = false; shift = true; code = F2 };
-  "O1;2R", { control = false; meta = false; shift = true; code = F3 };
-  "O1;2S", { control = false; meta = false; shift = true; code = F4 };
-
-  "O1;3P", { control = false; meta = true; shift = false; code = F1 };
-  "O1;3Q", { control = false; meta = true; shift = false; code = F2 };
-  "O1;3R", { control = false; meta = true; shift = false; code = F3 };
-  "O1;3S", { control = false; meta = true; shift = false; code = F4 };
-
-  "O1;4P", { control = false; meta = true; shift = true; code = F1 };
-  "O1;4Q", { control = false; meta = true; shift = true; code = F2 };
-  "O1;4R", { control = false; meta = true; shift = true; code = F3 };
-  "O1;4S", { control = false; meta = true; shift = true; code = F4 };
-
-  "O1;5P", { control = true; meta = false; shift = false; code = F1 };
-  "O1;5Q", { control = true; meta = false; shift = false; code = F2 };
-  "O1;5R", { control = true; meta = false; shift = false; code = F3 };
-  "O1;5S", { control = true; meta = false; shift = false; code = F4 };
-
-  "O1;6P", { control = true; meta = false; shift = true; code = F1 };
-  "O1;6Q", { control = true; meta = false; shift = true; code = F2 };
-  "O1;6R", { control = true; meta = false; shift = true; code = F3 };
-  "O1;6S", { control = true; meta = false; shift = true; code = F4 };
-
-  "O1;7P", { control = true; meta = true; shift = false; code = F1 };
-  "O1;7Q", { control = true; meta = true; shift = false; code = F2 };
-  "O1;7R", { control = true; meta = true; shift = false; code = F3 };
-  "O1;7S", { control = true; meta = true; shift = false; code = F4 };
-
-  "O1;8P", { control = true; meta = true; shift = true; code = F1 };
-  "O1;8Q", { control = true; meta = true; shift = true; code = F2 };
-  "O1;8R", { control = true; meta = true; shift = true; code = F3 };
-  "O1;8S", { control = true; meta = true; shift = true; code = F4 };
-
-  "[15;2~", { control = false; meta = false; shift = true; code = F5 };
-  "[17;2~", { control = false; meta = false; shift = true; code = F6 };
-  "[18;2~", { control = false; meta = false; shift = true; code = F7 };
-  "[19;2~", { control = false; meta = false; shift = true; code = F8 };
-  "[20;2~", { control = false; meta = false; shift = true; code = F9 };
-  "[21;2~", { control = false; meta = false; shift = true; code = F10 };
-  "[23;2~", { control = false; meta = false; shift = true; code = F11 };
-  "[24;2~", { control = false; meta = false; shift = true; code = F12 };
-
-  "[15;3~", { control = false; meta = true; shift = false; code = F5 };
-  "[17;3~", { control = false; meta = true; shift = false; code = F6 };
-  "[18;3~", { control = false; meta = true; shift = false; code = F7 };
-  "[19;3~", { control = false; meta = true; shift = false; code = F8 };
-  "[20;3~", { control = false; meta = true; shift = false; code = F9 };
-  "[21;3~", { control = false; meta = true; shift = false; code = F10 };
-  "[23;3~", { control = false; meta = true; shift = false; code = F11 };
-  "[24;3~", { control = false; meta = true; shift = false; code = F12 };
-
-  "[15;4~", { control = false; meta = true; shift = true; code = F5 };
-  "[17;4~", { control = false; meta = true; shift = true; code = F6 };
-  "[18;4~", { control = false; meta = true; shift = true; code = F7 };
-  "[19;4~", { control = false; meta = true; shift = true; code = F8 };
-  "[20;4~", { control = false; meta = true; shift = true; code = F9 };
-  "[21;4~", { control = false; meta = true; shift = true; code = F10 };
-  "[23;4~", { control = false; meta = true; shift = true; code = F11 };
-  "[24;4~", { control = false; meta = true; shift = true; code = F12 };
-
-  "[15;5~", { control = true; meta = false; shift = false; code = F5 };
-  "[17;5~", { control = true; meta = false; shift = false; code = F6 };
-  "[18;5~", { control = true; meta = false; shift = false; code = F7 };
-  "[19;5~", { control = true; meta = false; shift = false; code = F8 };
-  "[20;5~", { control = true; meta = false; shift = false; code = F9 };
-  "[21;5~", { control = true; meta = false; shift = false; code = F10 };
-  "[23;5~", { control = true; meta = false; shift = false; code = F11 };
-  "[24;5~", { control = true; meta = false; shift = false; code = F12 };
-
-  "[15;6~", { control = true; meta = false; shift = true; code = F5 };
-  "[17;6~", { control = true; meta = false; shift = true; code = F6 };
-  "[18;6~", { control = true; meta = false; shift = true; code = F7 };
-  "[19;6~", { control = true; meta = false; shift = true; code = F8 };
-  "[20;6~", { control = true; meta = false; shift = true; code = F9 };
-  "[21;6~", { control = true; meta = false; shift = true; code = F10 };
-  "[23;6~", { control = true; meta = false; shift = true; code = F11 };
-  "[24;6~", { control = true; meta = false; shift = true; code = F12 };
-
-  "[15;7~", { control = true; meta = true; shift = false; code = F5 };
-  "[17;7~", { control = true; meta = true; shift = false; code = F6 };
-  "[18;7~", { control = true; meta = true; shift = false; code = F7 };
-  "[19;7~", { control = true; meta = true; shift = false; code = F8 };
-  "[20;7~", { control = true; meta = true; shift = false; code = F9 };
-  "[21;7~", { control = true; meta = true; shift = false; code = F10 };
-  "[23;7~", { control = true; meta = true; shift = false; code = F11 };
-  "[24;7~", { control = true; meta = true; shift = false; code = F12 };
-
-  "[15;8~", { control = true; meta = true; shift = true; code = F5 };
-  "[17;8~", { control = true; meta = true; shift = true; code = F6 };
-  "[18;8~", { control = true; meta = true; shift = true; code = F7 };
-  "[19;8~", { control = true; meta = true; shift = true; code = F8 };
-  "[20;8~", { control = true; meta = true; shift = true; code = F9 };
-  "[21;8~", { control = true; meta = true; shift = true; code = F10 };
-  "[23;8~", { control = true; meta = true; shift = true; code = F11 };
-  "[24;8~", { control = true; meta = true; shift = true; code = F12 };
-
-  "[1;2H", { control = false; meta = false; shift = true; code = Home };
-  "[1;2F", { control = false; meta = false; shift = true; code = End };
-
-  "[1;3H", { control = false; meta = true; shift = false; code = Home };
-  "[1;3F", { control = false; meta = true; shift = false; code = End };
-
-  "[1;4H", { control = false; meta = true; shift = true; code = Home };
-  "[1;4F", { control = false; meta = true; shift = true; code = End };
-
-  "[1;5H", { control = true; meta = false; shift = false; code = Home };
-  "[1;5F", { control = true; meta = false; shift = false; code = End };
-
-  "[1;6H", { control = true; meta = false; shift = true; code = Home };
-  "[1;6F", { control = true; meta = false; shift = true; code = End };
-
-  "[1;7H", { control = true; meta = true; shift = false; code = Home };
-  "[1;7F", { control = true; meta = true; shift = false; code = End };
-
-  "[1;8H", { control = true; meta = true; shift = true; code = Home };
-  "[1;8F", { control = true; meta = true; shift = true; code = End };
-
-  "[2;2~", { control = false; meta = false; shift = true; code = Insert };
-  "[3;2~", { control = false; meta = false; shift = true; code = Delete };
-  "[5;2~", { control = false; meta = false; shift = true; code = Prev_page };
-  "[6;2~", { control = false; meta = false; shift = true; code = Next_page };
-
-  "[2;3~", { control = false; meta = true; shift = false; code = Insert };
-  "[3;3~", { control = false; meta = true; shift = false; code = Delete };
-  "[5;3~", { control = false; meta = true; shift = false; code = Prev_page };
-  "[6;3~", { control = false; meta = true; shift = false; code = Next_page };
-
-  "[2;4~", { control = false; meta = true; shift = true; code = Insert };
-  "[3;4~", { control = false; meta = true; shift = true; code = Delete };
-  "[5;4~", { control = false; meta = true; shift = true; code = Prev_page };
-  "[6;4~", { control = false; meta = true; shift = true; code = Next_page };
-
-  "[2;5~", { control = true; meta = false; shift = false; code = Insert };
-  "[3;5~", { control = true; meta = false; shift = false; code = Delete };
-  "[5;5~", { control = true; meta = false; shift = false; code = Prev_page };
-  "[6;5~", { control = true; meta = false; shift = false; code = Next_page };
-
-  "[2;6~", { control = true; meta = false; shift = true; code = Insert };
-  "[3;6~", { control = true; meta = false; shift = true; code = Delete };
-  "[5;6~", { control = true; meta = false; shift = true; code = Prev_page };
-  "[6;6~", { control = true; meta = false; shift = true; code = Next_page };
-
-  "[2;7~", { control = true; meta = true; shift = false; code = Insert };
-  "[3;7~", { control = true; meta = true; shift = false; code = Delete };
-  "[5;7~", { control = true; meta = true; shift = false; code = Prev_page };
-  "[6;7~", { control = true; meta = true; shift = false; code = Next_page };
-
-  "[2;8~", { control = true; meta = true; shift = true; code = Insert };
-  "[3;8~", { control = true; meta = true; shift = true; code = Delete };
-  "[5;8~", { control = true; meta = true; shift = true; code = Prev_page };
-  "[6;8~", { control = true; meta = true; shift = true; code = Next_page };
-
-  (* iTerm2 *)
-  "[1;9A", { control = false; meta = true; shift = false; code = Up };
-  "[1;9B", { control = false; meta = true; shift = false; code = Down };
-  "[1;9C", { control = false; meta = true; shift = false; code = Right };
-  "[1;9D", { control = false; meta = true; shift = false; code = Left };
-|]
-
-let () = Array.sort (fun (seq1, _) (seq2, _) -> String.compare seq1 seq2) sequences
-
-let find_sequence seq =
-  let rec loop a b =
-    if a = b then
-      None
-    else
-      let c = (a + b) / 2 in
-      let k, v = Array.unsafe_get sequences c in
-      match String.compare seq k with
-        | d when d < 0 ->
-            loop a c
-        | d when d > 0 ->
-            loop (c + 1) b
+    end else begin
+      let ch =
+        match first_byte with
+        | '\xc0' .. '\xdf' ->
+          Uchar.of_int ((   (Char.to_int first_byte           land 0x1f) lsl 6)
+                           lor (Char.to_int t.buffer.{start + 1} land 0x3f))
+        | '\xe0' .. '\xef' ->
+          Uchar.of_int ((    (Char.to_int first_byte           land 0x0f) lsl 12)
+                           lor ((Char.to_int t.buffer.{start + 1} land 0x3f) lsl 6)
+                           lor  (Char.to_int t.buffer.{start + 2} land 0x3f))
+        | '\xf0' .. '\xf7' ->
+          Uchar.of_int ((    (Char.to_int first_byte           land 0x07) lsl 18)
+                           lor ((Char.to_int t.buffer.{start + 1} land 0x3f) lsl 12)
+                           lor ((Char.to_int t.buffer.{start + 2} land 0x3f) lsl 6)
+                           lor  (Char.to_int t.buffer.{start + 3} land 0x3f))
         | _ ->
-            Some v
-  in
-  loop 0 (Array.length sequences)
+          Uchar.of_char first_byte
+      in
+      t.ofs <- start + len;
+      ch
+    end
+  ;;
 
-let rec parse_event ?(escape_time = 0.1) encoding stream =
-  Lwt_stream.next stream >>= fun byte ->
-  match byte with
-    | '\x1b' -> begin
-        (* Escape sequences *)
-        Lwt.catch (fun () ->
-          (* Try to parse an escape seqsuence *)
-          Lwt_stream.parse stream (parse_escape escape_time) >>= function
-            | "[M" -> begin
-                (* Mouse report *)
-                let open LTerm_mouse in
-                Lwt_stream.next stream >|= Char.code >>= fun mask ->
-                Lwt_stream.next stream >|= Char.code >>= fun x ->
-                Lwt_stream.next stream >|= Char.code >>= fun y ->
-                try
-                  if mask = 0b00100011 then raise Exit;
-                  return (LTerm_event.Mouse {
-                            control = mask land 0b00010000 <> 0;
-                            meta = mask land 0b00001000 <> 0;
-                            shift = false;
-                            row = y - 33;
-                            col = x - 33;
-                            button =
-                              (match mask land 0b11000111 with
-                                 | 0b00000000 -> Button1
-                                 | 0b00000001 -> Button2
-                                 | 0b00000010 -> Button3
-                                 | 0b01000000 -> Button4
-                                 | 0b01000001 -> Button5
-                                 | 0b01000010 -> Button6
-                                 | 0b01000011 -> Button7
-                                 | 0b01000100 -> Button8
-                                 | 0b01000101 -> Button9
-                                 | _ -> raise Exit);
-                          })
-                with Exit ->
-                  parse_event encoding stream
-              end
-            | seq ->
-                match find_sequence seq with
-                  | Some key ->
-                      return (LTerm_event.Key key)
-                  | None ->
-                      return (LTerm_event.Sequence ("\x1b" ^ seq)))
-          (function
-          | Not_a_sequence -> begin
-              (* If it is not, test if it is META+key. *)
-              Lwt.pick [Lwt_stream.peek stream;
-                        Lwt_unix.sleep escape_time >>= fun () -> return None] >>= fun ch ->
-              match ch with
-                | None ->
-                    return (LTerm_event.Key { control = false; meta = false;
-                                              shift = false; code = Escape })
-                | Some byte -> begin
-                    match byte with
-                      | '\x1b' -> begin
-                          (* Escape sequences *)
-                          Lwt.catch (fun () ->
-                            begin
-                              Lwt_stream.parse stream
-                                (fun stream ->
-                                   Lwt_stream.junk stream >>= fun () ->
-                                   Lwt.pick [Lwt_stream.peek stream;
-                                             Lwt_unix.sleep escape_time >>= fun () -> return None]
-                                             >>= fun ch ->
-                                   match ch with
-                                     | None ->
-                                         Lwt.fail Not_a_sequence
-                                     | Some _ ->
-                                         parse_escape escape_time stream)
-                            end >>= fun seq ->
-                            match find_sequence seq with
-                              | Some key ->
-                                  return (LTerm_event.Key { key with meta = true })
-                              | None ->
-                                  return (LTerm_event.Sequence ("\x1b\x1b" ^ seq)))
-                            (function
-                            | Not_a_sequence ->
-                                return (LTerm_event.Key { control = false; meta = false;
-                                                          shift = false; code = Escape })
-                            | exn -> Lwt.fail exn)
-                        end
-                      | '\x00' .. '\x1b' ->
-                          (* Control characters *)
-                          Lwt_stream.junk stream >>= fun () ->
-                          let code = controls.(Char.code byte) in
-                          return (LTerm_event.Key { control = (match code with Char _ -> true | _ -> false); meta = true; shift = false; code })
-                      | '\x7f' ->
-                          (* Backspace *)
-                          Lwt_stream.junk stream >>= fun () ->
-                          return (LTerm_event.Key { control = false; meta = true;
-                                                    shift = false; code = Backspace })
-                      | '\x00' .. '\x7f' ->
-                          (* Other ascii characters *)
-                          Lwt_stream.junk stream >>= fun () ->
-                          return(LTerm_event.Key  { control = false; meta = true;
-                                                    shift = false; code = Char(UChar.of_char byte) })
-                      | byte' ->
-                          Lwt_stream.junk stream >>= fun () ->
-                          parse_char encoding stream byte' >>= fun code ->
-                          return (LTerm_event.Key { control = false; meta = true;
-                                                    shift = false; code = Char code })
-                    end
-            end
-          | exn -> Lwt.fail exn)
-      end
-    | '\x00' .. '\x1f' ->
-        (* Control characters *)
-        let code = controls.(Char.code byte) in
-        return (LTerm_event.Key { control = (match code with Char _ -> true | _ -> false); meta = false; shift = false; code })
+  (* +---------------------------------------------------------------+
+     | Input of escape sequence                                      |
+     +---------------------------------------------------------------+ *)
+
+  (* This doesn't advance [t.ofs] the caller is responsible for doing it by the length of
+     the returned string. *)
+  let peek_escape t ~can_refill ~start =
+    let rec loop ~start i =
+      if i < t.max then
+        match t.buffer.{i} with
+        | '0' .. '9' | ';' | '[' ->
+          loop ~start (i + 1)
+        | '\x00' .. '\x1f' | '\x80' .. '\xff' ->
+          (* Control characters and non-ascii characters are not part of escape
+             sequences. *)
+          ""
+        | _ ->
+          Bigstring.To_string.sub t.buffer ~pos:start ~len:(i - start + 1)
+      else if can_refill then
+        need_more ()
+      else
+        (* If the rest is not immediatly available, conclude that this is not an escape
+           sequence but just the escape key: *)
+        ""
+    in
+    if start < t.max then
+      match t.buffer.{start} with
+      | '[' | 'O' ->
+        loop ~start (start + 1)
+      | _ ->
+        ""
+    else if can_refill then
+      need_more ()
+    else
+      ""
+  ;;
+
+  (* +---------------------------------------------------------------+
+     | Escape sequences mapping                                      |
+     +---------------------------------------------------------------+ *)
+
+  let controls : LTerm_event.t array = [|
+    Char(C, ' ');
+    Char(C, 'a');
+    Char(C, 'b');
+    Char(C, 'c');
+    Char(C, 'd');
+    Char(C, 'e');
+    Char(C, 'f');
+    Char(C, 'g');
+    Char(C, 'h');
+    Key (N, Tab);
+    Char(C, 'j');
+    Char(C, 'k');
+    Char(C, 'l');
+    Key (N, Enter);
+    Char(C, 'n');
+    Char(C, 'o');
+    Char(C, 'p');
+    Char(C, 'q');
+    Char(C, 'r');
+    Char(C, 's');
+    Char(C, 't');
+    Char(C, 'u');
+    Char(C, 'v');
+    Char(C, 'w');
+    Char(C, 'x');
+    Char(C, 'y');
+    Char(C, 'z');
+    Key (N, Escape);
+    Char(C, '\\');
+    Char(C, ']');
+    Char(C, '^');
+    Char(C, '_');
+  |]
+
+  let sequences : (string * LTerm_event.t) array = [|
+    "[1~", Key (N, Home);
+    "[2~", Key (N, Insert);
+    "[3~", Key (N, Delete);
+    "[4~", Key (N, End);
+    "[5~", Key (N, Prev);
+    "[6~", Key (N, Next);
+    "[7~", Key (N, Home);
+    "[8~", Key (N, End);
+    "[11~", Key (N, F1);
+    "[12~", Key (N, F2);
+    "[13~", Key (N, F3);
+    "[14~", Key (N, F4);
+    "[15~", Key (N, F5);
+    "[17~", Key (N, F6);
+    "[18~", Key (N, F7);
+    "[19~", Key (N, F8);
+    "[20~", Key (N, F9);
+    "[21~", Key (N, F10);
+    "[23~", Key (N, F11);
+    "[24~", Key (N, F12);
+
+    "[1^", Key (C, Home);
+    "[2^", Key (C, Insert);
+    "[3^", Key (C, Delete);
+    "[4^", Key (C, End);
+    "[5^", Key (C, Prev);
+    "[6^", Key (C, Next);
+    "[7^", Key (C, Home);
+    "[8^", Key (C, End);
+    "[11^", Key (C, F1);
+    "[12^", Key (C, F2);
+    "[13^", Key (C, F3);
+    "[14^", Key (C, F4);
+    "[15^", Key (C, F5);
+    "[17^", Key (C, F6);
+    "[18^", Key (C, F7);
+    "[19^", Key (C, F8);
+    "[20^", Key (C, F9);
+    "[21^", Key (C, F10);
+    "[23^", Key (C, F11);
+    "[24^", Key (C, F12);
+
+    "[1$", Key (S, Home);
+    "[2$", Key (S, Insert);
+    "[3$", Key (S, Delete);
+    "[4$", Key (S, End);
+    "[5$", Key (S, Prev);
+    "[6$", Key (S, Next);
+    "[7$", Key (S, Home);
+    "[8$", Key (S, End);
+
+    "[1@", Key (C_S, Home);
+    "[2@", Key (C_S, Insert);
+    "[3@", Key (C_S, Delete);
+    "[4@", Key (C_S, End);
+    "[5@", Key (C_S, Prev);
+    "[6@", Key (C_S, Next);
+    "[7@", Key (C_S, Home);
+    "[8@", Key (C_S, End);
+
+    "[25~", Key (S, F3);
+    "[26~", Key (S, F4);
+    "[28~", Key (S, F5);
+    "[29~", Key (S, F6);
+    "[31~", Key (S, F7);
+    "[32~", Key (S, F8);
+    "[33~", Key (S, F9);
+    "[34~", Key (S, F10);
+    "[23$", Key (S, F11);
+    "[24$", Key (S, F12);
+
+    "[25^", Key (C_S, F3);
+    "[26^", Key (C_S, F4);
+    "[28^", Key (C_S, F5);
+    "[29^", Key (C_S, F6);
+    "[31^", Key (C_S, F7);
+    "[32^", Key (C_S, F8);
+    "[33^", Key (C_S, F9);
+    "[34^", Key (C_S, F10);
+    "[23@", Key (C_S, F11);
+    "[24@", Key (C_S, F12);
+
+    "[Z", Key (S, Tab);
+
+    "[A", Key (N, Up);
+    "[B", Key (N, Down);
+    "[C", Key (N, Right);
+    "[D", Key (N, Left);
+
+    "[a", Key (S, Up);
+    "[b", Key (S, Down);
+    "[c", Key (S, Right);
+    "[d", Key (S, Left);
+
+    "A", Key (N, Up);
+    "B", Key (N, Down);
+    "C", Key (N, Right);
+    "D", Key (N, Left);
+
+    (* Putty *)
+    "OA", Key (C, Up);
+    "OB", Key (C, Down);
+    "OC", Key (C, Right);
+    "OD", Key (C, Left);
+
+    "Oa", Key (C, Up);
+    "Ob", Key (C, Down);
+    "Oc", Key (C, Right);
+    "Od", Key (C, Left);
+
+    "OP", Key (N, F1);
+    "OQ", Key (N, F2);
+    "OR", Key (N, F3);
+    "OS", Key (N, F4);
+
+    "O2P", Key (S, F1);
+    "O2Q", Key (S, F2);
+    "O2R", Key (S, F3);
+    "O2S", Key (S, F4);
+
+    "O3P", Key (M, F1);
+    "O3Q", Key (M, F2);
+    "O3R", Key (M, F3);
+    "O3S", Key (M, F4);
+
+    "O4P", Key (M_S, F1);
+    "O4Q", Key (M_S, F2);
+    "O4R", Key (M_S, F3);
+    "O4S", Key (M_S, F4);
+
+    "O5P", Key (C, F1);
+    "O5Q", Key (C, F2);
+    "O5R", Key (C, F3);
+    "O5S", Key (C, F4);
+
+    "O6P", Key (C_S, F1);
+    "O6Q", Key (C_S, F2);
+    "O6R", Key (C_S, F3);
+    "O6S", Key (C_S, F4);
+
+    "O7P", Key (C_M, F1);
+    "O7Q", Key (C_M, F2);
+    "O7R", Key (C_M, F3);
+    "O7S", Key (C_M, F4);
+
+    "O8P", Key (C_M_S, F1);
+    "O8Q", Key (C_M_S, F2);
+    "O8R", Key (C_M_S, F3);
+    "O8S", Key (C_M_S, F4);
+
+    "[[A", Key (N, F1);
+    "[[B", Key (N, F2);
+    "[[C", Key (N, F3);
+    "[[D", Key (N, F4);
+    "[[E", Key (N, F5);
+
+    "[H", Key (N, Home);
+    "[F", Key (N, End);
+
+    "OH", Key (N, Home);
+    "OF", Key (N, End);
+
+    "H", Key (N, Home);
+    "F", Key (N, End);
+
+    "[1;2A", Key (S, Up);
+    "[1;2B", Key (S, Down);
+    "[1;2C", Key (S, Right);
+    "[1;2D", Key (S, Left);
+
+    "[1;3A", Key (M, Up);
+    "[1;3B", Key (M, Down);
+    "[1;3C", Key (M, Right);
+    "[1;3D", Key (M, Left);
+
+    "[1;4A", Key (M_S, Up);
+    "[1;4B", Key (M_S, Down);
+    "[1;4C", Key (M_S, Right);
+    "[1;4D", Key (M_S, Left);
+
+    "[1;5A", Key (C, Up);
+    "[1;5B", Key (C, Down);
+    "[1;5C", Key (C, Right);
+    "[1;5D", Key (C, Left);
+
+    "[1;6A", Key (C_S, Up);
+    "[1;6B", Key (C_S, Down);
+    "[1;6C", Key (C_S, Right);
+    "[1;6D", Key (C_S, Left);
+
+    "[1;7A", Key (C_M, Up);
+    "[1;7B", Key (C_M, Down);
+    "[1;7C", Key (C_M, Right);
+    "[1;7D", Key (C_M, Left);
+
+    "[1;8A", Key (C_M_S, Up);
+    "[1;8B", Key (C_M_S, Down);
+    "[1;8C", Key (C_M_S, Right);
+    "[1;8D", Key (C_M_S, Left);
+
+    "[1;2P", Key (S, F1);
+    "[1;2Q", Key (S, F2);
+    "[1;2R", Key (S, F3);
+    "[1;2S", Key (S, F4);
+
+    "[1;3P", Key (M, F1);
+    "[1;3Q", Key (M, F2);
+    "[1;3R", Key (M, F3);
+    "[1;3S", Key (M, F4);
+
+    "[1;4P", Key (M_S, F1);
+    "[1;4Q", Key (M_S, F2);
+    "[1;4R", Key (M_S, F3);
+    "[1;4S", Key (M_S, F4);
+
+    "[1;5P", Key (C, F1);
+    "[1;5Q", Key (C, F2);
+    "[1;5R", Key (C, F3);
+    "[1;5S", Key (C, F4);
+
+    "[1;6P", Key (C_S, F1);
+    "[1;6Q", Key (C_S, F2);
+    "[1;6R", Key (C_S, F3);
+    "[1;6S", Key (C_S, F4);
+
+    "[1;7P", Key (C_M, F1);
+    "[1;7Q", Key (C_M, F2);
+    "[1;7R", Key (C_M, F3);
+    "[1;7S", Key (C_M, F4);
+
+    "[1;8P", Key (C_M_S, F1);
+    "[1;8Q", Key (C_M_S, F2);
+    "[1;8R", Key (C_M_S, F3);
+    "[1;8S", Key (C_M_S, F4);
+
+    "O1;2P", Key (S, F1);
+    "O1;2Q", Key (S, F2);
+    "O1;2R", Key (S, F3);
+    "O1;2S", Key (S, F4);
+
+    "O1;3P", Key (M, F1);
+    "O1;3Q", Key (M, F2);
+    "O1;3R", Key (M, F3);
+    "O1;3S", Key (M, F4);
+
+    "O1;4P", Key (M_S, F1);
+    "O1;4Q", Key (M_S, F2);
+    "O1;4R", Key (M_S, F3);
+    "O1;4S", Key (M_S, F4);
+
+    "O1;5P", Key (C, F1);
+    "O1;5Q", Key (C, F2);
+    "O1;5R", Key (C, F3);
+    "O1;5S", Key (C, F4);
+
+    "O1;6P", Key (C_S, F1);
+    "O1;6Q", Key (C_S, F2);
+    "O1;6R", Key (C_S, F3);
+    "O1;6S", Key (C_S, F4);
+
+    "O1;7P", Key (C_M, F1);
+    "O1;7Q", Key (C_M, F2);
+    "O1;7R", Key (C_M, F3);
+    "O1;7S", Key (C_M, F4);
+
+    "O1;8P", Key (C_M_S, F1);
+    "O1;8Q", Key (C_M_S, F2);
+    "O1;8R", Key (C_M_S, F3);
+    "O1;8S", Key (C_M_S, F4);
+
+    "[15;2~", Key (S, F5);
+    "[17;2~", Key (S, F6);
+    "[18;2~", Key (S, F7);
+    "[19;2~", Key (S, F8);
+    "[20;2~", Key (S, F9);
+    "[21;2~", Key (S, F10);
+    "[23;2~", Key (S, F11);
+    "[24;2~", Key (S, F12);
+
+    "[15;3~", Key (M, F5);
+    "[17;3~", Key (M, F6);
+    "[18;3~", Key (M, F7);
+    "[19;3~", Key (M, F8);
+    "[20;3~", Key (M, F9);
+    "[21;3~", Key (M, F10);
+    "[23;3~", Key (M, F11);
+    "[24;3~", Key (M, F12);
+
+    "[15;4~", Key (M_S, F5);
+    "[17;4~", Key (M_S, F6);
+    "[18;4~", Key (M_S, F7);
+    "[19;4~", Key (M_S, F8);
+    "[20;4~", Key (M_S, F9);
+    "[21;4~", Key (M_S, F10);
+    "[23;4~", Key (M_S, F11);
+    "[24;4~", Key (M_S, F12);
+
+    "[15;5~", Key (C, F5);
+    "[17;5~", Key (C, F6);
+    "[18;5~", Key (C, F7);
+    "[19;5~", Key (C, F8);
+    "[20;5~", Key (C, F9);
+    "[21;5~", Key (C, F10);
+    "[23;5~", Key (C, F11);
+    "[24;5~", Key (C, F12);
+
+    "[15;6~", Key (C_S, F5);
+    "[17;6~", Key (C_S, F6);
+    "[18;6~", Key (C_S, F7);
+    "[19;6~", Key (C_S, F8);
+    "[20;6~", Key (C_S, F9);
+    "[21;6~", Key (C_S, F10);
+    "[23;6~", Key (C_S, F11);
+    "[24;6~", Key (C_S, F12);
+
+    "[15;7~", Key (C_M, F5);
+    "[17;7~", Key (C_M, F6);
+    "[18;7~", Key (C_M, F7);
+    "[19;7~", Key (C_M, F8);
+    "[20;7~", Key (C_M, F9);
+    "[21;7~", Key (C_M, F10);
+    "[23;7~", Key (C_M, F11);
+    "[24;7~", Key (C_M, F12);
+
+    "[15;8~", Key (C_M_S, F5);
+    "[17;8~", Key (C_M_S, F6);
+    "[18;8~", Key (C_M_S, F7);
+    "[19;8~", Key (C_M_S, F8);
+    "[20;8~", Key (C_M_S, F9);
+    "[21;8~", Key (C_M_S, F10);
+    "[23;8~", Key (C_M_S, F11);
+    "[24;8~", Key (C_M_S, F12);
+
+    "[1;2H", Key (S, Home);
+    "[1;2F", Key (S, End);
+
+    "[1;3H", Key (M, Home);
+    "[1;3F", Key (M, End);
+
+    "[1;4H", Key (M_S, Home);
+    "[1;4F", Key (M_S, End);
+
+    "[1;5H", Key (C, Home);
+    "[1;5F", Key (C, End);
+
+    "[1;6H", Key (C_S, Home);
+    "[1;6F", Key (C_S, End);
+
+    "[1;7H", Key (C_M, Home);
+    "[1;7F", Key (C_M, End);
+
+    "[1;8H", Key (C_M_S, Home);
+    "[1;8F", Key (C_M_S, End);
+
+    "[2;2~", Key (S, Insert);
+    "[3;2~", Key (S, Delete);
+    "[5;2~", Key (S, Prev);
+    "[6;2~", Key (S, Next);
+
+    "[2;3~", Key (M, Insert);
+    "[3;3~", Key (M, Delete);
+    "[5;3~", Key (M, Prev);
+    "[6;3~", Key (M, Next);
+
+    "[2;4~", Key (M_S, Insert);
+    "[3;4~", Key (M_S, Delete);
+    "[5;4~", Key (M_S, Prev);
+    "[6;4~", Key (M_S, Next);
+
+    "[2;5~", Key (C, Insert);
+    "[3;5~", Key (C, Delete);
+    "[5;5~", Key (C, Prev);
+    "[6;5~", Key (C, Next);
+
+    "[2;6~", Key (C_S, Insert);
+    "[3;6~", Key (C_S, Delete);
+    "[5;6~", Key (C_S, Prev);
+    "[6;6~", Key (C_S, Next);
+
+    "[2;7~", Key (C_M, Insert);
+    "[3;7~", Key (C_M, Delete);
+    "[5;7~", Key (C_M, Prev);
+    "[6;7~", Key (C_M, Next);
+
+    "[2;8~", Key (C_M_S, Insert);
+    "[3;8~", Key (C_M_S, Delete);
+    "[5;8~", Key (C_M_S, Prev);
+    "[6;8~", Key (C_M_S, Next);
+  |]
+
+  let () = Array.sort ~cmp:(fun (seq1, _) (seq2, _) -> String.compare seq1 seq2) sequences
+
+  let find_sequence seq =
+    let rec loop a b =
+      if a = b then
+        None
+      else
+        let c = (a + b) / 2 in
+        let k, v = Array.get sequences c in
+        match String.compare seq k with
+        | d when d < 0 ->
+          loop a c
+        | d when d > 0 ->
+          loop (c + 1) b
+        | _ ->
+          Some v
+    in
+    loop 0 (Array.length sequences)
+  ;;
+
+  let rec scan_text t ofs =
+    if ofs >= t.max then
+      ofs
+    else begin
+      match t.buffer.{ofs} with
+      | '\x00' .. '\x1f' | '\x7f' -> ofs
+      | _ -> scan_text t (ofs + 1)
+    end
+  ;;
+
+  let make_char m c : LTerm_event.t =
+    if Char.to_int c <= 127 then
+      Char (m, c)
+    else
+      Uchar (m, Uchar.of_char c)
+  ;;
+
+  let make_uchar m c : LTerm_event.t =
+    if Uchar.to_int c <= 127 then
+      Char (m, Uchar.to_char c)
+    else
+      Uchar (m, c)
+  ;;
+
+  let parse_event t  ~can_refill : LTerm_event.t =
+    match t.buffer.{t.ofs} with
+    | '\x00' .. '\x1a' | '\x1c' .. '\x1f' as byte ->
+      (* Control characters *)
+      t.ofs <- t.ofs + 1;
+      controls.(Char.to_int byte)
     | '\x7f' ->
-        (* Backspace *)
-        return (LTerm_event.Key { control = false; meta = false;
-                                  shift = false; code = Backspace })
-    | '\x00' .. '\x7f' ->
-        (* Other ascii characters *)
-        return (LTerm_event.Key { control = false; meta = false;
-                                  shift = false; code = Char(UChar.of_char byte) })
-    | _ ->
-        (* Encoded characters *)
-        parse_char encoding stream byte >>= fun code ->
-        return (LTerm_event.Key { control = false; meta = false;
-                                  shift = false; code = Char code })
+      (* Backspace *)
+      t.ofs <- t.ofs + 1;
+      Key (N, Backspace)
+    | '\x20' .. '\x7e' | '\x80' .. '\xff' as byte ->
+      (* Text *)
+      let start_of_text = t.ofs in
+      let end_of_text   = scan_text t (start_of_text + 1) in
+      t.ofs <- end_of_text;
+      if end_of_text = start_of_text + 1 then
+        (* Fast path for the common case *)
+        make_char N byte
+      else begin
+        let s =
+          Bigstring.To_string.sub t.buffer
+            ~pos:start_of_text
+            ~len:(end_of_text - start_of_text)
+        in
+        match Zed_utf8.check s with
+        | Ok 1 -> make_uchar N (Zed_utf8.extract s 0)
+        | _    -> Text s
+      end
+    | '\x1b' ->
+      (* Escape sequences *)
+      match peek_escape t ~can_refill ~start:(t.ofs + 1) with
+      | "" ->
+        (* If it is not an escape, test if it is META+key. *)
+        if t.ofs + 1 >= t.max then begin
+          if can_refill then
+            need_more ()
+          else begin
+            t.ofs <- t.ofs + 1;
+            Key (N, Escape)
+          end
+        end else begin
+          match t.buffer.{t.ofs + 1} with
+          | '\x1b' -> begin
+              (* Escape sequences *)
+              match peek_escape t ~can_refill ~start:(t.ofs + 2) with
+              | "" ->
+                t.ofs <- t.ofs + 1;
+                Key (N, Escape)
+              | seq -> begin
+                  t.ofs <- t.ofs + 2 + String.length seq;
+                  match find_sequence seq with
+                  | Some (Key (m, k)) ->
+                    Key (LTerm_event.Modifiers.with_m m, k)
+                  | Some x ->
+                    x
+                  | None ->
+                    Sequence ("\x1b\x1b" ^ seq)
+                end
+            end
+          | '\x00' .. '\x1a' | '\x1c' .. '\x1f' as byte ->
+            (* Control characters *)
+            t.ofs <- t.ofs + 2;
+            (match controls.(Char.to_int byte) with
+             | Key  (N, k) -> Key  (M, k)
+             | Char (C, c) -> Char (C_M, c)
+             | _ -> assert false)
+          | '\x7f' ->
+            (* Backspace *)
+            t.ofs <- t.ofs + 2;
+            Key (M, Backspace)
+          | '\x20' .. '\x7e' as byte ->
+            (* Other ascii characters *)
+            t.ofs <- t.ofs + 2;
+            Char (M, byte)
+          | '\x80' .. '\xff' as byte ->
+            let ch = parse_uchar t ~can_refill ~start:(t.ofs + 1) byte in
+            make_uchar M ch
+        end
+      | "[M" as seq -> begin
+          (* Mouse report *)
+          if t.ofs + 5 >= t.max then begin
+            if can_refill then need_more () else begin
+              t.ofs <- t.ofs + 3;
+              Sequence ("\x1b" ^ seq)
+            end
+          end else begin
+            let ofs = t.ofs in
+            t.ofs <- ofs + 6;
+            let mask = Char.to_int t.buffer.{ofs + 3} in
+            let coord : LTerm_geom.coord =
+              { col = Char.to_int t.buffer.{ofs + 4} - 33
+              ; row = Char.to_int t.buffer.{ofs + 5} - 33 }
+            in
+            let modifiers : LTerm_event.Modifiers.t =
+              match mask land 0b00011000 with
+              | 0b00000000 -> N
+              | 0b00010000 -> C
+              | 0b00001000 -> M
+              | 0b00011000 -> C_M
+              | _ -> assert false
+            in
+            if mask = 0b00100011 then begin
+              let button_pressed = t.button_pressed in
+              if button_pressed < 0 then
+                discard_event ()
+              else begin
+                t.button_pressed <- -1;
+                Button_up (modifiers, button_pressed, coord)
+              end
+            end else begin
+              let button =
+                match mask land 0b11000111 with
+                | 0b00000000 -> 0
+                | 0b00000001 -> 1
+                | 0b00000010 -> 2
+                | 0b01000000 -> 3
+                | 0b01000001 -> 4
+                | 0b01000010 -> 5
+                | 0b01000011 -> 6
+                | 0b01000100 -> 7
+                | 0b01000101 -> 8
+                | _          -> -1
+              in
+              t.button_pressed <- button;
+              if button < 0 then discard_event ();
+              Button_down (modifiers, button, coord)
+            end
+          end
+        end
+      | seq ->
+        t.ofs <- t.ofs + 1 + String.length seq;
+        match find_sequence seq with
+        | Some ev -> ev
+        | None    -> Sequence ("\x1b" ^ seq)
+  ;;
+
+  let rec read t =
+    if not t.active then
+      None
+    else if t.ofs < t.max then begin
+      match
+        (* First try: we are allowed to refill the buffer *)
+        parse_event t ~can_refill:true
+      with
+      | event -> Some event
+      | exception Discard_event -> read t
+      | exception Need_more ->
+        match refill t ~timeout:t.escape_time with
+        | `Disabled -> None
+        | `Read _ | `Timeout ->
+          match
+            (* Second try: we must decide now *)
+            parse_event t ~can_refill:false
+          with
+          | event -> Some event
+          | exception (Need_more | Discard_event) ->
+            (* If we still want more, assume we are trying with a new sequence *)
+            read t
+    end else
+      match refill t with
+      | `Read 0   -> raise End_of_file
+      | `Read _   -> read t
+      | `Disabled -> None
+
+  let set_active t active = t.active <- active
+end

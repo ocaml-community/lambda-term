@@ -82,9 +82,9 @@ let create ?(max_size=max_int) ?(max_entries=max_int) init =
     cache = None;
   }
 
-let spaces = UCharInfo.load_property_tbl `White_Space
+let spaces = UcharInfo.load_property_tbl `White_Space
 
-let is_space ch = UCharTbl.Bool.get spaces ch
+let is_space ch = UcharTbl.Bool.get spaces ch
 let is_empty str = Zed_utf8.for_all is_space str
 
 let is_dup history entry =

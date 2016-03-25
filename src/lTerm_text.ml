@@ -7,30 +7,40 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDyn.Camomile
-open LTerm_style
+open Zed
+open Core.Std
 
-type t = (UChar.t * LTerm_style.t) array
+type point =
+  { mutable char  : Uchar.t
+  ; mutable style : LTerm_style.t }
+[@@deriving sexp]
+
+type t = point array [@@deriving sexp]
 
 (* +-----------------------------------------------------------------+
    | Conversions                                                     |
    +-----------------------------------------------------------------+ *)
 
-let dummy = (UChar.of_char ' ', LTerm_style.none)
+let uspace = Uchar.of_char ' '
 
-let of_string str =
+let create ?(style=LTerm_style.none) len =
+  Array.init len ~f:(fun _ -> { char = uspace; style })
+;;
+
+let of_string ?(style=LTerm_style.none) str =
   let len = Zed_utf8.length str in
-  let arr = Array.make len dummy in
+  let arr = create ~style len in
   let rec loop ofs idx =
     if idx = len then
       arr
     else begin
-      let chr, ofs = Zed_utf8.unsafe_extract_next str ofs in
-      Array.unsafe_set arr idx (chr, LTerm_style.none);
+      let chr, ofs = Zed_utf8.extract_next str ofs in
+      arr.(idx).char <- chr;
       loop ofs (idx + 1)
     end
   in
   loop 0 0
+;;
 
 let rec invalid_length str ofs acc =
   let ofs, len, _ = Zed_utf8.next_error str ofs in
@@ -38,104 +48,100 @@ let rec invalid_length str ofs acc =
     acc + len
   else
     invalid_length str (ofs + 1) (acc + len + 4)
+;;
 
-let uchar_of_hex x =
-  if x < 10 then
-    UChar.of_int (Char.code '0' + x)
-  else
-    UChar.of_int (Char.code 'a' + x - 10)
-
-let of_string_maybe_invalid str =
+let of_string_maybe_invalid ?(style=LTerm_style.none) str =
   let len = invalid_length str 0 0 in
-  let arr = Array.make len dummy in
-  let rec loop ofs idx =
-    if idx = len then
-      arr
+  let arr = create ~style len in
+  let rec loop ~ofs ~idx ~until =
+    if ofs = until then
+      if ofs = String.length str then
+        arr
+      else begin
+        let code = Char.to_int str.[ofs] in
+        arr.(idx + 0).char <- Uchar.of_char '\\';
+        let a = code / 100 in
+        let b = (code - a * 100) / 10 in
+        let c = code mod 10 in
+        arr.(idx + 1).char <- Uchar.of_int (Char.to_int '0' + a);
+        arr.(idx + 2).char <- Uchar.of_int (Char.to_int '0' + b);
+        arr.(idx + 3).char <- Uchar.of_int (Char.to_int '0' + c);
+        let ofs = ofs + 1 and idx = idx + 4 in
+        let until, _, _ = Zed_utf8.next_error str ofs in
+        loop ~ofs ~idx ~until
+      end
     else begin
-      let ofs, idx =
-        try
-          let chr, ofs = Zed_utf8.unsafe_extract_next str ofs in
-          Array.unsafe_set arr idx (chr, LTerm_style.none);
-          (ofs, idx + 1)
-        with Zed_utf8.Invalid _ ->
-          let code = Char.code (String.unsafe_get str ofs) in
-          Array.unsafe_set arr (idx + 0) (UChar.of_char '\\', LTerm_style.none);
-          Array.unsafe_set arr (idx + 1) (UChar.of_char 'y', LTerm_style.none);
-          Array.unsafe_set arr (idx + 2) (uchar_of_hex (code lsr 4), LTerm_style.none);
-          Array.unsafe_set arr (idx + 3) (uchar_of_hex (code land 15), LTerm_style.none);
-          (ofs + 1, idx + 4)
-      in
-      loop ofs idx
+      let chr, ofs = Zed_utf8.extract_next str ofs in
+      arr.(idx).char <- chr;
+      loop ~ofs ~idx:(idx + 1) ~until
     end
   in
-  loop 0 0
+  let until, _, _ = Zed_utf8.next_error str 0 in
+  loop ~ofs:0 ~idx:0 ~until
+;;
 
 let to_string txt =
   let buf = Buffer.create (Array.length txt) in
-  Array.iter (fun (ch, style) -> Buffer.add_string buf (Zed_utf8.singleton ch)) txt;
+  Array.iter txt ~f:(fun { char; _ } -> Zed_utf8.add buf char);
   Buffer.contents buf
+;;
 
-let of_rope rope =
-  let arr = Array.make (Zed_rope.length rope) dummy in
+let%test_unit _ = ignore (to_string (of_string_maybe_invalid "\233xx") = "\\233xx")
+
+let of_rope ?(style=LTerm_style.none) rope =
+  let arr = create ~style (Zed_rope.length rope) in
   let rec loop zip idx =
     if Zed_rope.Zip.at_eos zip then
       arr
     else begin
       let chr, zip = Zed_rope.Zip.next zip in
-      Array.unsafe_set arr idx (chr, LTerm_style.none);
+      arr.(idx).char <- chr;
       loop zip (idx + 1)
     end
   in
   loop (Zed_rope.Zip.make_f rope 0) 0
+;;
 
 let to_rope txt =
   let buf = Zed_rope.Buffer.create () in
-  Array.iter (fun (ch, style) -> Zed_rope.Buffer.add buf ch) txt;
+  Array.iter txt ~f:(fun { char; _ } -> Zed_rope.Buffer.add buf char);
   Zed_rope.Buffer.contents buf
-
-let stylise str style =
-  let len = Zed_utf8.length str in
-  let arr = Array.make len dummy in
-  let rec loop ofs idx =
-    if idx = len then
-      arr
-    else begin
-      let chr, ofs = Zed_utf8.unsafe_extract_next str ofs in
-      Array.unsafe_set arr idx (chr, style);
-      loop ofs (idx + 1)
-    end
-  in
-  loop 0 0
+;;
 
 (* +-----------------------------------------------------------------+
    | Parenthesis matching                                            |
    +-----------------------------------------------------------------+ *)
 
-let lparen = UChar.of_char '('
-let rparen = UChar.of_char ')'
-let lbrace = UChar.of_char '{'
-let rbrace = UChar.of_char '}'
-let lbracket = UChar.of_char '['
-let rbracket = UChar.of_char ']'
+let lparen = Uchar.of_char '('
+let rparen = Uchar.of_char ')'
+let lbrace = Uchar.of_char '{'
+let rbrace = Uchar.of_char '}'
+let lbracket = Uchar.of_char '['
+let rbracket = Uchar.of_char ']'
 
 type search_result =
   | No_match_found
   | No_paren_found
   | Match_found of int
 
-let stylise_parenthesis text ?(paren = [(lparen, rparen); (lbrace, rbrace); (lbracket, rbracket)]) pos style_paren =
+let default_paren = [ (lparen   , rparen  )
+                    ; (lbrace   , rbrace  )
+                    ; (lbracket , rbracket)
+                    ]
+
+let stylise_parenthesis text ?(paren = default_paren) ~pos style_paren =
   if Array.length text > 0 then begin
     let rec rsearch idx left right depth =
       if idx >= Array.length text then
         No_match_found
       else
-        let ch, _ = text.(idx) in
-        if ch = right then
+        let { char; _ } = text.(idx) in
+        if char = right then
           if depth = 0 then
             Match_found idx
           else
             rsearch (idx + 1) left right (depth - 1)
-        else if ch = left then
+        else if char = left then
           rsearch (idx + 1) left right (depth + 1)
         else
           rsearch (idx + 1) left right depth
@@ -144,13 +150,13 @@ let stylise_parenthesis text ?(paren = [(lparen, rparen); (lbrace, rbrace); (lbr
       if idx < 0 then
         No_match_found
       else
-        let ch, _ = text.(idx) in
-        if ch = left then
+        let { char; _ } = text.(idx) in
+        if char = left then
           if depth = 0 then
             Match_found idx
           else
             lsearch (idx - 1) left right (depth - 1)
-        else if ch = right then
+        else if char = right then
           lsearch (idx - 1) left right (depth + 1)
         else
           lsearch (idx - 1) left right depth
@@ -159,252 +165,328 @@ let stylise_parenthesis text ?(paren = [(lparen, rparen); (lbrace, rbrace); (lbr
       if pos = Array.length text then
         false
       else
-        let ch, _ = text.(pos) in
+        let { char; _ } = text.(pos) in
         let rec loop = function
           | [] ->
-              No_paren_found
-          | (lparen, rparen) :: rest ->
-              if ch = lparen then
-                rsearch (pos + 1) lparen rparen 0
-              else if ch = rparen then
-                lsearch (pos - 1) lparen rparen 0
-              else
-                loop rest
-        in
-        match loop paren with
-          | Match_found idx ->
-              let ch, style = text.(idx) in
-              text.(idx) <- (ch, LTerm_style.merge style_paren style);
-              true
-          | No_match_found ->
-              true
-          | No_paren_found ->
-              false
-    in
-    if not found && pos > 0 then
-      let ch, style = text.(pos - 1) in
-      let rec loop = function
-        | [] ->
             No_paren_found
-        | (lparen, rparen) :: rest ->
-            if ch = lparen then
+          | (lparen, rparen) :: rest ->
+            if char = lparen then
               rsearch (pos + 1) lparen rparen 0
-            else if ch = rparen then
-              lsearch (pos - 2) lparen rparen 0
+            else if char = rparen then
+              lsearch (pos - 1) lparen rparen 0
             else
               loop rest
+        in
+        match loop paren with
+        | Match_found idx ->
+          let pt = text.(idx) in
+          pt.style <- LTerm_style.merge style_paren pt.style;
+          true
+        | No_match_found ->
+          true
+        | No_paren_found ->
+          false
+    in
+    if not found && pos > 0 then
+      let { char; _ } = text.(pos - 1) in
+      let rec loop = function
+        | [] ->
+          No_paren_found
+        | (lparen, rparen) :: rest ->
+          if char = lparen then
+            rsearch (pos + 1) lparen rparen 0
+          else if char = rparen then
+            lsearch (pos - 2) lparen rparen 0
+          else
+            loop rest
       in
       match loop paren with
-        | Match_found idx ->
-            text.(pos - 1) <- (ch, LTerm_style.merge style_paren style);
-            let ch, style = text.(idx) in
-            text.(idx) <- (ch, LTerm_style.merge style_paren style)
-        | No_match_found | No_paren_found ->
-            ()
+      | Match_found idx ->
+        let pt = text.(pos - 1) in
+        pt.style <- LTerm_style.merge style_paren pt.style;
+        let pt = text.(idx) in
+        pt.style <- LTerm_style.merge style_paren pt.style;
+      | No_match_found | No_paren_found ->
+        ()
   end
 
 (* +-----------------------------------------------------------------+
-   | Markup strings                                                  |
+   | Convenience                                                     |
    +-----------------------------------------------------------------+ *)
 
-type item =
-  | S of Zed_utf8.t
-  | R of Zed_rope.t
-  | B_bold of bool
-  | E_bold
-  | B_underline of bool
-  | E_underline
-  | B_blink of bool
-  | E_blink
-  | B_reverse of bool
-  | E_reverse
-  | B_fg of LTerm_style.color
-  | E_fg
-  | B_bg of LTerm_style.color
-  | E_bg
+let mk
+      ?bold
+      ?underline
+      ?blink
+      ?reverse
+      ?fg:foreground
+      ?bg:background
+      str
+  =
+  of_string ~style:(LTerm_style.make
+                      ?bold
+                      ?underline
+                      ?blink
+                      ?reverse
+                      ?foreground
+                      ?background
+                      ())
+    str
+;;
 
-type markup = item list
-
-type eval_stack = {
-  mutable q_bold : bool option list;
-  mutable q_underline : bool option list;
-  mutable q_blink : bool option list;
-  mutable q_reverse : bool option list;
-  mutable q_fg : LTerm_style.color option list;
-  mutable q_bg : LTerm_style.color option list;
-}
-
-let markup_length markup =
-  let rec loop len = function
-    | [] -> len
-    | S str :: rest -> loop (len + Zed_utf8.length str) rest
-    | R str :: rest -> loop (len + Zed_rope.length str) rest
-    | _ :: rest -> loop len rest
+let mkf
+      ?bold
+      ?underline
+      ?blink
+      ?reverse
+      ?fg:foreground
+      ?bg:background
+      fmt
+  =
+  let style =
+    LTerm_style.make
+      ?bold
+      ?underline
+      ?blink
+      ?reverse
+      ?foreground
+      ?background
+      ()
   in
-  loop 0 markup
+  Printf.ksprintf (fun str -> of_string ~style str) fmt
+;;
 
-let eval markup =
-  let state = {
-    q_bold = [];
-    q_underline = [];
-    q_blink = [];
-    q_reverse = [];
-    q_fg = [];
-    q_bg = [];
-  } in
-  let arr = Array.make (markup_length markup) dummy in
-  let rec copy_utf8 str ofs idx style =
-    if ofs = String.length str then
-      idx
+let kmkf
+      k
+      ?bold
+      ?underline
+      ?blink
+      ?reverse
+      ?fg:foreground
+      ?bg:background
+      fmt
+  =
+  let style =
+    LTerm_style.make
+      ?bold
+      ?underline
+      ?blink
+      ?reverse
+      ?foreground
+      ?background
+      ()
+  in
+  Printf.ksprintf (fun str -> k (of_string ~style str)) fmt
+;;
+
+(* +-----------------------------------------------------------------+
+   | Styled formatters                                               |
+   +-----------------------------------------------------------------+ *)
+
+let style_of_tag s =
+  List.fold_left
+    (String.split s ~on:',')
+    ~init:LTerm_style.none
+    ~f:(fun ac s ->
+      match s with
+      | "bold"      -> LTerm_style.set_bold      ac On
+      | "underline" -> LTerm_style.set_underline ac On
+      | "blink"     -> LTerm_style.set_blink     ac On
+      | "reverse"   -> LTerm_style.set_reverse   ac On
+      | ""          -> failwith "empty style tag"
+      | s           ->
+        if s.[0] = '~' then
+          LTerm_style.set_background ac (LTerm_style.Color.of_string
+                                                     (String.drop_prefix s 1))
+        else
+          LTerm_style.set_foreground ac (LTerm_style.Color.of_string s))
+;;
+
+let rec tagput_acc b (acc : (_, _) CamlinternalFormat.acc) =
+  match acc with
+  | Acc_string_literal (p, s)
+  | Acc_data_string (p, s)   -> tagput_acc b p; Buffer.add_string b s
+  | Acc_char_literal (p, c)
+  | Acc_data_char (p, c)     -> tagput_acc b p; Buffer.add_char b c
+  | Acc_flush p              -> tagput_acc b p
+  | Acc_invalid_arg (p, msg) -> tagput_acc b p; invalid_arg msg;
+  | End_of_acc               -> ()
+  | _ -> failwith "LTerm_text.ktprintf: format too compilcated"
+;;
+
+let style_of_format_acc acc =
+  let buf = Buffer.create 16 in
+  tagput_acc buf acc;
+  let len = Buffer.length buf - 2 in
+  if len > 0 then
+    style_of_tag (Buffer.sub buf 1 len)
+  else
+    LTerm_style.none
+;;
+
+module Buffer = struct
+  type t =
+    { mutable txt           : point array
+    ; mutable pos           : int
+    ; mutable current_style : LTerm_style.t
+    ; mutable style_stack   : LTerm_style.t list
+    }
+
+  let create len =
+    { txt           = create len
+    ; pos           = 0
+    ; current_style = LTerm_style.none
+    ; style_stack   = []
+    }
+  ;;
+
+  let push_style t style =
+    let current_style = t.current_style in
+    let new_style = LTerm_style.merge current_style style in
+    t.style_stack <- current_style :: t.style_stack;
+    t.current_style <- new_style;
+  ;;
+
+  let pop_style t =
+    match t.style_stack with
+    | [] -> ()
+    | style :: rest ->
+      t.current_style <- style;
+      t.style_stack <- rest;
+  ;;
+
+  let set_style t style = t.current_style <- style
+
+  let check_size t needed =
+    let len = Array.length t.txt in
+    let old = t.txt in
+    if t.pos + needed > len then begin
+      let new_len = ref (2 * len) in
+      while t.pos + needed > !new_len do
+        new_len := !new_len * 2
+      done;
+      t.txt <- Array.init !new_len ~f:(fun i ->
+        if i < len then
+          old.(i)
+        else
+          { char = uspace
+          ; style = LTerm_style.none
+          })
+    end
+  ;;
+
+  let add_uchar t ch =
+    check_size t 1;
+    let pos = t.pos in
+    let pt = t.txt.(t.pos) in
+    t.pos <- pos + 1;
+    pt.char <- ch;
+    pt.style <- t.current_style;
+  ;;
+
+  let add_char t ch = add_uchar t (Uchar.of_char ch)
+
+  let add_string =
+    let rec loop t str ofs limit =
+      if ofs < limit then begin
+        let ch, ofs = Zed_utf8.extract_next str ofs in
+        add_uchar t ch;
+        loop t str ofs limit
+      end else if ofs = String.length str then
+        ()
+      else begin
+        add_char t str.[ofs];
+        let ofs = ofs + 1 in
+        let limit, _, _ = Zed_utf8.next_error str ofs in
+        loop t str ofs limit
+      end
+    in
+    fun t str ->
+      let limit, _, _ = Zed_utf8.next_error str 0 in
+      loop t str 0 limit
+  ;;
+
+  let add_txt t txt =
+    let len = Array.length txt in
+    check_size t len;
+    let start = t.pos in
+    for i = 0 to len - 1 do
+      let src_pt = txt.(i) in
+      let dst_pt = t.txt.(start + i) in
+      dst_pt.char <- src_pt.char;
+      dst_pt.style <- LTerm_style.merge t.current_style src_pt.style;
+    done;
+    t.pos <- t.pos + len
+  ;;
+
+  let contents t = Array.sub t.txt ~pos:0 ~len:t.pos
+end
+
+let rec txtput_acc b (acc : (_, _) CamlinternalFormat.acc) =
+  match acc with
+  | Acc_formatting_lit (p, Close_tag) ->
+    txtput_acc b p;
+    Buffer.pop_style b
+  | Acc_formatting_lit (p, fmting_lit) ->
+    let s = CamlinternalFormat.string_of_formatting_lit fmting_lit in
+    txtput_acc b p;
+    Buffer.add_string b s
+  | Acc_formatting_gen (p, Acc_open_tag acc') ->
+    let style = style_of_format_acc acc' in
+    txtput_acc b p;
+    Buffer.push_style b style;
+  | Acc_formatting_gen (p, Acc_open_box acc') ->
+    txtput_acc b p;
+    Buffer.add_string b "@[";
+    txtput_acc b acc'
+  | Acc_string_literal (p, s)
+  | Acc_data_string (p, s)   -> txtput_acc b p; Buffer.add_string b s
+  | Acc_char_literal (p, c)
+  | Acc_data_char (p, c)     -> txtput_acc b p; Buffer.add_char b c
+  | Acc_delay (p, f)         -> txtput_acc b p; Buffer.add_txt b (f ())
+  | Acc_flush p              -> txtput_acc b p
+  | Acc_invalid_arg (p, msg) -> txtput_acc b p; invalid_arg msg;
+  | End_of_acc               -> ()
+;;
+
+let ktprintf k (Format (fmt, s) : (_, _, _, _) format4) =
+  let k' () acc =
+    let buf = Buffer.create (Int.max 1 (String.length s)) in
+    txtput_acc buf acc;
+    k (Buffer.contents buf)
+  in
+  CamlinternalFormat.make_printf k' () End_of_acc fmt
+;;
+
+let tprintf fmt = ktprintf Fn.id fmt
+
+(* +-----------------------------------------------------------------+
+   | Ansi control sequence parsing                                   |
+   +-----------------------------------------------------------------+ *)
+
+let parse_ansi ~start_style str =
+  let buf = Buffer.create (String.length str) in
+  Buffer.set_style buf start_style;
+  let lexbuf = Lexing.from_string str in
+  let rec loop start style =
+    if start = String.length str then
+      (Buffer.contents buf, style)
     else begin
-      let chr, ofs = Zed_utf8.unsafe_extract_next str ofs in
-      Array.unsafe_set arr idx (chr, style);
-      copy_utf8 str ofs (idx + 1) style
+      let stop, restart, next_style = LTerm_ansi_parser.token style lexbuf in
+      if stop > start then
+        Buffer.add_string buf (String.sub str ~pos:start ~len:(stop - start));
+      Buffer.set_style buf next_style;
+      loop restart next_style
     end
   in
-  let rec copy_rope zip idx style =
-    if Zed_rope.Zip.at_eos zip then
-      idx
-    else begin
-      let chr, zip = Zed_rope.Zip.next zip in
-      Array.unsafe_set arr idx (chr, style);
-      copy_rope zip (idx + 1) style
-    end
+  loop 0 start_style
+;;
+
+let%test_unit _ =
+  let t, _ =
+    parse_ansi ~start_style:LTerm_style.none
+      "\237m\188m-\\149\1673e\225\\003S\213 5\\143"
   in
-  let rec loop idx style = function
-    | [] ->
-        arr
-    | S str :: rest ->
-        loop (copy_utf8 str 0 idx style) style rest
-    | R str :: rest ->
-        loop (copy_rope (Zed_rope.Zip.make_f str 0) idx style) style rest
-    | B_bold status :: rest ->
-        state.q_bold <- style.bold :: state.q_bold;
-        loop idx { style with bold = Some status } rest
-    | E_bold :: rest -> begin
-        match state.q_bold with
-          | [] ->
-              loop idx style rest
-          | save :: l ->
-              state.q_bold <- l;
-              loop idx { style with bold = save } rest
-      end
-    | B_underline status :: rest ->
-        state.q_underline <- style.underline :: state.q_underline;
-        loop idx { style with underline = Some status } rest
-    | E_underline :: rest -> begin
-        match state.q_underline with
-          | [] ->
-              loop idx style rest
-          | save :: l ->
-              state.q_underline <- l;
-              loop idx { style with underline = save } rest
-      end
-    | B_blink status :: rest ->
-        state.q_blink <- style.blink :: state.q_blink;
-        loop idx { style with blink = Some status } rest
-    | E_blink :: rest -> begin
-        match state.q_blink with
-          | [] ->
-              loop idx style rest
-          | save :: l ->
-              state.q_blink <- l;
-              loop idx { style with blink = save } rest
-      end
-    | B_reverse color :: rest ->
-        state.q_reverse <- style.reverse :: state.q_reverse;
-        loop idx { style with reverse = Some color } rest
-    | E_reverse :: rest -> begin
-        match state.q_reverse with
-          | [] ->
-              loop idx style rest
-          | save :: l ->
-              state.q_reverse <- l;
-              loop idx { style with reverse = save } rest
-      end
-    | B_fg color :: rest ->
-        state.q_fg <- style.foreground :: state.q_fg;
-        loop idx { style with foreground = Some color } rest
-    | E_fg :: rest -> begin
-        match state.q_fg with
-          | [] ->
-              loop idx style rest
-          | save :: l ->
-              state.q_fg <- l;
-              loop idx { style with foreground = save } rest
-      end
-    | B_bg color :: rest ->
-        state.q_bg <- style.background :: state.q_bg;
-        loop idx { style with background = Some color } rest
-    | E_bg :: rest -> begin
-        match state.q_bg with
-          | [] ->
-              loop idx style rest
-          | save :: l ->
-              state.q_bg <- l;
-              loop idx { style with background = save } rest
-      end
-  in
-  loop 0 none markup
-
-
-
-(** {6 Styled formatters} *)
-
-let make_formatter ?read_color () =
-  let style = Stack.create () in
-  let content = ref [||] in
-
-  let get_style () =
-    if Stack.is_empty style then LTerm_style.none
-    else Stack.top style
-  and pop_style () =
-    if Stack.is_empty style then ()
-    else ignore (Stack.pop style)
-  and push_style sty =
-    if Stack.is_empty style then Stack.push sty style
-    else Stack.push (LTerm_style.merge (Stack.top style) sty) style
-  in
-
-  let put s pos len =
-    let s = String.sub s pos len in
-    content := Array.append !content (stylise s (get_style ()))
-  in
-  let flush () = () in
-  let fmt = Format.make_formatter put flush in
-
-  let get_content () =
-    Format.pp_print_flush fmt () ; !content
-  in
-
-  begin match read_color with
-    | None -> ()
-    | Some f ->
-        Format.pp_set_tags fmt true;
-        Format.pp_set_formatter_tag_functions fmt {
-          Format.
-          mark_open_tag =
-            (fun a -> push_style (f a) ; "");
-          mark_close_tag =
-            (fun _ -> pop_style (); "");
-          print_open_tag = (fun _ -> ());
-          print_close_tag = (fun _ -> ());
-        } ;
-  end ;
-
-  get_content, fmt
-
-let pp_with_style to_style =
-  fun style fstr fmt ->
-    let tag = to_style style in
-    Format.pp_open_tag fmt tag;
-    Format.kfprintf
-      (fun fmt ->
-         Format.pp_close_tag fmt ())
-      fmt fstr
-
-let kstyprintf ?read_color f fstr =
-  let get_content, fmt = make_formatter ?read_color () in
-  Format.kfprintf (fun _ -> f (get_content ())) fmt fstr
-
-let styprintf ?read_color fstr = kstyprintf ?read_color (fun x -> x) fstr
+  let s = to_string t in
+  assert (s = "\195\173m\194\188m-\\149\194\1673e\195\161\\003S\195\149 5\\143")
+;;

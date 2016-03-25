@@ -94,7 +94,7 @@ let make_map start colors =
   let colors = loop start [] colors in
   let set_r, set_g, set_b =
     List.fold_left
-      (fun (set_r, set_g, set_b) (idx, (r, g, b)) ->
+      (fun (set_r, set_g, set_b) (_idx, (r, g, b)) ->
          (Int_set.add r set_r,
           Int_set.add g set_g,
           Int_set.add b set_b))

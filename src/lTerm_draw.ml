@@ -7,582 +7,543 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDyn.Camomile
-open LTerm_geom
-open LTerm_style
+open Core.Std
+open Zed
 
-let unsafe_get matrix line column =
-  Array.unsafe_get (Array.unsafe_get matrix line) column
+type point =
+  { mutable char  : Uchar.t
+  ; mutable style : LTerm_style.t
+  } [@@deriving sexp]
 
-type point = {
-  mutable char : UChar.t;
-  mutable bold : bool;
-  mutable underline : bool;
-  mutable blink : bool;
-  mutable reverse : bool;
-  mutable foreground : LTerm_style.color;
-  mutable background : LTerm_style.color;
-}
+type matrix = point array array [@@deriving sexp]
 
-type matrix = point array array
+let uspace = Uchar.of_char ' '
 
-let make_matrix size =
+let make_matrix (size : LTerm_geom.size) =
   Array.init
     size.rows
-    (fun _ ->
-       Array.init
-         size.cols
-         (fun _ -> {
-            char = UChar.of_char ' ';
-            bold = false;
-            underline = false;
-            blink = false;
-            reverse = false;
-            foreground = LTerm_style.default;
-            background = LTerm_style.default;
-          }))
+    ~f:(fun _ ->
+      Array.init
+        size.cols
+        ~f:(fun _ -> { char  = uspace
+                     ; style = LTerm_style.default
+                     }))
+;;
 
-let set_style point style =
-  begin
-    match LTerm_style.bold style with
-      | Some x -> point.bold <- x
-      | None -> ()
-  end;
-  begin
-    match LTerm_style.underline style with
-      | Some x -> point.underline <- x
-      | None -> ()
-  end;
-  begin
-    match LTerm_style.blink style with
-      | Some x -> point.blink <- x
-      | None -> ()
-  end;
-  begin
-    match LTerm_style.reverse style with
-      | Some x -> point.reverse <- x
-      | None -> ()
-  end;
-  begin
-    match LTerm_style.foreground style with
-      | Some x -> point.foreground <- x
-      | None -> ()
-  end;
-  begin
-    match LTerm_style.background style with
-      | Some x -> point.background <- x
-      | None -> ()
-  end
+let set_style point ~style =
+  point.style <- LTerm_style.merge point.style style
+;;
 
-let maybe_set_style point style =
-  match style with
-    | Some style ->
-        set_style point style
-    | None ->
-        ()
+type context =
+  { matrix      : matrix
+  ; matrix_size : LTerm_geom.size
+  ; row1        : int
+  ; col1        : int
+  ; row2        : int
+  ; col2        : int
+  } [@@deriving sexp_of]
 
-type context = {
-  ctx_matrix : matrix;
-  ctx_matrix_size : size;
-  ctx_row1 : int;
-  ctx_col1 : int;
-  ctx_row2 : int;
-  ctx_col2 : int;
-}
-
-let context m s =
+let context m (s : LTerm_geom.size) =
   if Array.length m <> s.rows then invalid_arg "LTerm_draw.context";
-  Array.iter (fun l -> if Array.length l <> s.cols then invalid_arg "LTerm_draw.context") m;
-  {
-    ctx_matrix = m;
-    ctx_matrix_size = s;
-    ctx_row1 = 0;
-    ctx_col1 = 0;
-    ctx_row2 = s.rows;
-    ctx_col2 = s.cols;
+  Array.iter m
+    ~f:(fun l -> if Array.length l <> s.cols then invalid_arg "LTerm_draw.context");
+  { matrix      = m
+  ; matrix_size = s
+  ; row1        = 0
+  ; col1        = 0
+  ; row2        = s.rows
+  ; col2        = s.cols
   }
 
-let size ctx = {
-  rows = ctx.ctx_row2 - ctx.ctx_row1;
-  cols = ctx.ctx_col2 - ctx.ctx_col1;
-}
+let size ctx : LTerm_geom.size =
+  { rows = ctx.row2 - ctx.row1
+  ; cols = ctx.col2 - ctx.col1
+  }
+
+let matrix ctx = ctx.matrix
 
 exception Out_of_bounds
 
-let sub ctx rect =
-  if rect.row1 < 0 || rect.col1 < 0 || rect.row1 > rect.row2 || rect.col1 > rect.col2 then raise Out_of_bounds;
-  let row1 = ctx.ctx_row1 + rect.row1
-  and col1 = ctx.ctx_col1 + rect.col1
-  and row2 = ctx.ctx_row1 + rect.row2
-  and col2 = ctx.ctx_col1 + rect.col2 in
-  if row2 > ctx.ctx_row2 || col2 > ctx.ctx_col2 then raise Out_of_bounds;
-  { ctx with ctx_row1 = row1; ctx_col1 = col1; ctx_row2 = row2; ctx_col2 = col2 }
+let sub ctx (rect:LTerm_geom.rect) =
+  if rect.row1 < 0 || rect.col1 < 0 || rect.row1 > rect.row2 || rect.col1 > rect.col2 then
+    raise Out_of_bounds;
+  let row1 = ctx.row1 + rect.row1
+  and col1 = ctx.col1 + rect.col1
+  and row2 = ctx.row1 + rect.row2
+  and col2 = ctx.col1 + rect.col2 in
+  if row2 > ctx.row2 || col2 > ctx.col2 then raise Out_of_bounds;
+  { ctx with row1; col1; row2; col2 }
 
-let space = UChar.of_char ' '
-let newline = UChar.of_char '\n'
+let space   = Uchar.of_char ' '
+let newline = Uchar.of_char '\n'
 
 let clear ctx =
-  for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
-    for col = ctx.ctx_col1 to ctx.ctx_col2 - 1 do
-      let point = unsafe_get ctx.ctx_matrix row col in
-      point.char <- space;
-      point.bold <- false;
-      point.underline <- false;
-      point.blink <- false;
-      point.reverse <- false;
-      point.foreground <- LTerm_style.default;
-      point.background <- LTerm_style.default
+  for row = ctx.row1 to ctx.row2 - 1 do
+    for col = ctx.col1 to ctx.col2 - 1 do
+      let point = ctx.matrix.(row).(col) in
+      point.char  <- space;
+      point.style <- LTerm_style.default;
     done
   done
 
-let fill ctx ?style ch =
-  match style with
-    | Some style ->
-        for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
-          for col = ctx.ctx_col1 to ctx.ctx_col2 - 1 do
-            let point = unsafe_get ctx.ctx_matrix row col in
-            point.char <- ch;
-            set_style point style
-          done
-        done
-    | None ->
-        for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
-          for col = ctx.ctx_col1 to ctx.ctx_col2 - 1 do
-            (unsafe_get ctx.ctx_matrix row col).char <- ch
-          done
-        done
+let default_style = LTerm_style.none
 
-let fill_style ctx style =
-  for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
-    for col = ctx.ctx_col1 to ctx.ctx_col2 - 1 do
-      set_style (unsafe_get ctx.ctx_matrix row col) style
-    done
-  done
-
-let point ctx row col =
-  if row < 0 || col < 0 then raise Out_of_bounds;
-  let row = ctx.ctx_row1 + row and col = ctx.ctx_col1 + col in
-  if row >= ctx.ctx_row2 || col >= ctx.ctx_col2 then raise Out_of_bounds;
-  unsafe_get ctx.ctx_matrix row col
-
-let draw_char ctx row col ?style ch =
-  if row >= 0 && col >= 0 then begin
-    let row = ctx.ctx_row1 + row and col = ctx.ctx_col1 + col in
-    if row < ctx.ctx_row2 && col < ctx.ctx_col2 then
-      let point = unsafe_get ctx.ctx_matrix row col in
+let fill ctx ?(style=default_style) ch =
+  for row = ctx.row1 to ctx.row2 - 1 do
+    for col = ctx.col1 to ctx.col2 - 1 do
+      let point = ctx.matrix.(row).(col) in
       point.char <- ch;
-      maybe_set_style point style
+      set_style point ~style
+    done
+  done
+
+let fill_style ctx ~style =
+  for row = ctx.row1 to ctx.row2 - 1 do
+    for col = ctx.col1 to ctx.col2 - 1 do
+      let point = ctx.matrix.(row).(col) in
+      set_style point ~style
+    done
+  done
+
+let point ctx ~row ~col =
+  if row < 0 || col < 0 then raise Out_of_bounds;
+  let row = ctx.row1 + row and col = ctx.col1 + col in
+  if row >= ctx.row2 || col >= ctx.col2 then raise Out_of_bounds;
+  ctx.matrix.(row).(col)
+
+let draw_char ctx ~row ~col ?(style=default_style) ch =
+  if row >= 0 && col >= 0 then begin
+    let row = ctx.row1 + row and col = ctx.col1 + col in
+    if row < ctx.row2 && col < ctx.col2 then
+      let point = ctx.matrix.(row).(col) in
+      point.char <- ch;
+      set_style point ~style
   end
 
-let draw_string ctx row col ?style str =
-  let rec loop row col ofs =
-    if ofs < String.length str then begin
-      let ch, ofs = Zed_utf8.unsafe_extract_next str ofs in
-      if ch = newline then
-        loop (row + 1) ctx.ctx_col1 ofs
-      else begin
-        if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col < ctx.ctx_col2 then begin
-          let point = unsafe_get ctx.ctx_matrix row col in
-          point.char <- ch;
-          maybe_set_style point style
-        end;
-        loop row (col + 1) ofs
-      end
-    end
-  in
-  loop (ctx.ctx_row1 + row) (ctx.ctx_col1 + col) 0
+module type Text_drawing = sig
+  type t
 
-let draw_styled ctx row col ?style str =
-  let rec loop row col idx =
-    if idx < Array.length str then begin
-      let ch, ch_style = Array.unsafe_get str idx in
-      if ch = newline then
-        loop (row + 1) ctx.ctx_col1 (idx + 1)
-      else begin
-        if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col < ctx.ctx_col2 then begin
-          let point = unsafe_get ctx.ctx_matrix row col in
-          point.char <- ch;
-          maybe_set_style point style;
-          set_style point ch_style
-        end;
-        loop row (col + 1) (idx + 1)
-      end
-    end
-  in
-  loop (ctx.ctx_row1 + row) (ctx.ctx_col1 + col) 0
+  val draw
+    :  context
+    -> row:int
+    -> col:int
+    -> ?style:LTerm_style.t
+    -> t
+    -> unit
 
-let draw_string_aligned ctx row alignment ?style str =
-  let rec line_length ofs len =
-    if ofs = String.length str then
-      len
-    else
-      let ch, ofs = Zed_utf8.unsafe_extract_next str ofs in
-      if ch = newline then
+  val draw_aligned
+    :  context
+    -> row:int
+    -> align:LTerm_geom.Horz_alignment.t
+    -> ?style:LTerm_style.t
+    -> t
+    -> unit
+end
+
+module Make_text_drawing(Text : sig
+                           type t
+                           val limit : t -> int
+                           val char  : t -> int -> Uchar.t
+                           val style : t -> int -> LTerm_style.t
+                           val next  : t -> int -> int
+                         end) : Text_drawing with type t = Text.t = struct
+  type t = Text.t
+
+  let draw ctx ~row ~col ?(style=default_style) txt =
+    let rec loop row col ofs =
+      if ofs < Text.limit txt then begin
+        let ch = Text.char txt ofs in
+        if ch = newline then
+          loop (row + 1) ctx.col1 (Text.next txt ofs)
+        else begin
+          if row >= ctx.row1
+          && row <  ctx.row2
+          && col >= ctx.col1
+          && col <  ctx.col2 then begin
+            let point = ctx.matrix.(row).(col) in
+            point.char <- ch;
+            set_style point ~style;
+            set_style point ~style:(Text.style txt ofs)
+          end;
+          loop row (col + 1) (Text.next txt ofs)
+        end
+      end
+    in
+    loop (ctx.row1 + row) (ctx.col1 + col) 0
+  ;;
+
+  let draw_aligned ctx ~row ~(align:LTerm_geom.Horz_alignment.t)
+        ?(style=default_style) txt =
+    let rec line_length ofs len =
+      if ofs = Text.limit txt then
         len
       else
-        line_length ofs (len + 1)
-  in
-  let rec loop row col ofs =
-    if ofs < String.length str then begin
-      let ch, ofs = Zed_utf8.unsafe_extract_next str ofs in
-      if ch = newline then
-        ofs
-      else begin
-        if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col < ctx.ctx_col2 then begin
-          let point = unsafe_get ctx.ctx_matrix row col in
-          point.char <- ch;
-          maybe_set_style point style
-        end;
-        loop row (col + 1) ofs
-      end
-    end else
-      ofs
-  in
-  let rec loop_lines row ofs =
-    if ofs < String.length str then begin
-      let ofs =
-        loop row
-          (match alignment with
-             | H_align_left ->
-                 ctx.ctx_col1
-             | H_align_center ->
-                 ctx.ctx_col1 + (ctx.ctx_col2 - ctx.ctx_col1 - line_length ofs 0) / 2
-             | H_align_right ->
-                 ctx.ctx_col2 - line_length ofs 0)
-          ofs
-      in
-      loop_lines (row + 1) ofs
-    end
-  in
-  loop_lines (ctx.ctx_row1 + row) 0
-
-let draw_styled_aligned ctx row alignment ?style str =
-  let rec line_length idx len =
-    if idx = Array.length str then
-      len
-    else
-      if fst (Array.unsafe_get str idx) = newline then
-        len
-      else
-        line_length (idx + 1) (len + 1)
-  in
-  let rec loop row col idx =
-    if idx < Array.length str then begin
-      let ch, ch_style = Array.unsafe_get str idx in
-      if ch = newline then
-        idx + 1
-      else begin
-        if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col < ctx.ctx_col2 then begin
-          let point = unsafe_get ctx.ctx_matrix row col in
-          point.char <- ch;
-          maybe_set_style point style;
-          set_style point ch_style
-        end;
-        loop row (col + 1) (idx + 1)
-      end
-    end else
-      idx
-  in
-  let rec loop_lines row idx =
-    if idx < Array.length str then begin
-      let idx =
-        loop row
-          (match alignment with
-             | H_align_left ->
-                 ctx.ctx_col1
-             | H_align_center ->
-                 ctx.ctx_col1 + (ctx.ctx_col2 - ctx.ctx_col1 - line_length idx 0) / 2
-             | H_align_right ->
-                 ctx.ctx_col2 - line_length idx 0)
-          idx
-      in
-      loop_lines (row + 1) idx
-    end
-  in
-  loop_lines (ctx.ctx_row1 + row) 0
-
-type connection =
-  | Blank
-  | Light
-  | Heavy
-
-type piece = { top : connection; bottom : connection; left : connection; right : connection }
-
-let piece_of_char char =
-  match UChar.code char with
-    | 0x2500 -> Some { top = Blank; bottom = Blank; left = Light; right = Light }
-    | 0x2501 -> Some { top = Blank; bottom = Blank; left = Heavy; right = Heavy }
-    | 0x2502 -> Some { top = Light; bottom = Light; left = Blank; right = Blank }
-    | 0x2503 -> Some { top = Heavy; bottom = Heavy; left = Blank; right = Blank }
-    | 0x250c -> Some { top = Blank; bottom = Light; left = Blank; right = Light }
-    | 0x250d -> Some { top = Blank; bottom = Light; left = Blank; right = Heavy }
-    | 0x250e -> Some { top = Blank; bottom = Heavy; left = Blank; right = Light }
-    | 0x250f -> Some { top = Blank; bottom = Heavy; left = Blank; right = Heavy }
-    | 0x2510 -> Some { top = Blank; bottom = Light; left = Light; right = Blank }
-    | 0x2511 -> Some { top = Blank; bottom = Light; left = Heavy; right = Blank }
-    | 0x2512 -> Some { top = Blank; bottom = Heavy; left = Light; right = Blank }
-    | 0x2513 -> Some { top = Blank; bottom = Heavy; left = Heavy; right = Blank }
-    | 0x2514 -> Some { top = Light; bottom = Blank; left = Blank; right = Light }
-    | 0x2515 -> Some { top = Light; bottom = Blank; left = Blank; right = Heavy }
-    | 0x2516 -> Some { top = Heavy; bottom = Blank; left = Blank; right = Light }
-    | 0x2517 -> Some { top = Heavy; bottom = Blank; left = Blank; right = Heavy }
-    | 0x2518 -> Some { top = Light; bottom = Blank; left = Light; right = Blank }
-    | 0x2519 -> Some { top = Light; bottom = Blank; left = Heavy; right = Blank }
-    | 0x251a -> Some { top = Heavy; bottom = Blank; left = Light; right = Blank }
-    | 0x251b -> Some { top = Heavy; bottom = Blank; left = Heavy; right = Blank }
-    | 0x251c -> Some { top = Light; bottom = Light; left = Blank; right = Light }
-    | 0x251d -> Some { top = Light; bottom = Light; left = Blank; right = Heavy }
-    | 0x251e -> Some { top = Heavy; bottom = Light; left = Blank; right = Light }
-    | 0x251f -> Some { top = Light; bottom = Heavy; left = Blank; right = Light }
-    | 0x2520 -> Some { top = Heavy; bottom = Heavy; left = Blank; right = Light }
-    | 0x2521 -> Some { top = Heavy; bottom = Light; left = Blank; right = Heavy }
-    | 0x2522 -> Some { top = Light; bottom = Heavy; left = Blank; right = Heavy }
-    | 0x2523 -> Some { top = Heavy; bottom = Heavy; left = Blank; right = Heavy }
-    | 0x2524 -> Some { top = Light; bottom = Light; left = Light; right = Blank }
-    | 0x2525 -> Some { top = Light; bottom = Light; left = Heavy; right = Blank }
-    | 0x2526 -> Some { top = Heavy; bottom = Light; left = Light; right = Blank }
-    | 0x2527 -> Some { top = Light; bottom = Heavy; left = Light; right = Blank }
-    | 0x2528 -> Some { top = Heavy; bottom = Heavy; left = Light; right = Blank }
-    | 0x2529 -> Some { top = Heavy; bottom = Light; left = Heavy; right = Blank }
-    | 0x252a -> Some { top = Light; bottom = Heavy; left = Heavy; right = Blank }
-    | 0x252b -> Some { top = Heavy; bottom = Heavy; left = Heavy; right = Blank }
-    | 0x252c -> Some { top = Blank; bottom = Light; left = Light; right = Light }
-    | 0x252d -> Some { top = Blank; bottom = Light; left = Heavy; right = Light }
-    | 0x252e -> Some { top = Blank; bottom = Light; left = Light; right = Heavy }
-    | 0x252f -> Some { top = Blank; bottom = Light; left = Heavy; right = Heavy }
-    | 0x2530 -> Some { top = Blank; bottom = Heavy; left = Light; right = Light }
-    | 0x2531 -> Some { top = Blank; bottom = Heavy; left = Heavy; right = Light }
-    | 0x2532 -> Some { top = Blank; bottom = Heavy; left = Light; right = Heavy }
-    | 0x2533 -> Some { top = Blank; bottom = Heavy; left = Heavy; right = Heavy }
-    | 0x2534 -> Some { top = Light; bottom = Blank; left = Light; right = Light }
-    | 0x2535 -> Some { top = Light; bottom = Blank; left = Heavy; right = Light }
-    | 0x2536 -> Some { top = Light; bottom = Blank; left = Light; right = Heavy }
-    | 0x2537 -> Some { top = Light; bottom = Blank; left = Heavy; right = Heavy }
-    | 0x2538 -> Some { top = Heavy; bottom = Blank; left = Light; right = Light }
-    | 0x2539 -> Some { top = Heavy; bottom = Blank; left = Heavy; right = Light }
-    | 0x253a -> Some { top = Heavy; bottom = Blank; left = Light; right = Heavy }
-    | 0x253b -> Some { top = Heavy; bottom = Blank; left = Heavy; right = Heavy }
-    | 0x253c -> Some { top = Light; bottom = Light; left = Light; right = Light }
-    | 0x253d -> Some { top = Light; bottom = Light; left = Heavy; right = Light }
-    | 0x253e -> Some { top = Light; bottom = Light; left = Light; right = Heavy }
-    | 0x253f -> Some { top = Light; bottom = Light; left = Heavy; right = Heavy }
-    | 0x2540 -> Some { top = Heavy; bottom = Light; left = Light; right = Light }
-    | 0x2541 -> Some { top = Light; bottom = Heavy; left = Light; right = Light }
-    | 0x2542 -> Some { top = Heavy; bottom = Heavy; left = Light; right = Light }
-    | 0x2543 -> Some { top = Heavy; bottom = Light; left = Heavy; right = Light }
-    | 0x2544 -> Some { top = Heavy; bottom = Light; left = Light; right = Heavy }
-    | 0x2545 -> Some { top = Light; bottom = Heavy; left = Heavy; right = Light }
-    | 0x2546 -> Some { top = Light; bottom = Heavy; left = Light; right = Heavy }
-    | 0x2547 -> Some { top = Heavy; bottom = Light; left = Heavy; right = Heavy }
-    | 0x2548 -> Some { top = Light; bottom = Heavy; left = Heavy; right = Heavy }
-    | 0x2549 -> Some { top = Heavy; bottom = Heavy; left = Heavy; right = Light }
-    | 0x254a -> Some { top = Heavy; bottom = Heavy; left = Light; right = Heavy }
-    | 0x254b -> Some { top = Heavy; bottom = Heavy; left = Heavy; right = Heavy }
-    | 0x2574 -> Some { top = Blank; bottom = Blank; left = Light; right = Blank }
-    | 0x2575 -> Some { top = Light; bottom = Blank; left = Blank; right = Blank }
-    | 0x2576 -> Some { top = Blank; bottom = Blank; left = Blank; right = Light }
-    | 0x2577 -> Some { top = Blank; bottom = Light; left = Blank; right = Blank }
-    | 0x2578 -> Some { top = Blank; bottom = Blank; left = Heavy; right = Blank }
-    | 0x2579 -> Some { top = Heavy; bottom = Blank; left = Blank; right = Blank }
-    | 0x257a -> Some { top = Blank; bottom = Blank; left = Blank; right = Heavy }
-    | 0x257b -> Some { top = Blank; bottom = Heavy; left = Blank; right = Blank }
-    | 0x257c -> Some { top = Blank; bottom = Blank; left = Light; right = Heavy }
-    | 0x257d -> Some { top = Light; bottom = Heavy; left = Blank; right = Blank }
-    | 0x257e -> Some { top = Blank; bottom = Blank; left = Heavy; right = Light }
-    | 0x257f -> Some { top = Heavy; bottom = Light; left = Blank; right = Blank }
-    | _ -> None
-
-let char_of_piece = function
-  | { top = Blank; bottom = Blank; left = Blank; right = Blank } -> UChar.of_int 0x0020
-  | { top = Blank; bottom = Blank; left = Light; right = Light } -> UChar.of_int 0x2500
-  | { top = Blank; bottom = Blank; left = Heavy; right = Heavy } -> UChar.of_int 0x2501
-  | { top = Light; bottom = Light; left = Blank; right = Blank } -> UChar.of_int 0x2502
-  | { top = Heavy; bottom = Heavy; left = Blank; right = Blank } -> UChar.of_int 0x2503
-  | { top = Blank; bottom = Light; left = Blank; right = Light } -> UChar.of_int 0x250c
-  | { top = Blank; bottom = Light; left = Blank; right = Heavy } -> UChar.of_int 0x250d
-  | { top = Blank; bottom = Heavy; left = Blank; right = Light } -> UChar.of_int 0x250e
-  | { top = Blank; bottom = Heavy; left = Blank; right = Heavy } -> UChar.of_int 0x250f
-  | { top = Blank; bottom = Light; left = Light; right = Blank } -> UChar.of_int 0x2510
-  | { top = Blank; bottom = Light; left = Heavy; right = Blank } -> UChar.of_int 0x2511
-  | { top = Blank; bottom = Heavy; left = Light; right = Blank } -> UChar.of_int 0x2512
-  | { top = Blank; bottom = Heavy; left = Heavy; right = Blank } -> UChar.of_int 0x2513
-  | { top = Light; bottom = Blank; left = Blank; right = Light } -> UChar.of_int 0x2514
-  | { top = Light; bottom = Blank; left = Blank; right = Heavy } -> UChar.of_int 0x2515
-  | { top = Heavy; bottom = Blank; left = Blank; right = Light } -> UChar.of_int 0x2516
-  | { top = Heavy; bottom = Blank; left = Blank; right = Heavy } -> UChar.of_int 0x2517
-  | { top = Light; bottom = Blank; left = Light; right = Blank } -> UChar.of_int 0x2518
-  | { top = Light; bottom = Blank; left = Heavy; right = Blank } -> UChar.of_int 0x2519
-  | { top = Heavy; bottom = Blank; left = Light; right = Blank } -> UChar.of_int 0x251a
-  | { top = Heavy; bottom = Blank; left = Heavy; right = Blank } -> UChar.of_int 0x251b
-  | { top = Light; bottom = Light; left = Blank; right = Light } -> UChar.of_int 0x251c
-  | { top = Light; bottom = Light; left = Blank; right = Heavy } -> UChar.of_int 0x251d
-  | { top = Heavy; bottom = Light; left = Blank; right = Light } -> UChar.of_int 0x251e
-  | { top = Light; bottom = Heavy; left = Blank; right = Light } -> UChar.of_int 0x251f
-  | { top = Heavy; bottom = Heavy; left = Blank; right = Light } -> UChar.of_int 0x2520
-  | { top = Heavy; bottom = Light; left = Blank; right = Heavy } -> UChar.of_int 0x2521
-  | { top = Light; bottom = Heavy; left = Blank; right = Heavy } -> UChar.of_int 0x2522
-  | { top = Heavy; bottom = Heavy; left = Blank; right = Heavy } -> UChar.of_int 0x2523
-  | { top = Light; bottom = Light; left = Light; right = Blank } -> UChar.of_int 0x2524
-  | { top = Light; bottom = Light; left = Heavy; right = Blank } -> UChar.of_int 0x2525
-  | { top = Heavy; bottom = Light; left = Light; right = Blank } -> UChar.of_int 0x2526
-  | { top = Light; bottom = Heavy; left = Light; right = Blank } -> UChar.of_int 0x2527
-  | { top = Heavy; bottom = Heavy; left = Light; right = Blank } -> UChar.of_int 0x2528
-  | { top = Heavy; bottom = Light; left = Heavy; right = Blank } -> UChar.of_int 0x2529
-  | { top = Light; bottom = Heavy; left = Heavy; right = Blank } -> UChar.of_int 0x252a
-  | { top = Heavy; bottom = Heavy; left = Heavy; right = Blank } -> UChar.of_int 0x252b
-  | { top = Blank; bottom = Light; left = Light; right = Light } -> UChar.of_int 0x252c
-  | { top = Blank; bottom = Light; left = Heavy; right = Light } -> UChar.of_int 0x252d
-  | { top = Blank; bottom = Light; left = Light; right = Heavy } -> UChar.of_int 0x252e
-  | { top = Blank; bottom = Light; left = Heavy; right = Heavy } -> UChar.of_int 0x252f
-  | { top = Blank; bottom = Heavy; left = Light; right = Light } -> UChar.of_int 0x2530
-  | { top = Blank; bottom = Heavy; left = Heavy; right = Light } -> UChar.of_int 0x2531
-  | { top = Blank; bottom = Heavy; left = Light; right = Heavy } -> UChar.of_int 0x2532
-  | { top = Blank; bottom = Heavy; left = Heavy; right = Heavy } -> UChar.of_int 0x2533
-  | { top = Light; bottom = Blank; left = Light; right = Light } -> UChar.of_int 0x2534
-  | { top = Light; bottom = Blank; left = Heavy; right = Light } -> UChar.of_int 0x2535
-  | { top = Light; bottom = Blank; left = Light; right = Heavy } -> UChar.of_int 0x2536
-  | { top = Light; bottom = Blank; left = Heavy; right = Heavy } -> UChar.of_int 0x2537
-  | { top = Heavy; bottom = Blank; left = Light; right = Light } -> UChar.of_int 0x2538
-  | { top = Heavy; bottom = Blank; left = Heavy; right = Light } -> UChar.of_int 0x2539
-  | { top = Heavy; bottom = Blank; left = Light; right = Heavy } -> UChar.of_int 0x253a
-  | { top = Heavy; bottom = Blank; left = Heavy; right = Heavy } -> UChar.of_int 0x253b
-  | { top = Light; bottom = Light; left = Light; right = Light } -> UChar.of_int 0x253c
-  | { top = Light; bottom = Light; left = Heavy; right = Light } -> UChar.of_int 0x253d
-  | { top = Light; bottom = Light; left = Light; right = Heavy } -> UChar.of_int 0x253e
-  | { top = Light; bottom = Light; left = Heavy; right = Heavy } -> UChar.of_int 0x253f
-  | { top = Heavy; bottom = Light; left = Light; right = Light } -> UChar.of_int 0x2540
-  | { top = Light; bottom = Heavy; left = Light; right = Light } -> UChar.of_int 0x2541
-  | { top = Heavy; bottom = Heavy; left = Light; right = Light } -> UChar.of_int 0x2542
-  | { top = Heavy; bottom = Light; left = Heavy; right = Light } -> UChar.of_int 0x2543
-  | { top = Heavy; bottom = Light; left = Light; right = Heavy } -> UChar.of_int 0x2544
-  | { top = Light; bottom = Heavy; left = Heavy; right = Light } -> UChar.of_int 0x2545
-  | { top = Light; bottom = Heavy; left = Light; right = Heavy } -> UChar.of_int 0x2546
-  | { top = Heavy; bottom = Light; left = Heavy; right = Heavy } -> UChar.of_int 0x2547
-  | { top = Light; bottom = Heavy; left = Heavy; right = Heavy } -> UChar.of_int 0x2548
-  | { top = Heavy; bottom = Heavy; left = Heavy; right = Light } -> UChar.of_int 0x2549
-  | { top = Heavy; bottom = Heavy; left = Light; right = Heavy } -> UChar.of_int 0x254a
-  | { top = Heavy; bottom = Heavy; left = Heavy; right = Heavy } -> UChar.of_int 0x254b
-  | { top = Blank; bottom = Blank; left = Light; right = Blank } -> UChar.of_int 0x2574
-  | { top = Light; bottom = Blank; left = Blank; right = Blank } -> UChar.of_int 0x2575
-  | { top = Blank; bottom = Blank; left = Blank; right = Light } -> UChar.of_int 0x2576
-  | { top = Blank; bottom = Light; left = Blank; right = Blank } -> UChar.of_int 0x2577
-  | { top = Blank; bottom = Blank; left = Heavy; right = Blank } -> UChar.of_int 0x2578
-  | { top = Heavy; bottom = Blank; left = Blank; right = Blank } -> UChar.of_int 0x2579
-  | { top = Blank; bottom = Blank; left = Blank; right = Heavy } -> UChar.of_int 0x257a
-  | { top = Blank; bottom = Heavy; left = Blank; right = Blank } -> UChar.of_int 0x257b
-  | { top = Blank; bottom = Blank; left = Light; right = Heavy } -> UChar.of_int 0x257c
-  | { top = Light; bottom = Heavy; left = Blank; right = Blank } -> UChar.of_int 0x257d
-  | { top = Blank; bottom = Blank; left = Heavy; right = Light } -> UChar.of_int 0x257e
-  | { top = Heavy; bottom = Light; left = Blank; right = Blank } -> UChar.of_int 0x257f
-
-let draw_piece ctx row col ?style piece =
-  let row = ctx.ctx_row1 + row and col = ctx.ctx_col1 + col in
-  if row >= ctx.ctx_row1 && col >= ctx.ctx_col1 && row < ctx.ctx_row2 && col < ctx.ctx_col2 then begin
-    let piece =
-      if row > 0 then begin
-        let point = unsafe_get ctx.ctx_matrix (row - 1) col in
-        match piece_of_char point.char with
-          | None ->
-              piece
-          | Some piece' ->
-              if piece.top = piece'.bottom then
-                piece
-              else if piece.top = Blank then
-                { piece with top = piece'.bottom }
-              else if piece'.bottom = Blank then begin
-                point.char <- char_of_piece { piece' with bottom = piece.top };
-                piece
-              end else
-                piece
+        let ch = Text.char txt ofs in
+        if ch = newline then
+          len
+        else
+          line_length (Text.next txt ofs) (len + 1)
+    in
+    let rec loop row col ofs =
+      if ofs < Text.limit txt then begin
+        let ch = Text.char txt ofs in
+        if ch = newline then
+          Text.next txt ofs
+        else begin
+          if row >= ctx.row1
+          && row <  ctx.row2
+          && col >= ctx.col1
+          && col <  ctx.col2 then begin
+            let point = ctx.matrix.(row).(col) in
+            point.char <- ch;
+            set_style point ~style;
+            set_style point ~style:(Text.style txt ofs)
+          end;
+          loop row (col + 1) (Text.next txt ofs)
+        end
       end else
+        ofs
+    in
+    let rec loop_lines row ofs =
+      if ofs < Text.limit txt then begin
+        let ofs =
+          loop row
+            (match align with
+             | Left ->
+               ctx.col1
+             | Center ->
+               ctx.col1 + (ctx.col2 - ctx.col1 - line_length ofs 0) / 2
+             | Right ->
+               ctx.col2 - line_length ofs 0)
+            ofs
+        in
+        loop_lines (row + 1) ofs
+      end
+    in
+    loop_lines (ctx.row1 + row) 0
+  ;;
+end
+
+module UTF8 = Make_text_drawing(struct
+  type t = Zed_utf8.t
+  let limit = String.length
+  let char = Zed_utf8.extract
+  let style _ _ = LTerm_style.none
+  let next = Zed_utf8.next
+end)
+
+module Latin1 = Make_text_drawing(struct
+  type t = string
+  let limit = String.length
+  let char  s i = Uchar.of_char s.[i]
+  let style _ _ = LTerm_style.none
+  let next  _ i = i + 1
+end)
+
+module Text = Make_text_drawing(struct
+  type t = LTerm_text.t
+  let limit = Array.length
+  let char  (t:t) i = t.(i).char
+  let style (t:t) i = t.(i).style
+  let next _ i = i + 1
+end)
+
+module Connection = struct
+  type t =
+    | Blank
+    | Light
+    | Heavy
+    | Double
+  [@@deriving sexp]
+end
+
+module Piece = struct
+  type t = int
+
+  let int_of_connection : Connection.t -> int = function
+    | Blank  -> 0x00
+    | Light  -> 0x01
+    | Heavy  -> 0x03
+    | Double -> 0x02
+  ;;
+
+  let connection_of_int : int -> Connection.t = function
+    | 0x00 -> Blank
+    | 0x01 -> Light
+    | 0x03 -> Heavy
+    | 0x02 -> Double
+    | _ -> assert false
+  ;;
+
+  external swap_int32 : int32 -> int32 = "%bswap_int32"
+
+  module Bits = struct
+    let top    = 0x7f000000
+    let left   = 0x007f0000
+    let right  = 0x00007f00
+    let bottom = 0x0000007f
+  end
+
+  let reverse t = Caml.Int32.to_int (swap_int32 (Caml.Int32.of_int t))
+
+  let%test_unit _ = assert (reverse Bits.top = Bits.bottom)
+  let%test_unit _ = assert (reverse Bits.bottom = Bits.top)
+  let%test_unit _ = assert (reverse Bits.left = Bits.right)
+  let%test_unit _ = assert (reverse Bits.right = Bits.left)
+
+  let ( + ) = ( lor )
+  let ( - ) a b = a land (lnot b)
+
+  let make ~top ~bottom ~left ~right =
+    int_of_connection top    lsl 24 +
+    int_of_connection left   lsl 16 +
+    int_of_connection right  lsl  8 +
+    int_of_connection bottom
+  ;;
+
+  let top    t = connection_of_int (t lsr 24        )
+  let left   t = connection_of_int (t lsr 16 land 15)
+  let right  t = connection_of_int (t lsr  8 land 15)
+  let bottom t = connection_of_int (t        land 15)
+
+  let set_top    t x = t - Bits.top    + (int_of_connection x lsl 24)
+  let set_left   t x = t - Bits.left   + (int_of_connection x lsl 16)
+  let set_right  t x = t - Bits.right  + (int_of_connection x lsl  8)
+  let set_bottom t x = t - Bits.bottom + (int_of_connection x       )
+
+  module For_sexp = struct
+    type t =
+      { top    : Connection.t
+      ; bottom : Connection.t
+      ; left   : Connection.t
+      ; right  : Connection.t
+      } [@@deriving sexp]
+  end
+
+  let sexp_of_t t =
+    For_sexp.sexp_of_t
+      { top    = top    t
+      ; bottom = bottom t
+      ; left   = left   t
+      ; right  = right  t
+      }
+  ;;
+
+  let t_of_sexp s =
+    let { For_sexp. top; bottom; left; right } = For_sexp.t_of_sexp s in
+    make ~top ~bottom ~left ~right
+  ;;
+
+  let hline c = make ~top:Blank ~bottom:Blank ~left:c ~right:c
+  let vline c = make ~top:c ~bottom:c ~left:Blank ~right:Blank
+
+  let br c = make ~top:Blank ~bottom:c ~left:Blank ~right:c
+  let bl c = make ~top:Blank ~bottom:c ~left:c ~right:Blank
+  let tr c = make ~top:c ~bottom:Blank ~left:Blank ~right:c
+  let tl c = make ~top:c ~bottom:Blank ~left:c ~right:Blank
+
+  (* These two arrays are generated by gen/gen_pieces.ml *)
+
+  let ucode_to_piece = [| 0x00010100; 0x00030300; 0x01000001; 0x03000003
+                        ;         -1;         -1;         -1;         -1
+                        ;         -1;         -1;         -1;         -1
+                        ; 0x00000101; 0x00000301; 0x00000103; 0x00000303
+                        ; 0x00010001; 0x00030001; 0x00010003; 0x00030003
+                        ; 0x01000100; 0x01000300; 0x03000100; 0x03000300
+                        ; 0x01010000; 0x01030000; 0x03010000; 0x03030000
+                        ; 0x01000101; 0x01000301; 0x03000101; 0x01000103
+                        ; 0x03000103; 0x03000301; 0x01000303; 0x03000303
+                        ; 0x01010001; 0x01030001; 0x03010001; 0x01010003
+                        ; 0x03010003; 0x03030001; 0x01030003; 0x03030003
+                        ; 0x00010101; 0x00030101; 0x00010301; 0x00030301
+                        ; 0x00010103; 0x00030103; 0x00010303; 0x00030303
+                        ; 0x01010100; 0x01030100; 0x01010300; 0x01030300
+                        ; 0x03010100; 0x03030100; 0x03010300; 0x03030300
+                        ; 0x01010101; 0x01030101; 0x01010301; 0x01030301
+                        ; 0x03010101; 0x01010103; 0x03010103; 0x03030101
+                        ; 0x03010301; 0x01030103; 0x01010303; 0x03030301
+                        ; 0x01030303; 0x03030103; 0x03010303; 0x03030303
+                        ;         -1;         -1;         -1;         -1
+                        ; 0x00020200; 0x02000002; 0x00000201; 0x00000102
+                        ; 0x00000202; 0x00020001; 0x00010002; 0x00020002
+                        ; 0x01000200; 0x02000100; 0x02000200; 0x01020000
+                        ; 0x02010000; 0x02020000; 0x01000201; 0x02000102
+                        ; 0x02000202; 0x01020001; 0x02010002; 0x02020002
+                        ; 0x00020201; 0x00010102; 0x00020202; 0x01020200
+                        ; 0x02010100; 0x02020200; 0x01020201; 0x02010102
+                        ; 0x02020202;         -1;         -1;         -1
+                        ;         -1;         -1;         -1;         -1
+                        ; 0x00010000; 0x01000000; 0x00000100; 0x00000001
+                        ; 0x00030000; 0x03000000; 0x00000300; 0x00000003
+                        ; 0x00010300; 0x01000003; 0x00030100; 0x03000001
+                       |]
+
+  let piece_to_ucode = [| 0x0020; 0x2577; 0x257b; 0x257b
+                        ; 0x2576; 0x250c; 0x2553; 0x250e
+                        ; 0x257a; 0x2552; 0x2554; 0x2554
+                        ; 0x257a; 0x250d; 0x2554; 0x250f
+                        ; 0x2574; 0x2510; 0x2556; 0x2512
+                        ; 0x2500; 0x252c; 0x2565; 0x2530
+                        ; 0x2550; 0x2566; 0x2566; 0x2566
+                        ; 0x257c; 0x252e; 0x2566; 0x2532
+                        ; 0x2578; 0x2555; 0x2557; 0x2557
+                        ; 0x2550; 0x2566; 0x2566; 0x2566
+                        ; 0x2550; 0x2564; 0x2566; 0x2566
+                        ; 0x2550; 0x2566; 0x2566; 0x2566
+                        ; 0x2578; 0x2511; 0x2557; 0x2513
+                        ; 0x257e; 0x252d; 0x2566; 0x2531
+                        ; 0x2550; 0x2566; 0x2566; 0x2566
+                        ; 0x2501; 0x252f; 0x2566; 0x2533
+                        ; 0x2575; 0x2502; 0x2551; 0x257d
+                        ; 0x2514; 0x251c; 0x2560; 0x251f
+                        ; 0x2558; 0x255e; 0x2560; 0x2560
+                        ; 0x2515; 0x251d; 0x2560; 0x2522
+                        ; 0x2518; 0x2524; 0x2563; 0x2527
+                        ; 0x2534; 0x253c; 0x256c; 0x2541
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x2536; 0x253e; 0x256c; 0x2546
+                        ; 0x255b; 0x2561; 0x2563; 0x2563
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x2567; 0x256a; 0x256c; 0x256c
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x2519; 0x2525; 0x2563; 0x252a
+                        ; 0x2535; 0x253d; 0x256c; 0x2545
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x2537; 0x253f; 0x256c; 0x2548
+                        ; 0x2579; 0x2551; 0x2551; 0x2551
+                        ; 0x2559; 0x2560; 0x255f; 0x2560
+                        ; 0x255a; 0x2560; 0x2560; 0x2560
+                        ; 0x255a; 0x2560; 0x2560; 0x2560
+                        ; 0x255c; 0x2563; 0x2562; 0x2563
+                        ; 0x2568; 0x256c; 0x256b; 0x256c
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x255d; 0x2563; 0x2563; 0x2563
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x255d; 0x2563; 0x2563; 0x2563
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x2579; 0x257f; 0x2551; 0x2503
+                        ; 0x2516; 0x251e; 0x2560; 0x2520
+                        ; 0x255a; 0x2560; 0x2560; 0x2560
+                        ; 0x2517; 0x2521; 0x2560; 0x2523
+                        ; 0x251a; 0x2526; 0x2563; 0x2528
+                        ; 0x2538; 0x2540; 0x256c; 0x2542
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x253a; 0x2544; 0x256c; 0x254a
+                        ; 0x255d; 0x2563; 0x2563; 0x2563
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x251b; 0x2529; 0x2563; 0x252b
+                        ; 0x2539; 0x2543; 0x256c; 0x2549
+                        ; 0x2569; 0x256c; 0x256c; 0x256c
+                        ; 0x253b; 0x2547; 0x256c; 0x254b
+                       |]
+
+
+  let of_ucode c =
+    if c < 0x2500 || c > 0x257f then
+      -1
+    else
+      ucode_to_piece.(c - 0x2500)
+  ;;
+
+  let of_char c = of_ucode (Uchar.to_int c)
+
+  let to_ucode t =
+    let n =
+      ((t land Bits.top   ) lsr 18) lor
+      ((t land Bits.left  ) lsr 12) lor
+      ((t land Bits.right ) lsr  6) lor
+      ((t land Bits.bottom))
+    in
+    piece_to_ucode.(n)
+  ;;
+
+  let to_char piece = Uchar.of_int (to_ucode piece)
+end
+
+let update_piece ctx piece1 row col bits1 bits2 =
+  let point2 = ctx.matrix.(row).(col) in
+  let piece2 = Piece.of_char point2.char in
+  if piece2 < 0 then
+    piece1
+  else begin
+    let new_piece1 = piece1 lor (Piece.reverse (piece2 land bits2)) in
+    let new_piece2 = piece2 lor (Piece.reverse (piece1 land bits1)) in
+    point2.char <- Piece.to_char new_piece2;
+    new_piece1
+  end
+
+let draw_piece ctx ~row ~col ?(style=default_style) piece =
+  let row = ctx.row1 + row and col = ctx.col1 + col in
+  if row >= ctx.row1
+  && col >= ctx.col1
+  && row < ctx.row2
+  && col < ctx.col2 then begin
+    let piece =
+      if row > 0 then
+        update_piece ctx piece (row - 1) col Piece.Bits.top Piece.Bits.bottom
+      else
         piece
     in
     let piece =
-      if row < ctx.ctx_matrix_size.rows - 1 then begin
-        let point = unsafe_get ctx.ctx_matrix (row + 1) col in
-        match piece_of_char point.char with
-          | None ->
-              piece
-          | Some piece' ->
-              if piece.bottom = piece'.top then
-                piece
-              else if piece.bottom = Blank then
-                { piece with bottom = piece'.top }
-              else if piece'.top = Blank then begin
-                point.char <- char_of_piece { piece' with top = piece.bottom };
-                piece
-              end else
-                piece
-      end else
+      if row < ctx.matrix_size.rows - 1 then
+        update_piece ctx piece (row + 1) col Piece.Bits.bottom Piece.Bits.top
+      else
         piece
     in
     let piece =
       if col > 0 then begin
-        let point = unsafe_get ctx.ctx_matrix row (col - 1) in
-        match piece_of_char point.char with
-          | None ->
-              piece
-          | Some piece' ->
-              if piece.left = piece'.right then
-                piece
-              else if piece.left = Blank then
-                { piece with left = piece'.right }
-              else if piece'.right = Blank then begin
-                point.char <- char_of_piece { piece' with right = piece.left };
-                piece
-              end else
-                piece
+        update_piece ctx piece row (col - 1) Piece.Bits.left Piece.Bits.right
       end else
         piece
     in
     let piece =
-      if col < ctx.ctx_matrix_size.cols - 1 then begin
-        let point = unsafe_get ctx.ctx_matrix row (col + 1) in
-        match piece_of_char point.char with
-          | None ->
-              piece
-          | Some piece' ->
-              if piece.right = piece'.left then
-                piece
-              else if piece.right = Blank then
-                { piece with right = piece'.left }
-              else if piece'.left = Blank then begin
-                point.char <- char_of_piece { piece' with left = piece.right };
-                piece
-              end else
-                piece
+      if col < ctx.matrix_size.cols - 1 then begin
+        update_piece ctx piece row (col + 1) Piece.Bits.right Piece.Bits.left
       end else
         piece
     in
-    let point = unsafe_get ctx.ctx_matrix row col in
-    point.char <- char_of_piece piece;
-    maybe_set_style point style
-  end
+    let point = ctx.matrix.(row).(col) in
+    point.char <- Piece.to_char piece;
+    set_style point ~style
+  end;
+;;
 
-let draw_hline ctx row col len ?style connection =
-  let piece = { top = Blank; bottom = Blank; left = connection; right = connection } in
+let draw_hline ctx ~row ~col ~len ?(style=default_style) connection =
+  let piece = Piece.hline connection in
   for i = 0 to len - 1 do
-    draw_piece ctx row (col + i) ?style piece
-  done
+    draw_piece ctx ~row ~col:(col + i) ~style piece
+  done;
+;;
 
-let draw_vline ctx row col len ?style connection =
-  let piece = { top = connection; bottom = connection; left = Blank; right = Blank } in
+let draw_vline ctx ~row ~col ~len ?(style=default_style) connection =
+  let piece = Piece.vline connection in
   for i = 0 to len - 1 do
-    draw_piece ctx (row + i) col ?style piece
-  done
+    draw_piece ctx ~row:(row + i) ~col ~style piece
+  done;
+;;
 
-let draw_frame ctx rect ?style connection =
-  let hline = { top = Blank; bottom = Blank; left = connection; right = connection } in
-  let vline = { top = connection; bottom = connection; left = Blank; right = Blank } in
-  for col = rect.col1 + 1 to rect.col2 - 2 do
-    draw_piece ctx (rect.row1 + 0) col ?style hline;
-    draw_piece ctx (rect.row2 - 1) col ?style hline
+let draw_frame ctx rect ?(style=default_style)
+      connection =
+  let { LTerm_geom. col1; col2; row1; row2 } = rect in
+  let hline = Piece.hline connection in
+  let vline = Piece.vline connection in
+  for col = col1 + 1 to col2 - 2 do
+    draw_piece ctx ~row:(row1 + 0) ~col ~style hline;
+    draw_piece ctx ~row:(row2 - 1) ~col ~style hline;
   done;
-  for row = rect.row1 + 1 to rect.row2 - 2 do
-    draw_piece ctx row (rect.col1 + 0) ?style vline;
-    draw_piece ctx row (rect.col2 - 1) ?style vline
+  for row = row1 + 1 to row2 - 2 do
+    draw_piece ctx ~row ~col:(col1 + 0) ~style vline;
+    draw_piece ctx ~row ~col:(col2 - 1) ~style vline;
   done;
-  draw_piece ctx (rect.row1 + 0) (rect.col1 + 0) ?style { top = Blank; bottom = connection; left = Blank; right = connection };
-  draw_piece ctx (rect.row1 + 0) (rect.col2 - 1) ?style { top = Blank; bottom = connection; left = connection; right = Blank };
-  draw_piece ctx (rect.row2 - 1) (rect.col2 - 1) ?style { top = connection; bottom = Blank; left = connection; right = Blank };
-  draw_piece ctx (rect.row2 - 1) (rect.col1 + 0) ?style { top = connection; bottom = Blank; left = Blank; right = connection }
+  draw_piece ctx ~row:(row1 + 0) ~col:(col1 + 0) ~style (Piece.br connection);
+  draw_piece ctx ~row:(row1 + 0) ~col:(col2 - 1) ~style (Piece.bl connection);
+  draw_piece ctx ~row:(row2 - 1) ~col:(col2 - 1) ~style (Piece.tl connection);
+  draw_piece ctx ~row:(row2 - 1) ~col:(col1 + 0) ~style (Piece.tr connection);
+;;
