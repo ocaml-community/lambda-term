@@ -48,6 +48,12 @@ let string_of_rect rect =
     "{ row1 = %d; col1 = %d; row2 = %d; col2 = %d }"
     rect.row1 rect.col1 rect.row2 rect.col2
 
+let in_rect rect coord = 
+  coord.col >= rect.col1 &&
+  coord.col < rect.col2 &&
+  coord.row >= rect.row1 &&
+  coord.row < rect.row2 
+
 type horz_alignment =
   | H_align_left
   | H_align_center

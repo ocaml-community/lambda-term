@@ -20,6 +20,19 @@ and find_focusable_in_list = function
         | Some _ as some -> some
         | None -> find_focusable_in_list rest
 
+(* Mouse support *)
+let rec pick coord widget = 
+  if not (LTerm_geom.in_rect widget#allocation coord) then None
+  else
+    let f () = if widget#can_focus then Some(widget, coord)  else None in
+    let w = (* search children *) 
+      List.fold_left 
+        (function None -> pick coord
+                | Some(w, c) -> (fun _ -> Some(w, c))) 
+        None widget#children
+    in
+    if w = None then f() else w
+
 (* An event for the main loop. *)
 type 'a event =
   | Value of 'a
@@ -143,6 +156,18 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
           size_ref := { !size_ref with row2 = size.rows; col2 = size.cols};
           List.iter (fun top -> top#set_allocation !size_ref) !layers;
           loop ()
+      (* left button mouse click *)
+      | Event ((LTerm_event.Mouse m) as ev) when LTerm_mouse.(m.button=Button1) -> begin
+          let picked = pick LTerm_mouse.(coord m) (toplevel :> t) in
+          match picked with
+          | None -> (* send event to currently focused widget *)
+            !(List.hd !focuses)#send_event ev;
+            loop ()
+          | _ -> (* move focus and send it the event *)
+            toplevel#move_focus_to picked;
+            !(List.hd !focuses)#send_event ev;
+            loop ()
+      end
       | Event ev ->
           !(List.hd !focuses)#send_event ev;
           loop ()

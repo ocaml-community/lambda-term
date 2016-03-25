@@ -52,6 +52,9 @@ val size_of_rect : rect -> size
 val string_of_rect : rect -> string
   (** Returns the string representation of the given rectangle. *)
 
+val in_rect : rect -> coord -> bool
+  (** Test if coord is within rect *)
+
 (** Horizontal alignment. *)
 type horz_alignment =
   | H_align_left
