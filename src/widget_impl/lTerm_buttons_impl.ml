@@ -82,17 +82,21 @@ class checkbutton initial_label initial_state = object(self)
   val mutable state = initial_state
 
   initializer
-    self#on_event
-    (function
-      | LTerm_event.Key { control = false; meta = false; shift = false; code }
-        when (code = Enter || code = space) ->
-          state <- not state;
-          (* checkbutton changes the state when clicked, so has to be redrawn *)
-          self#queue_draw;
-          exec_callbacks click_callbacks ();
-          true
-      | _ ->
-          false);
+    self#on_event (fun ev ->
+      let update () = 
+        state <- not state;
+        (* checkbutton changes the state when clicked, so has to be redrawn *)
+        self#queue_draw;
+        exec_callbacks click_callbacks ();
+        true
+      in
+      match ev with 
+        | LTerm_event.Key { control = false; meta = false; shift = false; code }
+          when (code = Enter || code = space) -> update ()
+        | LTerm_event.Mouse m 
+          when m.button = Button1 && in_rect self#allocation (coord m) -> update ()
+        | _ ->
+            false);
     self#set_resource_class "checkbutton"
 
   method state = state
