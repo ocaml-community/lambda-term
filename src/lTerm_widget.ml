@@ -85,7 +85,7 @@ class modal_frame = LTerm_containers_impl.modal_frame
    | Spacing for layout control (aka glue)                           |
    +-----------------------------------------------------------------+ *)
 
-class spacer ?(rows=0) ?(cols=0) () = object
+class spacing ?(rows=0) ?(cols=0) () = object
   inherit t "glue"
   val size_request = { rows; cols }
   method size_request = size_request

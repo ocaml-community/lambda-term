@@ -84,7 +84,7 @@ class type scrollable = object
 
 end
 
-class virtual scrollbar ~scroll_bar_size ~(scrollable:scrollable) =
+class virtual scrollbar ~scroll_bar_size ~(scrollable:#scrollable) =
   let window_of_scroll, scroll_of_window = Proj.make () in
 
   object(self)

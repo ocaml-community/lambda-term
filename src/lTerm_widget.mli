@@ -153,7 +153,7 @@ class modal_frame : object
 end
 
 (** A widget used for layout control within boxes *)
-class spacer : ?rows:int -> ?cols:int -> unit -> t
+class spacing : ?rows:int -> ?cols:int -> unit -> t
 
 (** {6 Lines} *)
 
@@ -258,19 +258,28 @@ end
 
 (** {6 Scrollbars} *)
 
+(** methods required for a widget to supprt scrollbars *)
 class type scrollable = object
   method full_size : LTerm_geom.size
+    (* full size of scrollable window *)
+
   method offset : LTerm_geom.coord
+    (* offset within window *)
+  
   method set_offset : LTerm_geom.coord -> unit
+    (* set offset within window *)
+
 end
 
+(** vertical scrollbar *)
 class vscrollbar : 
   ?scroll_bar_size:int -> ?scroll_window_size:int -> ?scroll_bar_thickness:int ->
-  scrollable:scrollable -> t
+  scrollable:#scrollable -> t
 
+(** horizontal scrollbar *)
 class hscrollbar : 
   ?scroll_bar_size:int -> ?scroll_window_size:int -> ?scroll_bar_thickness:int ->
-  scrollable:scrollable -> t
+  scrollable:#scrollable -> t
 
 (** {6 Running in a terminal} *)
 

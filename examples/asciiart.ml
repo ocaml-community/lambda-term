@@ -1,7 +1,19 @@
-(*let palette = "@#8&o:*. "*)
+(*
+ * asciiart.ml
+ * -----------
+ * Copyright : (c) 2016, Andy Ray <andy.ray@ujamjar.com>
+ * Licence   : BSD3
+ *
+ * This file is a part of Lambda-Term.
+ *)
+
+(* ascii chars of increasing intensity *)
 let palette = " .*:o&8#@"
+
+(* grayscale conversion coefficients *)
 let coefs = [| 0.229; 0.587; 0.114 |]
 
+(* load image *)
 let load file = 
   let img = OImages.load file [] in
   match OImages.tag img with
@@ -10,8 +22,10 @@ let load file =
   | OImages.Rgb24 img -> img
   | _ -> failwith "not supported"
 
+(* images will be scaled down by averaging pixels in blocks of this size *)
 let avg_cols = ref 5
 let avg_rows = ref 10
+
 let filename = ref "test.png"
 
 let () = Arg.(parse [
@@ -19,6 +33,7 @@ let () = Arg.(parse [
   "-rows", Set_int avg_rows, "num rows to average";
 ] (fun s -> filename := s) "asciiart [options] filename")
 
+(* scale image and convert to indices into palette *)
 let indices img = 
   let rows = img#height in
   let cols = img#width in
@@ -45,6 +60,7 @@ open LTerm_widget
 open LTerm_geom
 open CamomileLibrary
 
+(* scrollable asciiart widget *)
 class asciiart img = object(self)
   inherit t "asciiart"
 
@@ -71,6 +87,23 @@ class asciiart img = object(self)
 
 end
 
+let with_scrollbar ?down widget = 
+  let vbox = new vbox in
+  let hbox = new hbox in
+  let vscroll = new vscrollbar widget in
+  let hscroll = new hscrollbar widget in
+  hbox#add widget;
+  hbox#add ~expand:false vscroll;
+  vbox#add hbox;
+  let hbox = new hbox in
+  hbox#add hscroll;
+  hbox#add ~expand:false (new spacing ~rows:2 ~cols:2 ());
+  vbox#add ~expand:false hbox;
+  widget#set_focus { widget#focus with right = Some(vscroll); down = Some(hscroll) };
+  vscroll#set_focus { vscroll#focus with down = Some(hscroll) };
+  hscroll#set_focus { hscroll#focus with up = Some(vscroll); down } ;
+  vbox
+
 let main () = 
   let img = indices (load !filename) in
 
@@ -78,21 +111,7 @@ let main () =
   let exit = new button "exit" in
   exit#on_click (wakeup wakener);
 
-  let vbox = new vbox in
-  let hbox = new hbox in
-  let art = new asciiart img in
-  let vscroll = new vscrollbar (art :> scrollable) in
-  let hscroll = new hscrollbar (art :> scrollable) in
-
-  art#set_focus { art#focus with right = Some(vscroll); down = Some(hscroll :> t) };
-  vscroll#set_focus { vscroll#focus with down = Some(hscroll :> t) };
-  hscroll#set_focus { hscroll#focus with up = Some(vscroll); down = Some(exit :> t) } ;
-
-
-  hbox#add art;
-  hbox#add ~expand:false vscroll;
-  vbox#add hbox;
-  vbox#add ~expand:false hscroll;
+  let vbox = with_scrollbar ~down:(exit :> t) (new asciiart img) in
   vbox#add ~expand:false exit;
 
   Lazy.force LTerm.stdout >>= fun term ->

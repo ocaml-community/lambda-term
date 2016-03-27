@@ -10,6 +10,7 @@ open Lwt
 open LTerm_widget
 open LTerm_geom
 
+(* a simple widget with scrollbar support *)
 class scrollable_nums = object(self)
   inherit t "nums"
 
@@ -37,16 +38,18 @@ let main () =
   exit#on_click (wakeup wakener);
 
   let nums = new scrollable_nums in
-  let scroll = new vscrollbar (nums :> scrollable) in
+  let scroll = new vscrollbar nums in
+
   let hbox = new hbox in
   hbox#add ~expand:true nums;
   hbox#add ~expand:false scroll;
 
-  let decr = new button "decr" in
+  (* buttons to set scroll offset *)
   let set_offset f = 
     let o = nums#offset in 
     nums#set_offset { o with row = f o.row } 
   in
+  let decr = new button "decr" in
   decr#on_click (fun () -> set_offset ((+)(-1)));
   let incr = new button "incr" in
   incr#on_click (fun () -> set_offset ((+)1));
