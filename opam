@@ -6,11 +6,10 @@ bug-reports: "https://github.com/diml/lambda-term/issues"
 dev-repo: "git://github.com/diml/lambda-term.git"
 license: "BSD3"
 build: [
-  ["ocaml" "setup.ml" "-configure" "--prefix" prefix]
-  ["ocaml" "setup.ml" "-build"]
+  ["./configure" "--prefix" prefix]
+  [make]
 ]
-install: [["ocaml" "setup.ml" "-install"]]
-build-doc: [["ocaml" "setup.ml" "-doc"]]
+install: [[make "install"]]
 remove: [["ocamlfind" "remove" "lambda-term"]]
 depends: [
   "ocamlfind"
