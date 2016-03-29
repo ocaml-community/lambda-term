@@ -25,11 +25,6 @@ type t
 
 (** {6 Creation} *)
 
-module Blocking : sig
-  type 'a t = private 'a
-  val get : 'a t -> 'a
-end
-
 (** [create ?model (fd_in, fd_out)] creates a new terminal.
 
     - [model] is the type of the terminal, such as "rxvt" or "xterm". It defaults to the
@@ -43,11 +38,11 @@ val create
   :  ?windows : bool
   -> ?model   : string
   -> Unix.file_descr * Unix.file_descr
-  -> t Blocking.t
+  -> t
 
 (** Restore the initial state and stop updating the terminal state. This does not close
     the underlying file descriptor. *)
-val close : t -> unit Blocking.t
+val close : t -> unit
 
 (** Enable/disable the terminal.
 

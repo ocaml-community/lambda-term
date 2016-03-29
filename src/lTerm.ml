@@ -78,15 +78,18 @@ external get_size_from_fd : Unix.file_descr -> LTerm_geom.size
 *)
 
 (* +-----------------------------------------------------------------+
-   | The terminal type                                               |
+   | Terminal synchronisation                                        |
    +-----------------------------------------------------------------+ *)
 
 module Sync = struct
+  type end_of_display = Do_not_change | Set of int option
+
   type t =
     { len            : int
-    ; end_of_display : [ `Do_not_change | `Set of int option ]
+    ; end_of_display : end_of_display
     ; mode           : Mode.t
     ; cursor         : Cursor.t
+    ; callback       : unit -> unit
     }
   [@@deriving sexp_of]
 
@@ -94,11 +97,10 @@ module Sync = struct
     { len = 0
     ; end_of_display = `Do_not_change
     ; mode
-    ; finished = Ivar.create ()
     ; cursor
     }
   ;;
-
+(*
   let merge l =
     match l with
     | [] -> assert false
@@ -117,54 +119,56 @@ module Sync = struct
          ; mode = t.mode
          ; cursor = t.cursor })
   ;;
+*)
 end
 
-module Async_queue : sig
+let protect mutex ~f =
+  Mutex.lock t.mutex;
+  match f () with
+  | x           -> Mutex.unlock mutex; x
+  | exception e -> Mutex.unlock mutex; raise e
+
+module Thread_safe_queue : sig
   type 'a t [@@deriving sexp_of]
 
-  val create : unit -> _ t
-
-  val send : 'a t -> 'a -> unit
-
-  val wait : 'a t -> 'a Deferred.t
-
-  val pop_all : 'a t -> 'a list
+  val create  : unit -> _ t
+  val send    : 'a t -> 'a -> unit
+  val wait    : 'a t -> 'a
 end = struct
   type 'a t =
-    { data           : 'a Queue.t
-    ; mutable waiter : 'a Ivar.t option
+    { queue           : 'a Queue.t
+    ; mutex           : Mutex.t
+    ; wait            : Condition.t
+    ; mutable waiters : int
     }
   [@@deriving sexp_of]
 
   let create () =
-    { data   = Queue.create ()
-    ; waiter = None
+    { queue   = Queue.create ()
+    ; mutex   = Mutex.create ()
+    ; wait    = Condition.create ()
+    ; waiters = 0
     }
   ;;
 
   let pop t = Queue.dequeue t.data
 
   let wait t =
-    match pop t, t.waiter with
-    | None   , Some ivar -> Ivar.read ivar
-    | Some _ , Some _    -> assert false
-    | Some x , None      -> return x
-    | None   , None      ->
-      let ivar = Ivar.create () in
-      t.waiter <- Some ivar;
-      Ivar.read ivar
-  ;;
-
-  let rec pop_all t =
-    match pop t with
-    | None   -> []
-    | Some x -> x :: pop_all t
+    protect t.mutex ~f:(fun () ->
+      if Queue.is_empty t.queue then begin
+        t.waiters <- t.waiters + 1;
+        Condition.wait t.mutex t.wait;
+      end;
+      Queue.pop t.queue)
   ;;
 
   let send t x =
-    match t.waiter with
-    | None      -> Queue.enqueue t.data x
-    | Some ivar -> t.waiter <- None; Ivar.fill ivar x
+    protect t.mutex ~f:(fun () ->
+      Queue.push x t.queue;
+      if t.waiters > 0 then begin
+        t.waiters <- t.waiters - 1;
+        Condition.signal t.wait
+      end)
   ;;
 end
 
@@ -181,9 +185,8 @@ module Event_queue : sig
 
   val create : unit -> t
 
-  val send : t -> LTerm_event.t -> unit
-  val wait : t -> LTerm_event.t Deferred.t
-  val pop  : t -> LTerm_event.t option
+  val send       : t -> LTerm_event.t -> unit
+  val wait_async : t -> f:(LTerm_event.t -> unit)
 
   val set_active : t -> bool -> unit
   val close      : t -> unit
@@ -197,10 +200,10 @@ end = struct
 
        It can however contains a Resize followed (immediately or not) by a Resume. *)
     type t [@@deriving sexp_of]
-    val create : unit -> t
+    val create  : unit -> t
     val enqueue : t -> LTerm_event.t -> unit
     val dequeue : t -> LTerm_event.t option
-    val clear : t -> unit
+    val clear   : t -> unit
   end = struct
     type t =
       { queue : LTerm_event.t Queue.t
@@ -250,34 +253,32 @@ end = struct
     ;;
   end
 
-   type t =
+  type t =
     { pending_events : Queue.t
-    ; mutable waiter : LTerm_event.t Ivar.t option
+    ; mutex          : Mutex.t
+    ; waiters        : (LTerm_event.t -> unit) Queue.t
     ; mutable state  : State.t
     } [@@deriving sexp_of]
 
   let create () =
-    { pending_events  = Queue.create ()
-    ; waiter          = None
-    ; state           = Active
+    { pending_events = Queue.create ()
+    ; mutex          = Mutex.create ()
+    ; waiters        = Queue.create ()
+    ; state          = Active
     }
   ;;
 
   let send t ev =
-    match t.state with
-    | Closed   -> assert false
-    | Inactive -> Queue.enqueue t.pending_events ev
-    | Active   ->
-      match t.waiter with
-      | None      -> Queue.enqueue t.pending_events ev
-      | Some ivar -> t.waiter <- None; Ivar.fill ivar ev
-  ;;
-
-  let pop t =
-    match t.state with
-    | Closed   -> assert false
-    | Inactive -> None
-    | Active   -> Queue.dequeue t.pending_events
+    protect t.mutex ~f:(fun () ->
+      Mutex.lock t.mutex;
+      (match t.state with
+       | Closed   -> assert false
+       | Inactive -> Queue.enqueue t.pending_events ev
+       | Active   ->
+         if not (Queue.is_empty t.waiters) then
+           Queue.pop t.waiters ev
+         else
+           Queue.enqueue t.pending_events ev))
   ;;
 
   let really_wait t =
@@ -286,47 +287,48 @@ end = struct
     Ivar.read ivar
   ;;
 
-  let wait t =
-    match t.state with
-    | Closed   -> assert false
-    | Inactive -> really_wait t
-    | Active   ->
-      match Queue.dequeue t.pending_events, t.waiter with
-      | None    , Some ivar -> Ivar.read ivar
-      | Some _  , Some _    -> assert false
-      | Some ev , None      -> return ev
-      | None    , None      -> really_wait t
+  let wait_async t ~f =
+    protect t.mutex ~f:(fun () ->
+      (match t.state with
+       | Closed   -> assert false
+       | Inactive -> Queue.push f t.waiters
+       | Active   ->
+         if not (Queue.is_empty t.pending_events) then
+           f (Queue.pop t.pending_events)
+         else
+           Queue.enqueue t.waiters f))
   ;;
 
   let set_active t active =
-    match t.state, active with
-    | Closed   , _     -> assert false
-    | Active   , true  -> ()
-    | Inactive , false -> ()
-    | Active   , false -> t.state <- Inactive
-    | Inactive , true  ->
-      t.state <- Active;
-      match t.waiter with
-      | None -> ()
-      | Some ivar ->
-        match Queue.dequeue t.pending_events with
-        | None -> ()
-        | Some ev ->
-          t.waiter <- None;
-          Ivar.fill ivar ev
+    protect t.mutex ~f:(fun () ->
+      match t.state, active with
+      | Closed   , _     -> assert false
+      | Active   , true  -> ()
+      | Inactive , false -> ()
+      | Active   , false -> t.state <- Inactive
+      | Inactive , true  ->
+        t.state <- Active;
+        while not (Queue.is_empty t.waiters) && not (Queue.is_empty t.pending_events) do
+          let f = Queue.pop t.waiters        in
+          let x = Queue.pop t.pending_events in
+          f x
+        done)
   ;;
 
   let close t =
-    assert (not (State.is_closed t.state));
-    t.state <- Closed;
-    Queue.clear t.pending_events;
-    match t.waiter with
-    | None      -> ()
-    | Some ivar -> Ivar.fill ivar Closed
+    protect t.mutex ~f:(fun () ->
+      assert (not (State.is_closed t.state));
+      t.state <- Closed;
+      Queue.clear t.pending_events;
+      let waiters = Queue.fold (fun l x -> x :: l) [] t.waiters |> List.rev in
+      Queue.clear t.waiters;
+      List.iter (fun f -> f Closed) waiters)
   ;;
 end
 
-type write_result = [ `Error of exn | `Already_closed | `Ok of unit ] [@@deriving sexp_of]
+(* +-----------------------------------------------------------------+
+   | The terminal type                                               |
+   +-----------------------------------------------------------------+ *)
 
 type t =
   { mutable state              : State.t
@@ -340,7 +342,6 @@ type t =
   ; mutable out_pos            : int
   ; mutable size               : LTerm_geom.size
   ; event_parser               : LTerm_unix.Event_parser.t
-  ; mutable current_write      : write_result Deferred.t
   ; mutable sync_mutex         : Mutex.t
   ; mutable syncing_up_to      : int
   ; mutable reading_event      : bool
@@ -358,12 +359,11 @@ type t =
   ; mutable real_cursor        : Cursor.t
   ; mutable cursor_when_synced : Cursor.t
   ; mutable cursor             : Cursor.t
-  ; mutable closed             : unit Ivar.t
   }
 [@@deriving fields, sexp_of]
 
 let suspending = ref None
-let terminals = ref []
+let terminals  = ref []
 
 let add_event t ev =
   match t.state with
@@ -579,7 +579,7 @@ let handle_signals t =
       Deferred.unit
       >>> fun () ->
       let sync = Sync.refresh ~mode:t.mode_when_synced ~cursor:t.cursor_when_synced in
-      Async_queue.send t.syncs sync;
+      Thread_safe_queue.send t.syncs sync;
     end;
     if !Signals.got_intr then add_event t (Signal Intr);
     if !Signals.got_quit then add_event t (Signal Quit);
@@ -1194,7 +1194,7 @@ let create ?(model=default_model) fd =
       ; size
       ; event_parser = LTerm_unix.Event_parser.create ~escape_time:(sec 0.1) fd
       ; current_write = return (`Ok ())
-      ; syncs = Async_queue.create ()
+      ; syncs = Thread_safe_queue.create ()
       ; syncing_up_to = 0
       ; reading_event = false
       ; end_of_display = None
