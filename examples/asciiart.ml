@@ -61,16 +61,14 @@ open LTerm_geom
 open CamomileLibrary
 
 (* scrollable asciiart widget *)
-class asciiart img = object(self)
+class asciiart img vscroll hscroll = object(self)
   inherit t "asciiart"
 
+  initializer
+    vscroll#set_range (Array.length img);
+    hscroll#set_range (Array.length img.(0))
+
   method can_focus = false
-
-  method full_size = { rows = Array.length img - 1; cols=Array.length img.(0) - 1 }
-
-  val mutable offset = { row = 0; col = 0 }
-  method offset = offset
-  method set_offset o = offset <- o; self#queue_draw
 
   val style = 
     LTerm_style.({ none with foreground=Some white; 
@@ -81,7 +79,9 @@ class asciiart img = object(self)
     for row=0 to rows-1 do
       for col=0 to cols-1 do
         LTerm_draw.draw_char ~style ctx row col @@ 
-          UChar.of_char palette.[ try img.(row+offset.row).(col+offset.col) with _ -> 0 ]
+          UChar.of_char palette.[ 
+            try img.(row + vscroll#offset).(col + hscroll#offset) with _ -> 0 
+          ]
       done
     done
 
@@ -90,8 +90,9 @@ end
 let with_scrollbar ?down widget = 
   let vbox = new vbox in
   let hbox = new hbox in
-  let vscroll = new vscrollbar widget in
-  let hscroll = new hscrollbar widget in
+  let vscroll = new vscrollbar () in
+  let hscroll = new hscrollbar () in
+  let widget = widget vscroll hscroll in
   hbox#add widget;
   hbox#add ~expand:false vscroll;
   vbox#add hbox;
@@ -99,9 +100,10 @@ let with_scrollbar ?down widget =
   hbox#add hscroll;
   hbox#add ~expand:false (new spacing ~rows:2 ~cols:2 ());
   vbox#add ~expand:false hbox;
-  widget#set_focus { widget#focus with right = Some(vscroll); down = Some(hscroll) };
-  vscroll#set_focus { vscroll#focus with down = Some(hscroll) };
-  hscroll#set_focus { hscroll#focus with up = Some(vscroll); down } ;
+  widget#set_focus { widget#focus with right = Some(vscroll :> t); 
+                                       down = Some(hscroll :> t) };
+  vscroll#set_focus { vscroll#focus with down = Some(hscroll :> t) };
+  hscroll#set_focus { hscroll#focus with up = Some(vscroll :> t); down } ;
   vbox
 
 let main () = 

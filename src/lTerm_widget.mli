@@ -258,28 +258,41 @@ end
 
 (** {6 Scrollbars} *)
 
-(** methods required for a widget to supprt scrollbars *)
-class type scrollable = object
-  method full_size : LTerm_geom.size
-    (* full size of scrollable window *)
+(** Adjustable integer value from (0..range-1) *)
+class type adjustment = object
 
-  method offset : LTerm_geom.coord
-    (* offset within window *)
-  
-  method set_offset : LTerm_geom.coord -> unit
-    (* set offset within window *)
+  method range : int
+    (** range of adjustment *)
+
+  method set_range : int -> unit
+    (** set range of adjustment *)
+
+  method offset : int
+    (** offset from (0..range-1) *)
+
+  method set_offset : int -> unit
+    (** set offset clipped to range *)
+
+  method incr : unit
+    (** increment offset by one step *)
+
+  method decr : unit
+    (** decrement offset by one step *)
+
+  method scroll_bar_size : int
+    (** size of scroll bar *)
 
 end
 
-(** vertical scrollbar *)
-class vscrollbar : 
-  ?scroll_bar_size:int -> ?scroll_window_size:int -> ?scroll_bar_thickness:int ->
-  scrollable:#scrollable -> t
+class vscrollbar : ?size_request:LTerm_geom.size -> unit -> object
+  inherit t
+  inherit adjustment
+end
 
-(** horizontal scrollbar *)
-class hscrollbar : 
-  ?scroll_bar_size:int -> ?scroll_window_size:int -> ?scroll_bar_thickness:int ->
-  scrollable:#scrollable -> t
+class hscrollbar : ?size_request:LTerm_geom.size -> unit -> object
+  inherit t
+  inherit adjustment
+end
 
 (** {6 Running in a terminal} *)
 

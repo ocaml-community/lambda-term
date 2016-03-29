@@ -147,7 +147,7 @@ class ['a] radiobutton = ['a] LTerm_buttons_impl.radiobutton
    | Scrollbars                                                      |
    +-----------------------------------------------------------------+ *)
 
-class type scrollable = LTerm_scroll_impl.scrollable
+class type adjustment = LTerm_scroll_impl.adjustment
 class vscrollbar = LTerm_scroll_impl.vscrollbar
 class hscrollbar = LTerm_scroll_impl.hscrollbar
 
