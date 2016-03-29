@@ -55,8 +55,10 @@ let main () =
   let frame = new frame in
   frame#set vbox;
 
-  Lazy.force LTerm.stdout
-  >>= fun term ->
-  run term frame waiter
+  Lazy.force LTerm.stdout >>= fun term ->
+  LTerm.enable_mouse term >>= fun () ->
+  Lwt.finalize 
+    (fun () -> run term frame waiter)
+    (fun () -> LTerm.disable_mouse term)
 
 let () = Lwt_main.run (main ())
