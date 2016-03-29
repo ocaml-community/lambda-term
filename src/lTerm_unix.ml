@@ -328,7 +328,7 @@ module Event_parser = struct
 
   external blit
     : src:bigstring -> src_pos:int -> dst:bigstring -> dst_pos:int -> len:int -> int
-    = "lt_term_bigarray_read"
+    = "lt_term_bigarray_blit"
 
   type t =
     { fd                     : Unix.file_descr

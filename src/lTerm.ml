@@ -7,6 +7,8 @@
  * This file is a part of Lambda-Term.
  *)
 
+open Bigarray
+
 module Screen = struct
   type t = Main | Alternative
 end
@@ -63,6 +65,19 @@ module Terminal_io = struct
       Unix.tcsetattr fd TCSAFLUSH attr
     with Unix.Unix_error (EINTR, _, _) ->
       set_attr fd attr
+  ;;
+
+  let get_attr_no_err fd =
+    match get_attr fd with
+    | x -> Some x
+    | exception _ -> None
+  ;;
+
+  let set_attr_no_err fd attr =
+    try
+      set_attr fd attr
+    with _ ->
+      ()
   ;;
 end
 
@@ -330,22 +345,27 @@ end
    | The terminal type                                               |
    +-----------------------------------------------------------------+ *)
 
+type bigstring = (char, int8_unsigned, c_layout) Array1.t
+
 type t =
   { mutable state              : State.t
   ; windows                    : bool
   ; model                      : string
   ; colors                     : int
   ; bold_is_bright             : bool
-  ; color_map                  : LTerm_color_mappings.map sexp_opaque
-  ; fd                         : Fd.t
-  ; mutable out_buf            : Bigstring.t sexp_opaque
+  ; color_map                  : LTerm_color_mappings.map
+  ; fd_in                      : Unix.file_descr
+  ; fd_out                     : Unix.file_descr
+  ; out_buf_shift_mutex        : Mutex.t
+  ; mutable out_buf            : bigstring
+  ; mutable out_pos_written    : int
   ; mutable out_pos            : int
   ; mutable size               : LTerm_geom.size
   ; event_parser               : LTerm_unix.Event_parser.t
   ; mutable sync_mutex         : Mutex.t
   ; mutable syncing_up_to      : int
   ; mutable reading_event      : bool
-  ; mutable initial_attr       : Unix.Terminal_io.t sexp_opaque option
+  ; mutable initial_attr       : Unix.terminal_io option
   ; mutable attr_modified      : bool (* Whether the current term attributes are different
                                          from the initial ones *)
   ; mutable end_of_display     : int option
@@ -362,8 +382,26 @@ type t =
   }
 [@@deriving fields, sexp_of]
 
-let suspending = ref None
-let terminals  = ref []
+module Global = struct
+  module State = struct
+    type t =
+      | Normal
+      | Suspending
+      | Exiting
+  end
+
+  let mutex = Mutex.create ()
+
+  let state     = ref State.Normal
+  let terminals = ref []
+
+  (* Number of writer threads currently working *)
+  let writers = ref 0
+  (* Notified when [state] is [Suspending] or [Exiting] *)
+  let writers_done = Condition.create ()
+  (* Notified after a resume *)
+  let resume = Condition.create ()
+end
 
 let add_event t ev =
   match t.state with
@@ -403,21 +441,28 @@ module Signals = struct
 
   let get () = !t
 
-  (* We do not use async in these functions. Intr and Quit are for emergency so it doesn't
-     really matters and even for Ctrl+Z, using async seems to create some visual delay. *)
+  type signal =
+    | Intr
+    | Quit
+    | Susp
+    | Winch
 
-  let get_attr t =
-    try
-      Some (Terminal_io.get_attr (Fd.file_descr_exn t.fd))
-    with _ ->
-      None
+  let signal_of_int signo =
+    if signo = Sys.sigint then
+      Intr
+    else if signo = Sys.sigquit then
+      Quit
+    else if signo = Sys.sigtstp then
+      Susp
+    else
+      Winch
   ;;
 
-  let set_attr t attr =
-    try
-      Terminal_io.set_attr (Fd.file_descr_exn t.fd) attr
-    with _ ->
-      ()
+  let state_of_signal = function
+    | Intr -> !t.intr
+    | Quit -> !t.quit
+    | Susp -> !t.susp
+    | Winch -> Generate_event
   ;;
 
   let send t s =
@@ -427,7 +472,7 @@ module Signals = struct
       while !i < len do
         let n =
           try
-            Unix.write (Fd.file_descr_exn t.fd) s !i (len - !i)
+            Unix.write t.fdout s !i (len - !i)
           with Unix.Unix_error (EINTR, _, _) ->
             ()
         in
@@ -447,177 +492,209 @@ module Signals = struct
         ; if mode.screen = Alternative then "\027[?1049l" else ""
         ; if t.real_cursor = Hidden    then "\027[?25h"   else ""
         ; match t.end_of_display with
-          | None -> ""
-          | Some ofs ->
-            (* Move down, beginning of line *)
-            Printf.sprintf "\027[%dB\r" ofs
+        | None -> ""
+        | Some ofs ->
+          (* Move down, beginning of line *)
+          Printf.sprintf "\027[%dB\r" ofs
         ]
     in
     if cmd <> "" then send t cmd
   ;;
 
-  let rec abort () =
-    match !terminals with
-    | [] -> ()
-    | t :: l ->
-      match t.state with
-      | Closed | Inactive -> ()
-      | Active ->
-        t.state <- Inactive;
-        terminals := l;
-        (try reset t with _ -> ());
-        abort ()
+  let abort () =
+    let l = !terminals in
+    terminals := [];
+    List.iter
+      (fun t ->
+         match t.state with
+         | Closed | Inactive -> ()
+         | Active ->
+           t.state <- Inactive;
+           terminals := l;
+           (try reset t with _ -> ()));
   ;;
 
   let () = Caml.at_exit abort
 
-  let got_intr = ref false
-  let got_quit = ref false
-  let got_susp = ref false
-
-  (* No way it's safe to call at_exit handler from a signal handler. It's supposed to be a
-     dirty exit anyway. *)
   external sys_exit : int -> unit = "caml_sys_exit"
 
-  let notify_async () =
-    (* SIGWINCH is managed by async *)
-    Option.iter LTerm_unix.sigwinch ~f:(fun signum ->
-      Signal.send_i signum (`Pid (Unix.getpid ())))
+  let clean_quit_by_signal () =
+    protect Global.mutex ~f:(fun () ->
+      Global.state := Exiting;
+      if !Mutex.writers <> 0 then Condition.wait Mutex.writers_done;
+      abort ();
+      sys_exit 1)
   ;;
 
-  let handler signo =
-    let got, state =
-      if signo = Signal.int then
-        got_intr, !t.intr
-      else if signo = Signal.quit then
-        got_quit, !t.quit
-      else if signo = Signal.tstp then
-        got_susp, !t.susp
-      else
-        assert false
+  let suspend () =
+    protect Global.mutex ~f:(fun () ->
+      Global.state := Suspending;
+      if !Mutex.writers <> 0 then Condition.wait Mutex.writers_done;
+      let terminals   = !Global.terminals in
+      let saved_attrs = List.map terminals ~f:Terminal_io.get_attr_no_err in
+      List.iter terminals ~f:reset;
+
+      let behavior = Sys.signal Sys.sigtstp Signal_default in
+      Unix.kill (Unix.getpid ()) Sys.sigtstp;
+      Sys.set_signal Sys.sigtstp behavior;
+
+      List.iter2 terminals saved_attrs ~f:(fun t attr ->
+        t.real_mode   <- Mode.erase_non_termios_fields t.real_mode;
+        t.real_cursor <- Visible;
+        (match attr with
+         | None -> ()
+         | Some attr -> Terminal_io.set_attr_no_err t attr);
+        add_event t Resume;
+        (* Be sure that if the program does nothing to restore this terminal, we restore
+           at least some basic stuff. *)
+        let sync = Sync.refresh ~mode:t.mode_when_synced ~cursor:t.cursor_when_synced in
+        Thread_safe_queue.send t.syncs sync;
+      );
+      List.iter (fun t -> add_event t Resume) !Global.terminals;
+      Condition.broadcast Global.resume)
+  ;;
+
+  let broadcast_event event =
+    protect Global.mutex ~f:(fun () ->
+      List.iter (fun t -> add_event t event) !Global.terminals)
+  ;;
+
+  let broadcast_resize () =
+    let send t =
+      match get_size_from_fd t.fd_out with
+      | size ->
+        if size <> t.size then begin
+          t.size <- size;
+          add_event t Resize
+        end
+      | exception _ -> ()
     in
-    match state with
-    | Not_managed -> ()
-    | Generate_event -> got := true; notify_async ()
-    | Handled ->
-      if signo = Signal.tstp then
-        (* This one is just impossible to get right in a concurrent context. If the
-           program is stuck, Ctrl+Z will just not work. *)
-        (got := true; notify_async ())
-      else begin
-        abort ();
-        sys_exit 1
-      end
+    protect Global.mutex ~f:(fun () ->
+      List.iter send !Global.terminals)
   ;;
 
-  let prev_intr = ref `Default
-  let prev_quit = ref `Default
-  let prev_susp = ref `Default
+(*
+    match get_size_from_fd (Fd.file_descr_exn t.fd) with
+    | size ->
+      if size <> t.size then begin
+        t.size <- size;
+        add_event t Resize;
+*)
 
-  let set_one prev signo (old_state:State.t) (new_state:State.t) =
+  (* Called by the signal manager thread *)
+  let process_signal signal =
+    match state_of_signal signal with
+    | Not_managed -> ()
+    | Generate_event ->
+      (match signal with
+       | Intr -> broadcast_event (Signal Intr)
+       | Quit -> broadcast_event (Signal Quit)
+       | Susp -> broadcast_event (Signal Susp)
+       | Winch -> broadcast_resive ())
+    | Handled ->
+      (match signal with
+       | Intr | Quit -> clean_quit_by_signal ()
+       | Susp -> suspend ()
+       | Winch -> assert false)
+  ;;
+
+  let signal_manager_loop fd =
+    let buf = Bytes.create 4096 in
+    let timeout =
+      match LTerm_unix.sigwinch with
+      | Some _ -> -1.0
+      | None   -> 0.5 (* Check the size every half second *)
+    in
+    while true do
+      match Unix.select [fd] [] [] timeout with
+      | exception Unix.Unix_error (EINTR, _, _) ->
+        ()
+      | [], [], [] ->
+        process_signal Winch
+      | _ ->
+        let len = Unix.read buf 0 (Bytes.len buf) in
+        for i = 0 to len - 1 do
+          let signal = signal_of_int (Char.code (Bytes.get buf i)) in
+          process_signal signal
+        done
+    done
+  ;;
+
+  let send_to_manager =
+    let buf = Bytes.create 1 in
+    fun fd signum ->
+      let rec loop fd =
+        match Unix.write fd buf 0 1 with
+        | exception Unix.Unix_error ((EINTR, _, _) ->
+          notify_manager ()
+        | 1 -> ()
+        | _ -> assert false
+      in
+      Bytes.set buf 0 (Char.chr signum);
+      loop fd
+  ;;
+
+  let set_exit_signals behavior =
+    Sys.set_signal Sys.sigint  behavior;
+    Sys.set_signal Sys.sigquit behavior
+  ;;
+
+  (* Cleanup without waiting for the writer threads *)
+  let dirty_exit (signo : int) =
+    (* Third Ctrl+C/Ctrl+Q just exit without cleaning *)
+    set_exit_handlers Signal_default;
+    abort ();
+    sys_exit signo
+  ;;
+
+  let handler fd signo =
+    let signal = signal_of_int signo in
+    match state_of_signal signal with
+    | Not_managed -> ()
+    | Generate_event ->
+    | Handled ->
+      (match signal with
+       | Intr | Quit ->
+         (* Second Ctrl+C/Ctrl+Q will exit without cleaning *)
+         set_exit_handlers (Signal_handle dirty_exit)
+       | _ -> ());
+      send_to_manager fd signo
+  ;;
+
+  let prev_intr = ref Sys.Signal_default
+  let prev_quit = ref Sys.Signal_default
+  let prev_susp = ref Sys.Signal_default
+
+  let init = lazy(
+    let fdr, fdw = Unix.pipe () in
+    ignore (Thread.create signal_manager_loop fdr : Thread.t);
+    fdw
+  )
+
+  let set_one fd prev signo (old_state:State.t) (new_state:State.t) =
+    let fd = Lazy.force init in
     match old_state, new_state with
     | Not_managed, Not_managed ->
       ()
     | _, Not_managed ->
-      Core.Std.Signal.Expert.set signo !prev;
-      prev := `Default;
+      Sys.signal signo !prev;
+      prev := Signal_default
     | Not_managed, _ ->
-      prev := Core.Std.Signal.Expert.signal signo (`Handle handler)
+      prev := Sys.signal signo (Signal_handle (handler fd))
     | _ ->
       ()
   ;;
 
   let set new_t =
     let old_t = !t in
-    set_one prev_intr Signal.int  old_t.intr new_t.intr;
-    set_one prev_quit Signal.quit old_t.quit new_t.quit;
-    set_one prev_susp Signal.tstp old_t.susp new_t.susp;
+    set_one prev_intr Sys.sigint  old_t.intr new_t.intr;
+    set_one prev_quit Sys.sigquit old_t.quit new_t.quit;
+    set_one prev_susp Sys.sigtstp old_t.susp new_t.susp;
     t := new_t;
-  ;;
-
-  let got_resume = ref false
-
-  let rec suspend () =
-    match !suspending with
-    | Some ivar -> Ivar.read ivar >>> suspend
-    | None ->
-      let resume_ivar = Ivar.create () in
-      suspending := Some resume_ivar;
-      let terminals = !terminals in
-      (* Wait for everybody to finish drawing *)
-      Deferred.all (List.map terminals ~f:current_write)
-      >>> fun (_ : write_result list) ->
-      let saved_attrs = List.map terminals ~f:get_attr in
-      List.iter terminals ~f:reset;
-
-      let behavior = Signal.Expert.signal Signal.tstp `Default in
-      Signal.send_i Signal.tstp (`Pid (Unix.getpid ()));
-      Signal.Expert.set Signal.tstp behavior;
-
-      List.iter2_exn terminals saved_attrs ~f:(fun t attr ->
-        t.real_mode   <- Mode.erase_non_termios_fields t.real_mode;
-        t.real_cursor <- Visible;
-        Option.iter attr ~f:(set_attr t));
-
-      suspending := None;
-      Ivar.fill resume_ivar ();
-      got_resume := true;
-      notify_async ();
   ;;
 end
 
 let abort = Signals.abort
-
-let handle_signals t =
-  match t.state with
-  | Closed | Inactive -> ()
-  | Active ->
-    if !Signals.got_resume then begin
-      add_event t Resume;
-      (* Be sure that if the program does nothing to restore this terminal, we restore
-         at least some basic stuff. *)
-      Deferred.unit
-      >>> fun () ->
-      let sync = Sync.refresh ~mode:t.mode_when_synced ~cursor:t.cursor_when_synced in
-      Thread_safe_queue.send t.syncs sync;
-    end;
-    if !Signals.got_intr then add_event t (Signal Intr);
-    if !Signals.got_quit then add_event t (Signal Quit);
-    if !Signals.got_susp then begin
-      match !Signals.t.susp with
-      | Not_managed | Handled -> ()
-      | Generate_event -> add_event t (Signal Susp);
-    end;
-    match get_size_from_fd (Fd.file_descr_exn t.fd) with
-    | size ->
-      if size <> t.size then begin
-        t.size <- size;
-        add_event t Resize;
-      end
-    | exception _ -> ()
-;;
-
-let () =
-  let check () =
-    if !Signals.got_susp then begin
-      match !Signals.t.susp with
-      | Not_managed | Generate_event -> ()
-      | Handled -> Signals.suspend ()
-    end;
-    List.iter !terminals ~f:handle_signals;
-    Signals.got_resume := false;
-    Signals.got_intr := false;
-    Signals.got_quit := false;
-    Signals.got_susp := false;
-  in
-  Deferred.unit
-  >>> fun () ->
-  match LTerm_unix.sigwinch with
-  | None ->
-    Clock.every (sec 1.0) check
-  | Some signum ->
-    Signal.handle [signum] ~f:(fun _ -> check ())
-;;
 
 (* +-----------------------------------------------------------------+
    | Events                                                          |
@@ -674,12 +751,30 @@ let map_char =
    | Output buffer                                                   |
    +-----------------------------------------------------------------+ *)
 
+external blit
+  : src:bigstring -> src_pos:int -> dst:bigstring -> dst_pos:int -> len:int -> int
+  = "lt_term_bigarray_blit"
+
+let grow_size n =
+  let n = n * 2 in
+  if n < 0 then
+    max_int
+  else begin
+    let res = ref 1 in
+    while !res < n && ~res > 0 do res := !res lsl 1 done;
+    if !res <= 0 then
+      max_int
+    else
+      !res
+  end
+;;
+
 let grow_out_buf t len =
   let _f () = () in (* prevents inlining *)
-  if State.is_closed t.state then failwiths "closed terminal" t sexp_of_t;
-  let new_buf = Bigstring.create (Int.ceil_pow2 (len * 2)) in
-  Bigstring.blit ~src:t.out_buf ~dst:new_buf ~src_pos:0 ~dst_pos:0 ~len:t.out_pos;
-  t.out_buf <- new_buf;
+  if State.is_closed t.state then failwith "LTerm: closed terminal";
+  let new_buf = Array1.create char c_layout (grow_size len) in
+  blit ~src:t.out_buf ~dst:new_buf ~src_pos:0 ~dst_pos:0 ~len:t.out_pos;
+  t.out_buf <- new_buf
 ;;
 
 let reserve t n =
@@ -1047,14 +1142,20 @@ let rec really_write fd ~buf ~pos ~len =
     | exception Unix.Unix_error(EINTR, _, _) ->
       really_write fd ~buf ~pos ~len
 
-let do_sync ?end_of_display t =
-  let to_write  = t.out_pos   in
-  let new_mode  = t.mode      in
+    { len            : int
+    ; end_of_display : end_of_display
+    ; mode           : Mode.t
+    ; cursor         : Cursor.t
+    ; callback       : unit -> unit
+    }
+
+let do_sync t (sync : Sync.t) =
   let real_mode = t.real_mode in
+  let new_mode  = sync.mode   in
   let new_mode_termios_only =
     Mode.copy_non_termios_fields mode ~from:t.real_mode
   in
-  if not (new_mode_termios_only <> real_mode) then begin
+  if new_mode_termios_only <> real_mode then begin
     let attr = Terminal_io.get_attr t.fd_in in
     let init_attr =
       match t.initial_attr with
@@ -1093,17 +1194,35 @@ let do_sync ?end_of_display t =
       attr.c_vmin   <- init_attr.c_vmin;
       attr.c_vtime  <- init_attr.c_vtime;
     end;
-    Terminal_io.set_attr fd attr;
-    t.real_mode <- new_mode_termios_only;
+    Terminal_io.set_attr t.fd_in attr;
+    t.real_mode     <- new_mode_termios_only;
     t.attr_modified <- not (attr_equal attr init_attr);
   end;
   let cursor = t.cursor in
-  really_write fd ~buf:t.out_buf ~pos:0 ~len:to_write;
-  assert (t.out_pos = to_write);
-  t.out_pos        <- 0;
+  really_write t.fd_out ~buf:t.out_buf ~pos:t.out_written ~len:sync.len;
+  (*  t.out_pos        <- 0;*)
   t.real_mode      <- new_mode;
   t.real_cursor    <- cursor;
   t.end_of_display <- end_of_display;
+;;
+
+let rec sync_forever t =
+  let sync = Thread_safe_queue.wait t.syncs in
+  if t.state <> Closed then begin
+    let continue =
+      protect Global.mutex ~f:(fun () ->
+        match Global.state with
+        | Exiting ->
+          false
+        | Normal ->
+          Global.writers <- Global.writers + 1;
+          true
+        | Suspending ->
+          Condition.wait Global.mutex Global.resume;
+          true)
+    in
+    if continue then do_sync t sync
+  end
 ;;
 
 let sync ?end_of_display t =
@@ -1169,7 +1288,8 @@ let check_utf8 = lazy(
 )
 ;;
 
-let create ?(model=default_model) fd =
+let create ?(model=default_model) (fd_in, fd_out) =
+  ignore (Lazy.force Signals.init : Unix.file_descr);
   Lazy.force check_utf8;
   if Core.Std.Unix.isatty (Fd.file_descr_exn fd) then begin
     (* Colors stuff. *)
@@ -1188,7 +1308,8 @@ let create ?(model=default_model) fd =
       ; colors
       ; bold_is_bright = bold_is_bright model
       ; color_map
-      ; fd
+      ; fd_in
+      ; fd_out
       ; out_buf = Bigstring.create 16384
       ; out_pos = 0
       ; size
@@ -1210,11 +1331,12 @@ let create ?(model=default_model) fd =
       ; closed = Ivar.create ()
       }
     in
-    terminals := t :: !terminals;
-    sync_forever t;
+    protect Global.mutex ~f:(fun ->
+      Global.terminals := t :: !Global.terminals);
+    ignore (Thread.create sync_forever t : Thread.t);
     Ok t
   end else
-    Or_error.error "reader fd is not a TTY device" fd Fd.sexp_of_t
+    failwith "LTerm.create: input fd is not a TTY device"
 ;;
 
 let really_close t =
