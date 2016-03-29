@@ -21,7 +21,7 @@ class type adjustment = object
   method scroll_bar_size : int
 end
 
-class virtual scrollbar = 
+class virtual scrollbar ~default_scroll_bar_size = 
   let map_range range1 range2 offset1 = 
     let map_range range1 range2 offset1 = 
       max 0. (min range2 (range2 *. offset1 /. range1)) 
@@ -50,7 +50,7 @@ class virtual scrollbar =
     method set_range r = range <- max 0 r
     method offset = offset
     method set_offset o = offset <- max 0 (min (range-1) o); self#queue_draw
-    method scroll_bar_size = 5
+    method scroll_bar_size = default_scroll_bar_size
 
     method virtual private mouse_offset : LTerm_mouse.t -> rect -> int
     method virtual private key_scroll_incr : LTerm_key.code
@@ -111,8 +111,8 @@ class virtual scrollbar =
 
   end
 
-class vscrollbar ?size_request () = object(self)
-  inherit scrollbar
+class vscrollbar ?size_request ?(default_scroll_bar_size=5) () = object(self)
+  inherit scrollbar ~default_scroll_bar_size
 
   method size_request = 
     match size_request with None -> { rows=0; cols=2 } | Some(x) -> x
@@ -131,27 +131,25 @@ class vscrollbar ?size_request () = object(self)
 
     let offset = self#scroll_of_window @@ self#offset in
 
-    for col=0 to cols-1 do
-      let r1 = offset in
-      let r2 = offset + self#scroll_bar_size-1 in
-      for row=r1 to r2 do
-        if col=0 || col=cols-1 then
-          if row=r1 && row=r2 then
-            LTerm_draw.draw_char ~style ctx row col @@ UChar.of_int xbar
-          else if row=r1 then
-            LTerm_draw.draw_char ~style ctx row col @@ UChar.of_int tbar
-          else if row=r2 then
-            LTerm_draw.draw_char ~style ctx row col @@ UChar.of_int bbar
-          else
-            LTerm_draw.draw_char ~style ctx row col @@ UChar.of_int vbar
-        else if row=r1 || row=r2 then
-          LTerm_draw.draw_char ~style ctx row col @@ UChar.of_int hbar
+    let open LTerm_draw in
+    if cols = 1 then
+      for r=offset to offset+self#scroll_bar_size-1 do
+        draw_char ctx r 0 ~style (CamomileLibrary.UChar.of_int vbar)
       done
-    done
+    else if self#scroll_bar_size = 1 then
+      for c=0 to cols-1 do
+        draw_char ctx offset c ~style (CamomileLibrary.UChar.of_int hbar)
+      done
+    else
+      draw_frame ctx
+        { row1 = offset; col1 = 0;
+          row2 = offset + self#scroll_bar_size; col2 = cols }
+        ~style Light
+
 end
 
-class hscrollbar ?size_request () = object(self)
-  inherit scrollbar
+class hscrollbar ?size_request ?(default_scroll_bar_size=5) () = object(self)
+  inherit scrollbar ~default_scroll_bar_size
   
   method size_request = 
     match size_request with None -> { rows=2; cols=0 } | Some(x) -> x
@@ -170,23 +168,20 @@ class hscrollbar ?size_request () = object(self)
 
     let offset = self#scroll_of_window @@ self#offset in
 
-    let c1 = offset in
-    let c2 = offset + self#scroll_bar_size - 1 in
-    for col=c1 to c2 do
-      for row=0 to rows-1 do
-        if row=0 || row=rows-1 then
-          if col=c1 && col=c2 then
-            LTerm_draw.draw_char ~style ctx row col @@ UChar.of_int xbar
-          else if col=c1 then
-            LTerm_draw.draw_char ~style ctx row col @@ UChar.of_int lbar
-          else if col=c2 then
-            LTerm_draw.draw_char ~style ctx row col @@ UChar.of_int rbar
-          else
-            LTerm_draw.draw_char ~style ctx row col @@ UChar.of_int hbar
-        else if col=c1 || col=c2 then
-          LTerm_draw.draw_char ~style ctx row col @@ UChar.of_int vbar
+    let open LTerm_draw in
+    if rows = 1 then
+      for c=offset to offset+self#scroll_bar_size-1 do
+        draw_char ctx 0 c ~style (CamomileLibrary.UChar.of_int hbar) (* 0x25a2? *)
       done
-    done
+    else if self#scroll_bar_size = 1 then
+      for r=0 to rows-1 do
+        draw_char ctx r offset ~style (CamomileLibrary.UChar.of_int vbar)
+      done
+    else
+      draw_frame ctx
+        { row1 = 0; col1 = offset;
+          row2 = rows; col2 = offset + self#scroll_bar_size }
+        ~style Light
 
 end
 

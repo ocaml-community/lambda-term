@@ -265,16 +265,26 @@ class type adjustment = object
     (** range of adjustment *)
 
   method set_range : int -> unit
-    (** set range of adjustment *)
+    (** set range of adjustment.
+    
+     The range can be changed dynamically, set statically in an
+     [initializer] if known when the widget is created,
+     or set in the [set_allocation] method if the size of the 
+     widget needs to be known. *)
 
   method offset : int
     (** offset from (0..range-1) *)
 
   method set_offset : int -> unit
-    (** set offset clipped to range *)
+    (** Set offset clipped to range.
+    
+    The scrollbars will call [queue_draw] when [set_offset]
+    is called. *)
 
   method incr : unit
-    (** increment offset by one step *)
+    (** increment offset by one step 
+    
+    If range > number of scroll bar steps then step>=1. *)
 
   method decr : unit
     (** decrement offset by one step *)
@@ -284,15 +294,19 @@ class type adjustment = object
 
 end
 
-class vscrollbar : ?size_request:LTerm_geom.size -> unit -> object
-  inherit t
-  inherit adjustment
-end
+class vscrollbar : 
+  ?size_request:LTerm_geom.size -> ?default_scroll_bar_size:int -> unit ->
+  object
+    inherit t
+    inherit adjustment
+  end
 
-class hscrollbar : ?size_request:LTerm_geom.size -> unit -> object
-  inherit t
-  inherit adjustment
-end
+class hscrollbar : 
+  ?size_request:LTerm_geom.size -> ?default_scroll_bar_size:int -> unit ->
+  object
+    inherit t
+    inherit adjustment
+  end
 
 (** {6 Running in a terminal} *)
 

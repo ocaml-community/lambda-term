@@ -90,15 +90,23 @@ end
 let with_scrollbar ?down widget = 
   let vbox = new vbox in
   let hbox = new hbox in
-  let vscroll = new vscrollbar () in
-  let hscroll = new hscrollbar () in
+  let vscroll = (* make scroll bars roughly the same size *)
+    new vscrollbar ~size_request:{rows=0;cols=3} ~default_scroll_bar_size:5 () 
+  in
+  let hscroll = 
+    new hscrollbar ~size_request:{rows=2;cols=0} ~default_scroll_bar_size:10 () 
+  in
+  let spacing = new spacing ~rows:2 ~cols:3 () in
   let widget = widget vscroll hscroll in
   hbox#add widget;
+  hbox#add ~expand:false (new vline);
   hbox#add ~expand:false vscroll;
   vbox#add hbox;
+  vbox#add ~expand:false (new hline);
   let hbox = new hbox in
   hbox#add hscroll;
-  hbox#add ~expand:false (new spacing ~rows:2 ~cols:2 ());
+  hbox#add ~expand:false (new vline);
+  hbox#add ~expand:false spacing;
   vbox#add ~expand:false hbox;
   widget#set_focus { widget#focus with right = Some(vscroll :> t); 
                                        down = Some(hscroll :> t) };
@@ -114,12 +122,20 @@ let main () =
   exit#on_click (wakeup wakener);
 
   let vbox = with_scrollbar ~down:(exit :> t) (new asciiart img) in
+  vbox#add ~expand:false (new hline);
   vbox#add ~expand:false exit;
+
+  let top = new frame in
+  top#set vbox;
+
+  top#on_event (function (* quit with escape key *)
+    LTerm_event.Key{LTerm_key.code=LTerm_key.Escape} -> 
+      wakeup wakener (); false | _ -> false);
 
   Lazy.force LTerm.stdout >>= fun term ->
   LTerm.enable_mouse term >>= fun () ->
   Lwt.finalize 
-    (fun () -> run term vbox waiter)
+    (fun () -> run term top waiter)
     (fun () -> LTerm.disable_mouse term)
 
 let () = Lwt_main.run (main ())

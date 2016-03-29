@@ -18,8 +18,6 @@ class scrollable_nums scroll = object(self)
 
   method can_focus = false
 
-  method full_size = { rows = 0; cols=40 }
-
   method draw ctx focused = 
     let { rows; cols } = LTerm_draw.size ctx in
 

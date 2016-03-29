@@ -4,6 +4,8 @@ checkbutton.focused.foreground: lyellow
 checkbutton.focused.background: blue
 radiobutton.focused.foreground: lyellow
 radiobutton.focused.background: blue
+scrollbar.focused.foreground: lyellow
+scrollbar.focused.background: blue
 !
 ! For monochrome experience comment out the resources above and uncomment two
 ! following lines:
@@ -11,3 +13,4 @@ radiobutton.focused.background: blue
 !button.focused.reverse: true
 !checkbutton.focused.reverse: true
 !radiobutton.focused.reverse: true
+!scrollbar.focused.reverse: true
