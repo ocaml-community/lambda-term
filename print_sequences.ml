@@ -32,9 +32,11 @@ let () =
       Unix.c_vtime = 0;
       Unix.c_isig = false;
   };
+  print_string "\027[?1003h;\027[?1004h;\027[?1005h";
+  flush stdout;
   (* Read and print key sequences. *)
   print_endline "press 'q' to quit";
-  let buf = String.create 128 in
+  let buf = Bytes.create 128 in
   let rec loop () =
     let n = Unix.read Unix.stdin buf 0 (String.length buf) in
     let s = String.sub buf 0 n in
@@ -48,6 +50,8 @@ let () =
     with exn ->
       `Exn exn
   in
+  print_string "\027[?1003l;\027[?1005l;\027[?1004l";
+  flush stdout;
   (* Reset terminal attributes. *)
   Unix.tcsetattr Unix.stdin Unix.TCSAFLUSH attr;
   match result with
