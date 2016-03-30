@@ -363,7 +363,7 @@ module Event_parser = struct
   (* Wait before reading so that we avoid eating data when the terminal is disabled *)
   let rec wait_for_fd t =
     try
-      let res = Unix.select [t.fd] [] [] (-1.0) in
+      ignore (Unix.select [t.fd] [] [] (-1.0) : _ list * _ * _);
       if t.active then
         `Ready
       else
@@ -424,16 +424,10 @@ module Event_parser = struct
   ;;
 
   exception Need_more
-  let need_more =
-    let exn = Need_more in
-    fun () -> raise_notrace exn
-  ;;
+  let need_more () = raise_notrace Need_more
 
   exception Discard_event
-  let discard_event =
-    let exn = Discard_event in
-    fun () -> raise_notrace exn
-  ;;
+  let discard_event () = raise_notrace Discard_event
 
   (* +---------------------------------------------------------------+
      | Parsing of encoded characters                                 |
@@ -461,22 +455,31 @@ module Event_parser = struct
         match first_byte with
         | '\xc0' .. '\xdf' ->
           Uchar.of_int ((   (Char.code first_byte           land 0x1f) lsl 6)
-                           lor (Char.code t.buffer.{start + 1} land 0x3f))
+                        lor (Char.code t.buffer.{start + 1} land 0x3f))
         | '\xe0' .. '\xef' ->
           Uchar.of_int ((    (Char.code first_byte           land 0x0f) lsl 12)
-                           lor ((Char.code t.buffer.{start + 1} land 0x3f) lsl 6)
-                           lor  (Char.code t.buffer.{start + 2} land 0x3f))
+                        lor ((Char.code t.buffer.{start + 1} land 0x3f) lsl 6)
+                        lor  (Char.code t.buffer.{start + 2} land 0x3f))
         | '\xf0' .. '\xf7' ->
           Uchar.of_int ((    (Char.code first_byte           land 0x07) lsl 18)
-                           lor ((Char.code t.buffer.{start + 1} land 0x3f) lsl 12)
-                           lor ((Char.code t.buffer.{start + 2} land 0x3f) lsl 6)
-                           lor  (Char.code t.buffer.{start + 3} land 0x3f))
+                        lor ((Char.code t.buffer.{start + 1} land 0x3f) lsl 12)
+                        lor ((Char.code t.buffer.{start + 2} land 0x3f) lsl 6)
+                        lor  (Char.code t.buffer.{start + 3} land 0x3f))
         | _ ->
           Uchar.of_char first_byte
       in
       t.ofs <- start + len;
       ch
     end
+  ;;
+
+  (* For mouse events *)
+  let fetch_next_uchar t =
+    if t.ofs >= t.max then
+      need_more ()
+    else
+      let c = t.buffer.{t.ofs} in
+      parse_uchar t c ~can_refill:true ~start:t.ofs
   ;;
 
   (* +---------------------------------------------------------------+
@@ -1070,18 +1073,16 @@ module Event_parser = struct
         end
       | "[M" as seq -> begin
           (* Mouse report *)
-          if t.ofs + 5 >= t.max then begin
-            if can_refill then need_more () else begin
-              t.ofs <- t.ofs + 3;
-              Sequence ("\x1b" ^ seq)
-            end
-          end else begin
-            let ofs = t.ofs in
-            t.ofs <- ofs + 6;
-            let mask = Char.code t.buffer.{ofs + 3} in
+          let saved_ofs = t.ofs in
+          try
+            t.ofs <- t.ofs + 3;
+            let mask = fetch_next_uchar t |> Uchar.to_int in
+            let col  = fetch_next_uchar t |> Uchar.to_int in
+            let row  = fetch_next_uchar t |> Uchar.to_int in
             let coord : LTerm_geom.coord =
-              { col = Char.code t.buffer.{ofs + 4} - 33
-              ; row = Char.code t.buffer.{ofs + 5} - 33 }
+              { col = col - 33
+              ; row = row - 33
+              }
             in
             let modifiers : LTerm_event.Modifiers.t =
               match mask land 0b00011000 with
@@ -1117,7 +1118,9 @@ module Event_parser = struct
               if button < 0 then discard_event ();
               Button_down (modifiers, button, coord)
             end
-          end
+          with Need_more when not can_refill ->
+            t.ofs <- saved_ofs + 3;
+            Sequence ("\x1b" ^ seq)
         end
       | seq ->
         t.ofs <- t.ofs + 1 + String.length seq;

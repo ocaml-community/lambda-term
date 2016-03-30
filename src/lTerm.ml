@@ -14,12 +14,37 @@ module Screen = struct
   type t = Main | Alternative
 end
 
+module Mouse_events = struct
+  type t =
+    | Disabled
+    | Buttons
+    | Any
+
+  let state_change_sequence a b =
+    match a, b with
+    | Disabled, Disabled
+    | Buttons , Buttons
+    | Any     , Any -> ""
+    | Disabled, Buttons ->
+      "\027[?1000h\027[?1002h\027[?1005h"
+    | Disabled, Any ->
+      "\027[?1000h\027[?1003h\027[?1005h"
+    | Buttons, Any ->
+      "\027[?1002l\027[?1003h"
+    | Any, Buttons ->
+      "\027[?1003l\027[?1002h"
+    | Buttons, Disabled ->
+      "\027[?1002l\027[?1000l\027[?1005l"
+    | Any, Disabled ->
+      "\027[?1003l\027[?1000l\027[?1005l"
+end
+
 module Mode = struct
   type t =
     { echo    : bool
     ; raw     : bool
     ; signals : bool
-    ; mouse   : bool
+    ; mouse   : Mouse_events.t
     ; screen  : Screen.t
     }
 
@@ -29,7 +54,8 @@ module Mode = struct
   let mouse   t = t.mouse
   let screen  t = t.screen
 
-  let make ?(echo=true) ?(raw=false) ?(signals=true) ?(mouse=false)
+  let make ?(echo=true) ?(raw=false) ?(signals=true)
+        ?(mouse=Mouse_events.Disabled)
         ?(screen=Screen.Main) () =
     { echo
     ; raw
@@ -671,7 +697,7 @@ module Signals = struct
     let cmd =
       let mode = t.real_mode in
       String.concat ""
-        [ if mode.mouse                then "\027[?1000l" else ""
+        [ Mouse_events.state_change_sequence mode.mouse Disabled
         ; if mode.screen = Alternative then "\027[?1049l" else ""
         ; if t.real_cursor = Hidden    then "\027[?25h"   else ""
         ; match t.end_of_display with
@@ -1046,9 +1072,7 @@ let cursor_visible t =
 let set_mode t (mode : Mode.t) =
   if t.mode.mouse <> mode.mouse then
     add_string t
-      (match mode.mouse with
-       | true  -> "\027[?1000h"
-       | false -> "\027[?1000l");
+      (Mouse_events.state_change_sequence t.mode.mouse mode.mouse);
   if t.mode.screen <> mode.screen then
     add_string t
       (match mode.screen with

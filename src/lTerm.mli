@@ -168,6 +168,14 @@ module Screen : sig
   type t = Main | Alternative [@@deriving sexp]
 end
 
+module Mouse_events : sig
+  type t =
+    | Disabled (** Report no mouse events *)
+    | Buttons  (** Report button down/up events as well as motion events while
+                   a button is down *)
+    | Any      (** Report any events *)
+end
+
 module Mode : sig
   (** Terminal modes. These modes are preserved after resuming from a Ctrl+Z. *)
   type t
@@ -175,14 +183,14 @@ module Mode : sig
   val echo    : t -> bool (** If [true], characters are printed on screen             *)
   val raw     : t -> bool (** If [true], input is reported immediately                *)
   val signals : t -> bool (** If [true], signals are generated on INTR, QUIT and SUSP *)
-  val mouse   : t -> bool (** If [true], mouse events are reported                    *)
+  val mouse   : t -> Mouse_events.t
   val screen  : t -> Screen.t
 
   val set
     :  ?echo    : bool
     -> ?raw     : bool
     -> ?signals : bool
-    -> ?mouse   : bool
+    -> ?mouse   : Mouse_events.t
     -> ?screen  : Screen.t
     -> t
     -> t
@@ -191,7 +199,7 @@ module Mode : sig
     :  ?echo    : bool
     -> ?raw     : bool
     -> ?signals : bool
-    -> ?mouse   : bool
+    -> ?mouse   : Mouse_events.t
     -> ?screen  : Screen.t
     -> unit
     -> t
@@ -214,7 +222,7 @@ val modify_mode
   :  ?echo    : bool
   -> ?raw     : bool
   -> ?signals : bool
-  -> ?mouse   : bool
+  -> ?mouse   : Mouse_events.t
   -> ?screen  : Screen.t
   -> t
   -> unit
