@@ -8,51 +8,63 @@
  *)
 
 open Zed
-open Core.Std
+open StdLabels
 
 module Modifiers = struct
   type t =
     | N
     | C
     | M
-    | S
     | C_M
+    | S
     | C_S
     | M_S
     | C_M_S
 
-  let with_c = function
-    | N -> C
-    | C -> C
-    | M -> C_M
-    | S -> C_S
-    | C_M -> C_M
-    | C_S -> C_S
-    | M_S -> C_M_S
-    | C_M_S -> C_M_S
+  let to_int = function
+    | N      -> 0b000
+    | C      -> 0b001
+    | M      -> 0b010
+    | C_M    -> 0b011
+    | S      -> 0b100
+    | C_S    -> 0b101
+    | M_S    -> 0b110
+    | C_M_S  -> 0b111
+
+  let of_int_array =
+    [| N
+     ; C
+     ; M
+     ; C_M
+     ; S
+     ; C_S
+     ; M_S
+     ; C_M_S
+    |]
+
+  let of_int i = of_int_array.(i)
+
+  let set_bit t x bit =
+    let n = to_int t in
+    of_int (if x then n lor bit else n land (lnot bit))
   ;;
 
-  let with_m = function
-    | N -> M
-    | C -> C_M
-    | M -> M
-    | S -> M_S
-    | C_M -> C_M
-    | C_S -> C_M_S
-    | M_S -> M_S
-    | C_M_S -> C_M_S
-  ;;
+  let set_control t x = set_bit t x 0b001
+  let set_meta    t x = set_bit t x 0b010
+  let set_shift   t x = set_bit t x 0b100
 
-  let with_s = function
-    | N -> S
-    | C -> C_S
-    | M -> M_S
-    | S -> S
-    | C_M -> C_M_S
-    | C_S -> C_S
-    | M_S -> M_S
-    | C_M_S -> C_M_S
-  ;;
+  let bit t bit = (to_int t) land bit <> 0
+
+  let control t = bit t 0b001
+  let meta    t = bit t 0b010
+  let shift   t = bit t 0b100
+
+  let make ~control ~meta ~shift =
+    of_int (
+      (if control then 0b001 else 0) lor
+      (if meta    then 0b010 else 0) lor
+      (if shift   then 0b100 else 0)
+    )
 
   let to_string = function
     | N -> ""
@@ -65,28 +77,21 @@ module Modifiers = struct
     | C_M_S -> "C-M-S-"
   ;;
 
-  let prefixes =
-    [ "C-M-S-" , C_M_S
-    ; "C-S-"   , C_S
-    ; "C-M-"   , C_M
-    ; "M-S-"   , M_S
-    ; "C-"     , C
-    ; "M-"     , M
-    ; "S-"     , S
-    ; ""       , N
-    ]
+  let test_prefix s pos char =
+    if String.length s >= 2 && s.[0] = char && s.[1] = '-' then
+      (pos + 2, true)
+    else
+      (pos, false)
   ;;
 
   let extract_from_string s =
-    let rec loop s = function
-      | [] -> (N, s)
-      | (prefix, m) :: rest ->
-        if String.is_prefix s ~prefix then
-          (m, String.drop_prefix s (String.length prefix))
-        else
-          loop s rest
-    in
-    loop s prefixes
+    let pos, control = test_prefix s 0 'C' in
+    let pos, meta    = test_prefix s 0 'M' in
+    let pos, shift   = test_prefix s 0 'S' in
+    if pos = 0 then
+      (N, s)
+    else
+      (make ~control ~meta ~shift, String.sub s ~pos:0 ~len:pos)
   ;;
 end
 
@@ -218,10 +223,10 @@ let to_string = function
   | Uchar (m, c)          -> Modifiers.to_string m ^ Zed_utf8.singleton c
   | Key   (m, k)          -> Modifiers.to_string m ^ Key.to_string k
   | Sequence s            -> s
-  | Button_down (m, b, c) -> Printf.sprintf !"%{Modifiers}button-down-%d"
-                               m b ^ string_of_coord c
-  | Button_up   (m, b, c) -> Printf.sprintf !"%{Modifiers}button-up-%d"
-                               m b ^ string_of_coord c
+  | Button_down (m, b, c) -> Printf.sprintf "%sbutton-down-%d%s"
+                               (Modifiers.to_string m) b (string_of_coord c)
+  | Button_up   (m, b, c) -> Printf.sprintf "%sbutton-up-%d%s"
+                               (Modifiers.to_string m) b (string_of_coord c)
   | Signal s              -> Signal.to_string s
   | Resume                -> "resume"
   | Resize                -> "resize"
@@ -240,7 +245,7 @@ type pattern =
 
 let make_char m n =
   if n <= 127 then
-    Char (m, Char.of_int_exn n)
+    Char (m, Char.chr n)
   else
     Uchar (m, Uchar.of_int n)
 ;;
@@ -297,18 +302,18 @@ and try_pattern
 
 let of_string s =
   let m, s = Modifiers.extract_from_string s in
-  try
-    Key (m, Key.of_string s)
-  with _ ->
-  match Zed_utf8.check s with
-  | Ok 1 ->
-    let c = Zed_utf8.extract s 0 in
-    if Uchar.code c <= 127 then
-      Char (m, Uchar.to_char c)
-    else
-      Uchar (m, c)
-  | _ ->
-    search_patterns m (s ^ "\x00") patterns
+  match Key.of_string s with
+  | Some key -> Key (m, key)
+  | None ->
+    match Zed_utf8.check s with
+    | Ok 1 ->
+      let c = Zed_utf8.extract s 0 in
+      if Uchar.to_int c < 256 then
+        Char (m, Uchar.to_char c)
+      else
+        Uchar (m, c)
+    | _ ->
+      search_patterns m (s ^ "\x00") patterns
 ;;
 
 let with_coord t c =

@@ -6,7 +6,7 @@
  *
  * This file is a part of Lambda-Term.
  *)
-
+(*
 open Lwt
 open LTerm_style
 open LTerm_text
@@ -26,3 +26,4 @@ let main () =
   end
 
 let () = Lwt_main.run (main ())
+*)

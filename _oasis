@@ -34,17 +34,19 @@ FilesAB: src/lTerm_config.h.ab
 # | The library                                                       |
 # +-------------------------------------------------------------------+
 
-Library "lambda-term"
-  FindlibName: lambda-term
+Library "lambda-term2"
+  FindlibName: lambda-term2
   BuildDepends:
     threads,
     react,
     xdg-basedir (>= 0.0.2),
-    zed2 (>= 2.0)
+    zed2 (>= 2.0),
+    zed2.bigarray
   XMETADescription: Cross-platform library for terminal manipulation
   Path: src
   Install: true
   Modules:
+    Lambda_term,
     LTerm,
     LTerm_event,
     LTerm_unix,
@@ -62,7 +64,9 @@ Library "lambda-term"
 #    LTerm_history,
 #    LTerm_full_screen
   InternalModules:
-    LTerm_color_mappings
+    LTerm_bigstring,
+    LTerm_color_mappings,
+    LTerm_ansi_parser
 #    LTerm_resource_lexer,
 #    widget_impl/LTerm_widget_base_impl,
 #    widget_impl/LTerm_buttons_impl,
@@ -71,6 +75,7 @@ Library "lambda-term"
 #    widget_impl/LTerm_toplevel_impl
   CSources:
     lTerm_config.h,
+    lTerm_bigstring_stubs.c,
     lTerm_term_stubs.c,
     lTerm_unix_stubs.c,
     lTerm_windows_stubs.c
@@ -88,119 +93,119 @@ Executable events
   Install: false
   CompiledObject: best
   MainIs: events.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 Executable colors
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: colors.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 Executable colors_256
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: colors_256.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 Executable rgb
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: rgb.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 Executable move
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: move.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 Executable hello
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: hello.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 Executable clock
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: clock.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 Executable buttons
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: buttons.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 Executable focus
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: focus.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 Executable checkbuttons
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: checkbuttons.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 Executable radiobuttons
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: radiobuttons.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 Executable shell
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: shell.ml
-  BuildDepends: lambda-term, str
+  BuildDepends: lambda-term2, str
 
 Executable repl
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: repl.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 Executable modal
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: modal.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 Executable "read-password"
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: read_password.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 Executable "read-yes-no"
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: read_yes_no.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 Executable "editor"
   Path: examples
   Install: false
   CompiledObject: best
   MainIs: editor.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 # +-------------------------------------------------------------------+
 # | Utils                                                             |
@@ -211,7 +216,7 @@ Executable "lambda-term-actions"
   Install: true
   CompiledObject: best
   MainIs: lambda_term_actions.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 # +-------------------------------------------------------------------+
 # | Tests                                                             |
@@ -222,7 +227,7 @@ Executable "history-stress-test"
   Install: false
   CompiledObject: best
   MainIs: history_stress_test.ml
-  BuildDepends: lambda-term
+  BuildDepends: lambda-term2
 
 # +-------------------------------------------------------------------+
 # | Doc                                                               |
@@ -236,7 +241,7 @@ Document "lambda-term-api"
   DataFiles: style.css
   BuildTools: ocamldoc
   XOCamlbuildPath: ./
-  XOCamlbuildLibraries: lambda-term
+  XOCamlbuildLibraries: lambda-term2
 
 # +-------------------------------------------------------------------+
 # | Manual pages                                                      |

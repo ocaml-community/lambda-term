@@ -17,15 +17,21 @@ module Modifiers : sig
     | N
     | C
     | M
-    | S
     | C_M
+    | S
     | C_S
     | M_S
     | C_M_S
 
-  val with_c : t -> t
-  val with_m : t -> t
-  val with_s : t -> t
+  val set_control : t -> bool -> t
+  val set_meta    : t -> bool -> t
+  val set_shift   : t -> bool -> t
+
+  val control : t -> bool
+  val meta    : t -> bool
+  val shift   : t -> bool
+
+  val make : control:bool -> meta:bool -> shift:bool -> t
 end
 
 module Key : sig

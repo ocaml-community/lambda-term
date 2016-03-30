@@ -11,7 +11,6 @@
 #include <caml/fail.h>
 #include <caml/memory.h>
 #include <caml/signals.h>
-#include <caml/bigarray.h>
 #include <caml/unixsupport.h>
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -73,7 +72,6 @@ CAMLprim value lt_term_set_size_from_fd(value fd, value val_size)
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <errno.h>
-#include <string.h>
 
 CAMLprim value lt_term_get_size_from_fd(value fd)
 {
@@ -110,40 +108,6 @@ CAMLprim value lt_term_set_size_from_fd(value fd, value val_size)
   return Val_unit;
 }
 */
-
-CAMLprim value lt_term_bigarray_read(value fd, value buf, value ofs, value len)
-{
-  int ret;
-  enter_blocking_section();
-  ret = read(Int_val(fd),
-             Caml_ba_data_val(buf) + Long_val(ofs),
-             Long_val(len));
-  leave_blocking_section();
-  if (ret == -1) uerror("read", Nothing);
-  return Val_int(ret);
-}
-
-CAMLprim value lt_term_bigarray_write(value fd, value buf, value ofs, value len)
-{
-  int ret;
-  enter_blocking_section();
-  ret = write(Int_val(fd),
-              Caml_ba_data_val(buf) + Long_val(ofs),
-              Long_val(len));
-  leave_blocking_section();
-  if (ret == -1) uerror("write", Nothing);
-  return Val_int(ret);
-}
-
-CAMLprim value lt_term_bigarray_blit(value sbuf, value sofs,
-                                     value dbuf, value dofs,
-                                     value len)
-{
-  memmove(Caml_ba_data_val(dbuf) + Long_val(dofs),
-          Caml_ba_data_val(sbuf) + Long_val(sofs),
-          Long_val(len));
-  return Val_unit;
-}
 
 /* +-----------------------------------------------------------------+
    | Signals management                                              |

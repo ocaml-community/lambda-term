@@ -114,19 +114,41 @@ end
 
 (** {6 Events} *)
 
-(** Start watching for inputs. Concretelly this means that A thread is started reading
-    from the terminal input. *)
-val set_watching : t -> bool -> unit
+(** Block the current thread until an event is available and return it.
 
-(** Reads and returns one event. The terminal should be in raw mode before calling this
-    function, otherwise event will not be reported as they happen.
+    The terminal should be in raw mode before calling this function, otherwise event will
+    not be reported as they happen.
+*)
+val read_event_sync : t -> LTerm_event.t
 
-    If [no_text] is [true], [Text] events will be reported as multiple [Char] pr [Uchar]
-    events.
+module Notifier : sig
+  (** Type of notifiers. ['request] is the type of a request for this notifier.
 
-    Note: When multiple [read_event] are pending on the same terminal, they will all
-    return the same event when one becomes available. *)
-val read_event : ?no_text:bool (* default: false *) -> t -> LTerm_event.t
+      Notifiers are used for inter-thread notifications.  *)
+  type 'request t
+
+  (** Create a new notifiers. [new_request] will always be called immediately by the
+      function the notifier is passed to, while [notify] will always be called in another
+      thread (a thread internal to lambda-term). [notify] should always be quick, as it
+      will block *)
+  val make
+    :  new_request:(unit -> 'a)
+    -> notify:('a -> unit)
+    -> unit
+    -> 'a t
+end
+
+type ('a, 'b) poll_result =
+  | Ready   of 'a
+  | Pending of 'b
+
+(** This is the low-level function to deal with terminal events. If an event is
+    immediately available, it returns it, otherwise it request a new notification
+    request.
+
+    This can be used to integrate lambda-term with a custom main loop, or a cooperative
+    library like Lwt or Async. *)
+val poll_event : t -> notifier:'a Notifier.t -> (LTerm_event.t, 'a) poll_result
 
 (** {6 State change} *)
 
@@ -139,7 +161,8 @@ val read_event : ?no_text:bool (* default: false *) -> t -> LTerm_event.t
     receive a [TSTP], [INT] or [QUIT] signal. The lambda term signal handler will move
     down the cursor by [n] lines to leave things in a clean state.
 *)
-val sync : ?end_of_display:int -> t -> unit Blocking.t
+val commit : ?end_of_display:int -> notifier:'a Notifier.t -> t -> 'a
+val commit_sync : ?end_of_display:int -> t -> unit
 
 module Screen : sig
   type t = Main | Alternative [@@deriving sexp]
@@ -225,11 +248,22 @@ val print_sub : t -> string -> pos:int -> len:int -> unit
 val set_style : t -> LTerm_style.t -> unit
 
 (** {8 Rendering} *)
+(*
+val set_contents
+  :  t
+  -> LTerm_draw.matrix
+  -> with_newlines:  bool
+  -> cursor:         LTerm_geom.coord
+  -> cursor_visible: bool
+  -> unit
 
+val clear_screen : t -> toto
+
+val clear_contents : t -> unit
+*)
 val render : t -> ?old:LTerm_draw.matrix -> LTerm_draw.matrix -> unit
 (** Render an offscreen array to the given terminal. [old] is the currently displayed
-    matrix. If specified it is used to reduce the amount of text send to the
-    terminal. *)
+    matrix. If specified it is used to reduce the amount of text sent to the terminal. *)
 
 val print_box : t -> ?old:LTerm_draw.matrix -> LTerm_draw.matrix -> unit
 (** [print_box term matrix] prints the contents of [matrix] starting

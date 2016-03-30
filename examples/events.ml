@@ -9,33 +9,23 @@
 
 (* Show events read from the terminal *)
 
-open Lwt
-open LTerm_event
+open Lambda_term
 
 let rec loop term =
-  LTerm.read_event term
-  >>= fun ev ->
-  Lwt_io.printl (LTerm_event.to_string ev)
-  >>= fun () ->
+  let ev = Terminal.read_event_sync term in
+  Printf.printf "%s\n%!" (Event.to_string ev);
   match ev with
-  | LTerm_event.Key{ LTerm_key.code = LTerm_key.Escape } ->
-    return ()
-  | _ ->
-    loop term
+  | Key (N, Escape) -> ()
+  | _ -> loop term
 
-let main () =
-  Lwt_io.printl "press escape to exit"
-  >>= fun () ->
-  Lazy.force LTerm.stdout
-  >>= fun term ->
-  LTerm.enable_mouse term
-  >>= fun () ->
-  LTerm.enter_raw_mode term
-  >>= fun mode ->
-  Lwt.finalize (fun () -> loop term)
-    (fun () ->
-       LTerm.leave_raw_mode term mode
-       >>= fun () ->
-       LTerm.disable_mouse term)
-
-let () = Lwt_main.run (main ())
+let () =
+  print_endline "press escape to exit";
+  let term = Lazy.force Terminal.std in
+  Terminal.set_mode term { (Terminal.mode term) with
+                           mouse = true
+                         ; raw   = true
+                         ; echo  = false
+                         };
+  Terminal.commit_sync term;
+  loop term;
+  Terminal.close term

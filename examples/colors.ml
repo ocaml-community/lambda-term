@@ -7,11 +7,10 @@
  * This file is a part of Lambda-Term.
  *)
 
-open Lwt
-open LTerm_style
-open LTerm_text
-
+open Lambda_term
+(*
 let () =
+  for
   let rec loop i =
     if i = 16 then
       Lwt.return ()
@@ -24,3 +23,4 @@ let () =
       loop (i + 1)
   in
   Lwt_main.run (loop 0)
+*)

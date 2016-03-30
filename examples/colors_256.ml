@@ -6,7 +6,7 @@
  *
  * This file is a part of Lambda-Term.
  *)
-
+(*
 open Lwt
 open LTerm_style
 open LTerm_text
@@ -22,3 +22,4 @@ let () =
       loop (i + 1)
   in
   Lwt_main.run (loop 0)
+*)

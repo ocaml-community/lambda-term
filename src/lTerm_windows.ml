@@ -22,46 +22,45 @@ type input =
 external read_console_input : Unix.file_descr -> input = "lt_windows_read_console_input"
 
 let controls =
-  Array.map Uchar.of_char
-    [| ' '
-     ; 'a'
-     ; 'b'
-     ; 'c'
-     ; 'd'
-     ; 'e'
-     ; 'f'
-     ; 'g'
-     ; 'h'
-     ; 'i'
-     ; 'j'
-     ; 'k'
-     ; 'l'
-     ; 'm'
-     ; 'n'
-     ; 'o'
-     ; 'p'
-     ; 'q'
-     ; 'r'
-     ; 's'
-     ; 't'
-     ; 'u'
-     ; 'v'
-     ; 'w'
-     ; 'x'
-     ; 'y'
-     ; 'z'
-     ; '['
-     ; '\\'
-     ; ']'
-     ; '^'
-     ; '_'
-    |]
+  [| ' '
+   ; 'a'
+   ; 'b'
+   ; 'c'
+   ; 'd'
+   ; 'e'
+   ; 'f'
+   ; 'g'
+   ; 'h'
+   ; 'i'
+   ; 'j'
+   ; 'k'
+   ; 'l'
+   ; 'm'
+   ; 'n'
+   ; 'o'
+   ; 'p'
+   ; 'q'
+   ; 'r'
+   ; 's'
+   ; 't'
+   ; 'u'
+   ; 'v'
+   ; 'w'
+   ; 'x'
+   ; 'y'
+   ; 'z'
+   ; '['
+   ; '\\'
+   ; ']'
+   ; '^'
+   ; '_'
+  |]
 
 let read_console_input fd : LTerm_event.t =
-  match read_console_input with
+  match read_console_input fd with
   | Uchar (mods, ch) ->
     if Uchar.to_int ch < 32 then
-      Char (mods, controls.(Uchar.code ch))
+      Char (mods, controls.(Uchar.to_int ch))
     else if Uchar.to_int ch < 256 then
       Char (mods, Uchar.to_char ch)
     else
@@ -70,6 +69,7 @@ let read_console_input fd : LTerm_event.t =
     Key (mods, key)
   | Button_down (mods, button, coord) ->
     Button_down (mods, button, coord)
+  | Resize -> Resize
 
 type text_attributes =
   { foreground : int
@@ -127,7 +127,6 @@ external write_console_output
     -> LTerm_geom.rect = "lt_windows_write_console_output"
 
 let write_console_output fd chars size coord rect =
-  Lwt_unix.check_descriptor fd;
   if Array.length chars <> size.LTerm_geom.rows then
     invalid_arg "LTerm_windows.write_console_output";
   Array.iter
@@ -135,7 +134,7 @@ let write_console_output fd chars size coord rect =
        if Array.length line <> size.LTerm_geom.cols then
          invalid_arg "LTerm_windows.write_console_output")
     chars;
-  write_console_output (Lwt_unix.unix_file_descr fd) chars size coord rect
+  write_console_output fd chars size coord rect
 
 external fill_console_output_character
   :  Unix.file_descr

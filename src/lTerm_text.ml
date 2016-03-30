@@ -7,8 +7,8 @@
  * This file is a part of Lambda-Term.
  *)
 
+open StdLabels
 open Zed
-open Core.Std
 
 type point =
   { mutable char  : Uchar.t
@@ -58,14 +58,14 @@ let of_string_maybe_invalid ?(style=LTerm_style.none) str =
       if ofs = String.length str then
         arr
       else begin
-        let code = Char.to_int str.[ofs] in
+        let code = Char.code str.[ofs] in
         arr.(idx + 0).char <- Uchar.of_char '\\';
         let a = code / 100 in
         let b = (code - a * 100) / 10 in
         let c = code mod 10 in
-        arr.(idx + 1).char <- Uchar.of_int (Char.to_int '0' + a);
-        arr.(idx + 2).char <- Uchar.of_int (Char.to_int '0' + b);
-        arr.(idx + 3).char <- Uchar.of_int (Char.to_int '0' + c);
+        arr.(idx + 1).char <- Uchar.of_int (Char.code '0' + a);
+        arr.(idx + 2).char <- Uchar.of_int (Char.code '0' + b);
+        arr.(idx + 3).char <- Uchar.of_int (Char.code '0' + c);
         let ofs = ofs + 1 and idx = idx + 4 in
         let until, _, _ = Zed_utf8.next_error str ofs in
         loop ~ofs ~idx ~until
@@ -86,18 +86,14 @@ let to_string txt =
   Buffer.contents buf
 ;;
 
-let%test_unit _ = ignore (to_string (of_string_maybe_invalid "\233xx") = "\\233xx")
-
 let of_rope ?(style=LTerm_style.none) rope =
   let arr = create ~style (Zed_rope.length rope) in
   let rec loop zip idx =
-    if Zed_rope.Zip.at_eos zip then
-      arr
-    else begin
-      let chr, zip = Zed_rope.Zip.next zip in
+    match Zed_rope.Zip.next zip with
+    | No_more -> arr
+    | Yield (chr, zip) ->
       arr.(idx).char <- chr;
       loop zip (idx + 1)
-    end
   in
   loop (Zed_rope.Zip.make_f rope 0) 0
 ;;
@@ -283,11 +279,26 @@ let kmkf
    | Styled formatters                                               |
    +-----------------------------------------------------------------+ *)
 
+let fold_coma_separated_words =
+  let rec loop s i j f acc =
+    if j = String.length s then
+      let word = String.sub s ~pos:i ~len:(j - i) in
+      f word acc
+    else
+      match s.[j] with
+      | ',' ->
+        let len = j - i in
+        let word = String.sub s ~pos:i ~len:(j - i) in
+        loop s (j + 1) (j + 1) f (f word acc)
+      | _ ->
+        loop s i (j + 1) f acc
+  in
+  fun s ~init ~f -> loop s 0 0 f init
+;;
+
 let style_of_tag s =
-  List.fold_left
-    (String.split s ~on:',')
-    ~init:LTerm_style.none
-    ~f:(fun ac s ->
+  fold_coma_separated_words s ~init:LTerm_style.none
+    ~f:(fun s ac ->
       match s with
       | "bold"      -> LTerm_style.set_bold      ac On
       | "underline" -> LTerm_style.set_underline ac On
@@ -296,8 +307,9 @@ let style_of_tag s =
       | ""          -> failwith "empty style tag"
       | s           ->
         if s.[0] = '~' then
-          LTerm_style.set_background ac (LTerm_style.Color.of_string
-                                                     (String.drop_prefix s 1))
+          LTerm_style.set_background ac
+            (LTerm_style.Color.of_string
+               (String.sub s ~pos:1 ~len:(String.length s - 1)))
         else
           LTerm_style.set_foreground ac (LTerm_style.Color.of_string s))
 ;;
@@ -451,14 +463,14 @@ let rec txtput_acc b (acc : (_, _) CamlinternalFormat.acc) =
 
 let ktprintf k (Format (fmt, s) : (_, _, _, _) format4) =
   let k' () acc =
-    let buf = Buffer.create (Int.max 1 (String.length s)) in
+    let buf = Buffer.create (max 1 (String.length s)) in
     txtput_acc buf acc;
     k (Buffer.contents buf)
   in
   CamlinternalFormat.make_printf k' () End_of_acc fmt
 ;;
 
-let tprintf fmt = ktprintf Fn.id fmt
+let tprintf fmt = ktprintf (fun x -> x) fmt
 
 (* +-----------------------------------------------------------------+
    | Ansi control sequence parsing                                   |
@@ -480,13 +492,4 @@ let parse_ansi ~start_style str =
     end
   in
   loop 0 start_style
-;;
-
-let%test_unit _ =
-  let t, _ =
-    parse_ansi ~start_style:LTerm_style.none
-      "\237m\188m-\\149\1673e\225\\003S\213 5\\143"
-  in
-  let s = to_string t in
-  assert (s = "\195\173m\194\188m-\\149\194\1673e\195\161\\003S\195\149 5\\143")
 ;;

@@ -7,6 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
+open StdLabels
 open Bigarray
 
 external get_sigwinch : unit -> int option = "lt_unix_get_sigwinch"
@@ -305,13 +306,13 @@ let system_encoding =
   match get_system_encoding () with
   | "" -> begin
       match Sys.getenv "LANG" with
-      | None ->
+      | exception _ ->
         "ASCII"
-      | Some lang ->
+      | lang ->
         match String.index lang '.' with
-        | None ->
+        | exception _ ->
           encoding_of_lang lang
-        | Some idx ->
+        | idx ->
           String.sub lang ~pos:(idx + 1) ~len:(String.length lang - idx - 1)
     end
   | enc ->
@@ -319,25 +320,15 @@ let system_encoding =
 ;;
 
 module Event_parser = struct
-  open Bigarray
-
-  type bigstring = (char, int8_unsigned, c_layout) Array1.t
-
-  external read : Unix.file_descr -> buf:bigstring -> pos:int -> len:int -> int
-    = "lt_term_bigarray_read"
-
-  external blit
-    : src:bigstring -> src_pos:int -> dst:bigstring -> dst_pos:int -> len:int -> int
-    = "lt_term_bigarray_blit"
+  module Bigstring = LTerm_bigstring
 
   type t =
     { fd                     : Unix.file_descr
     ; mutable escape_time    : float
     ; mutable active         : bool
-    ; buffer                 : bigstring
+    ; buffer                 : LTerm_bigstring.t
     ; mutable ofs            : int
     ; mutable max            : int
-    ; mutable refilling      : bool
     ; mutable button_pressed : int (* mouse event for button up doesn't include which one
                                       it is, so we have to remember it *)
     }
@@ -346,13 +337,15 @@ module Event_parser = struct
     { fd
     ; escape_time
     ; active         = true
-    ; buffer         = Array1.create char c_layout 4096
+    ; buffer         = Bigstring.create 4096
     ; ofs            = 0
     ; max            = 0
     ; button_pressed = -1
-    ; resume         = None
     }
   ;;
+
+  let escape_time t = t.escape_time
+  let set_escape_time t span = t.escape_time <- span
 
   let discard t =
     t.ofs <- 0;
@@ -362,28 +355,28 @@ module Event_parser = struct
   let shift_remaining t =
     let len = t.max - t.ofs in
     if 0 < t.ofs && len > 0 then
-      blit ~src:t.buffer ~dst:t.buffer ~src_pos:t.ofs ~dst_pos:0 ~len;
+      Bigstring.blit ~src:t.buffer ~dst:t.buffer ~src_pos:t.ofs ~dst_pos:0 ~len;
     t.ofs <- 0;
     t.max <- len;
   ;;
 
   (* Wait before reading so that we avoid eating data when the terminal is disabled *)
-  let rec wait_for_fd t fd =
+  let rec wait_for_fd t =
     try
-      let res = Unix.select [fd] [] [] (-1.0) in
+      let res = Unix.select [t.fd] [] [] (-1.0) in
       if t.active then
         `Ready
       else
         `Disabled
     with Unix.Unix_error (EINTR, _, _) ->
       if t.active then
-        wait_for_fd t fd
+        wait_for_fd t
       else
         `Disabled
 
-  let rec wait_for_fd_with_timeout t fd ~timeout ~timeout_at =
+  let rec wait_for_fd_with_timeout t ~timeout ~timeout_at =
     try
-      let res = Unix.select [fd] [] [] timeout in
+      let res = Unix.select [t.fd] [] [] timeout in
       if t.active then
         match res with
         | [], [], [] -> `Timeout
@@ -393,40 +386,38 @@ module Event_parser = struct
     with Unix.Unix_error (EINTR, _, _) ->
       if t.active then
         let now = Unix.gettimeofday () in
-        let timeout = timeout_at - now in
+        let timeout = timeout_at -. now in
         if now <= 0. then
           `Timeout
         else
-          wait_for_fd' t ~timeout ~timeout_at
+          wait_for_fd_with_timeout t ~timeout ~timeout_at
       else
         `Disabled
   ;;
 
   let rec read_handle_eintr t =
-    match read fd t.buffer ~pos:t.max ~len:(Array1.dim t.buffer - t.max) with
+    match Bigstring.read t.fd ~buf:t.buffer ~pos:t.max ~len:(Bigstring.length t.buffer - t.max) with
     | n ->
       t.max <- t.max + n;
       if t.active then `Read n else `Disabled
     | exception (Unix.Unix_error (EINTR, _, _)) ->
-      if t.action then
+      if t.active then
         read_handle_eintr t
       else
         `Disabled
   ;;
 
-  let refill ?timeout t =
-    let timeout_at =
-      match timeout with
-      | None -> None
-      | Some span -> Unix.gettimeofday () +. span
-    in
+  let refill t =
     shift_remaining t;
-    match
-      match timeout with
-      | None -> wait_for_fd t fd
-      | Some span ->
-        wait_for_fd_with_timeout t fd ~timeout:span
-          ~timeout_at:(Unix.gettimeofday () + span)
+    match wait_for_fd t with
+    | `Ready -> read_handle_eintr t
+    | `Disabled -> `Disabled
+  ;;
+
+  let refill_with_timeout t ~timeout =
+    shift_remaining t;
+    match wait_for_fd_with_timeout t ~timeout
+            ~timeout_at:(Unix.gettimeofday () +. timeout)
     with
     | `Disabled | `Timeout as x -> x
     | `Ready -> read_handle_eintr t
@@ -435,13 +426,13 @@ module Event_parser = struct
   exception Need_more
   let need_more =
     let exn = Need_more in
-    fun () -> Exn.raise_without_backtrace exn
+    fun () -> raise_notrace exn
   ;;
 
   exception Discard_event
   let discard_event =
     let exn = Discard_event in
-    fun () -> Exn.raise_without_backtrace exn
+    fun () -> raise_notrace exn
   ;;
 
   (* +---------------------------------------------------------------+
@@ -469,17 +460,17 @@ module Event_parser = struct
       let ch =
         match first_byte with
         | '\xc0' .. '\xdf' ->
-          Uchar.of_int ((   (Char.to_int first_byte           land 0x1f) lsl 6)
-                           lor (Char.to_int t.buffer.{start + 1} land 0x3f))
+          Uchar.of_int ((   (Char.code first_byte           land 0x1f) lsl 6)
+                           lor (Char.code t.buffer.{start + 1} land 0x3f))
         | '\xe0' .. '\xef' ->
-          Uchar.of_int ((    (Char.to_int first_byte           land 0x0f) lsl 12)
-                           lor ((Char.to_int t.buffer.{start + 1} land 0x3f) lsl 6)
-                           lor  (Char.to_int t.buffer.{start + 2} land 0x3f))
+          Uchar.of_int ((    (Char.code first_byte           land 0x0f) lsl 12)
+                           lor ((Char.code t.buffer.{start + 1} land 0x3f) lsl 6)
+                           lor  (Char.code t.buffer.{start + 2} land 0x3f))
         | '\xf0' .. '\xf7' ->
-          Uchar.of_int ((    (Char.to_int first_byte           land 0x07) lsl 18)
-                           lor ((Char.to_int t.buffer.{start + 1} land 0x3f) lsl 12)
-                           lor ((Char.to_int t.buffer.{start + 2} land 0x3f) lsl 6)
-                           lor  (Char.to_int t.buffer.{start + 3} land 0x3f))
+          Uchar.of_int ((    (Char.code first_byte           land 0x07) lsl 18)
+                           lor ((Char.code t.buffer.{start + 1} land 0x3f) lsl 12)
+                           lor ((Char.code t.buffer.{start + 2} land 0x3f) lsl 6)
+                           lor  (Char.code t.buffer.{start + 3} land 0x3f))
         | _ ->
           Uchar.of_char first_byte
       in
@@ -505,7 +496,7 @@ module Event_parser = struct
              sequences. *)
           ""
         | _ ->
-          Bigstring.To_string.sub t.buffer ~pos:start ~len:(i - start + 1)
+          Bigstring.sub_string t.buffer ~pos:start ~len:(i - start + 1)
       else if can_refill then
         need_more ()
       else
@@ -986,7 +977,7 @@ module Event_parser = struct
   ;;
 
   let make_char m c : LTerm_event.t =
-    if Char.to_int c <= 127 then
+    if Char.code c <= 127 then
       Char (m, c)
     else
       Uchar (m, Uchar.of_char c)
@@ -1004,7 +995,7 @@ module Event_parser = struct
     | '\x00' .. '\x1a' | '\x1c' .. '\x1f' as byte ->
       (* Control characters *)
       t.ofs <- t.ofs + 1;
-      controls.(Char.to_int byte)
+      controls.(Char.code byte)
     | '\x7f' ->
       (* Backspace *)
       t.ofs <- t.ofs + 1;
@@ -1019,7 +1010,7 @@ module Event_parser = struct
         make_char N byte
       else begin
         let s =
-          Bigstring.To_string.sub t.buffer
+          Bigstring.sub_string t.buffer
             ~pos:start_of_text
             ~len:(end_of_text - start_of_text)
         in
@@ -1051,7 +1042,7 @@ module Event_parser = struct
                   t.ofs <- t.ofs + 2 + String.length seq;
                   match find_sequence seq with
                   | Some (Key (m, k)) ->
-                    Key (LTerm_event.Modifiers.with_m m, k)
+                    Key (LTerm_event.Modifiers.set_meta m true, k)
                   | Some x ->
                     x
                   | None ->
@@ -1061,7 +1052,7 @@ module Event_parser = struct
           | '\x00' .. '\x1a' | '\x1c' .. '\x1f' as byte ->
             (* Control characters *)
             t.ofs <- t.ofs + 2;
-            (match controls.(Char.to_int byte) with
+            (match controls.(Char.code byte) with
              | Key  (N, k) -> Key  (M, k)
              | Char (C, c) -> Char (C_M, c)
              | _ -> assert false)
@@ -1087,10 +1078,10 @@ module Event_parser = struct
           end else begin
             let ofs = t.ofs in
             t.ofs <- ofs + 6;
-            let mask = Char.to_int t.buffer.{ofs + 3} in
+            let mask = Char.code t.buffer.{ofs + 3} in
             let coord : LTerm_geom.coord =
-              { col = Char.to_int t.buffer.{ofs + 4} - 33
-              ; row = Char.to_int t.buffer.{ofs + 5} - 33 }
+              { col = Char.code t.buffer.{ofs + 4} - 33
+              ; row = Char.code t.buffer.{ofs + 5} - 33 }
             in
             let modifiers : LTerm_event.Modifiers.t =
               match mask land 0b00011000 with
@@ -1146,7 +1137,7 @@ module Event_parser = struct
       | event -> Some event
       | exception Discard_event -> read t
       | exception Need_more ->
-        match refill t ~timeout:t.escape_time with
+        match refill_with_timeout t ~timeout:t.escape_time with
         | `Disabled -> None
         | `Read _ | `Timeout ->
           match

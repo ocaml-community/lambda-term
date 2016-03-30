@@ -7,7 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
-open Core.Std
+open StdLabels
 open Zed
 
 type point =
@@ -284,12 +284,7 @@ module Piece = struct
     let bottom = 0x0000007f
   end
 
-  let reverse t = Caml.Int32.to_int (swap_int32 (Caml.Int32.of_int t))
-
-  let%test_unit _ = assert (reverse Bits.top = Bits.bottom)
-  let%test_unit _ = assert (reverse Bits.bottom = Bits.top)
-  let%test_unit _ = assert (reverse Bits.left = Bits.right)
-  let%test_unit _ = assert (reverse Bits.right = Bits.left)
+  let reverse t = Int32.to_int (swap_int32 (Int32.of_int t))
 
   let ( + ) = ( lor )
   let ( - ) a b = a land (lnot b)
@@ -310,29 +305,6 @@ module Piece = struct
   let set_left   t x = t - Bits.left   + (int_of_connection x lsl 16)
   let set_right  t x = t - Bits.right  + (int_of_connection x lsl  8)
   let set_bottom t x = t - Bits.bottom + (int_of_connection x       )
-
-  module For_sexp = struct
-    type t =
-      { top    : Connection.t
-      ; bottom : Connection.t
-      ; left   : Connection.t
-      ; right  : Connection.t
-      } [@@deriving sexp]
-  end
-
-  let sexp_of_t t =
-    For_sexp.sexp_of_t
-      { top    = top    t
-      ; bottom = bottom t
-      ; left   = left   t
-      ; right  = right  t
-      }
-  ;;
-
-  let t_of_sexp s =
-    let { For_sexp. top; bottom; left; right } = For_sexp.t_of_sexp s in
-    make ~top ~bottom ~left ~right
-  ;;
 
   let hline c = make ~top:Blank ~bottom:Blank ~left:c ~right:c
   let vline c = make ~top:c ~bottom:c ~left:Blank ~right:Blank
