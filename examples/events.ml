@@ -21,11 +21,7 @@ let rec loop term =
 let () =
   print_endline "press escape to exit";
   let term = Lazy.force Terminal.std in
-  Terminal.set_mode term { (Terminal.mode term) with
-                           mouse = true
-                         ; raw   = true
-                         ; echo  = false
-                         };
+  Terminal.modify_mode term ~mouse:true ~raw:true ~echo:false;
   Terminal.commit_sync term;
   loop term;
   Terminal.close term

@@ -23,12 +23,35 @@ module Mode = struct
     ; screen  : Screen.t
     }
 
-  let default =
-    { echo    = true
-    ; raw     = false
-    ; signals = true
-    ; mouse   = false
-    ; screen  = Main
+  let echo    t = t.echo
+  let raw     t = t.raw
+  let signals t = t.signals
+  let mouse   t = t.mouse
+  let screen  t = t.screen
+
+  let make ?(echo=true) ?(raw=false) ?(signals=true) ?(mouse=false)
+        ?(screen=Screen.Main) () =
+    { echo
+    ; raw
+    ; signals
+    ; mouse
+    ; screen
+    }
+  ;;
+
+  let default = make ()
+
+  let set ?echo ?raw ?signals ?mouse ?screen t =
+    let choose orig repl =
+      match repl with
+      | None -> orig
+      | Some x -> x
+    in
+    { echo    = choose t.echo    echo
+    ; raw     = choose t.raw     raw
+    ; signals = choose t.signals signals
+    ; mouse   = choose t.mouse   mouse
+    ; screen  = choose t.screen  screen
     }
 
   let termios_fields_equal a b =
@@ -1032,6 +1055,10 @@ let set_mode t (mode : Mode.t) =
        | Main        -> "\027[?1049l"
        | Alternative -> "\027[?1049h");
   t.mode <- mode
+;;
+
+let modify_mode ?echo ?raw ?signals ?mouse ?screen t =
+  set_mode t (Mode.set (mode t) ?echo ?raw ?signals ?mouse ?screen)
 ;;
 
 let reset t =

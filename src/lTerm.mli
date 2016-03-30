@@ -170,30 +170,54 @@ end
 
 module Mode : sig
   (** Terminal modes. These modes are preserved after resuming from a Ctrl+Z. *)
-  type t =
-    { echo    : bool (** If [true], characters are printed on screen             *)
-    ; raw     : bool (** If [true], input is reported immediately                *)
-    ; signals : bool (** If [true], signals are generated on INTR, QUIT and SUSP *)
-    ; mouse   : bool (** If [true], mouse events are reported                    *)
-    ; screen  : Screen.t
-    }
-  [@@deriving sexp, fields]
+  type t
+
+  val echo    : t -> bool (** If [true], characters are printed on screen             *)
+  val raw     : t -> bool (** If [true], input is reported immediately                *)
+  val signals : t -> bool (** If [true], signals are generated on INTR, QUIT and SUSP *)
+  val mouse   : t -> bool (** If [true], mouse events are reported                    *)
+  val screen  : t -> Screen.t
+
+  val set
+    :  ?echo    : bool
+    -> ?raw     : bool
+    -> ?signals : bool
+    -> ?mouse   : bool
+    -> ?screen  : Screen.t
+    -> t
+    -> t
+
+  val make
+    :  ?echo    : bool
+    -> ?raw     : bool
+    -> ?signals : bool
+    -> ?mouse   : bool
+    -> ?screen  : Screen.t
+    -> unit
+    -> t
 
   (**
-     {[
-       { echo    = true
-       ; raw     = false
-       ; signals = true
-       ; mouse   = false
-       ; screen  = Main
-       }
-     ]}
+     - echo:    true
+     - raw:     false
+     - signals: true
+     - mouse:   false
+     - screen:  Main
   *)
   val default : t
 end
 
 val mode : t -> Mode.t
 val set_mode : t -> Mode.t -> unit
+
+(** Short-hard for: mode+Mode.set+set_mode *)
+val modify_mode
+  :  ?echo    : bool
+  -> ?raw     : bool
+  -> ?signals : bool
+  -> ?mouse   : bool
+  -> ?screen  : Screen.t
+  -> t
+  -> unit
 
 (** Make the cursor visible. *)
 val show_cursor : t -> unit
