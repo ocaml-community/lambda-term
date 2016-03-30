@@ -582,7 +582,7 @@ module Global = struct
   ;;
 
   let wait_for_writers_holding_mutex () =
-    if !writers = 0 then Condition.wait writers_done mutex
+    if !writers <> 0 then Condition.wait writers_done mutex
   ;;
 
   type start_writing_result =
@@ -656,7 +656,20 @@ module Signals = struct
     | Susp
     | Winch
 
-  let signal_of_int signo =
+  let char_of_signal = function
+    | Intr  -> 'i'
+    | Quit  -> 'q'
+    | Susp  -> 's'
+    | Winch -> 'w'
+
+  let signal_of_char = function
+    | 'i' -> Intr
+    | 'q' -> Quit
+    | 's' -> Susp
+    | 'w' -> Winch
+    | _   -> assert false
+
+  let signal_of_signo signo =
     if signo = Sys.sigint then
       Intr
     else if signo = Sys.sigquit then
@@ -817,7 +830,7 @@ module Signals = struct
       | _ ->
         let len = Unix.read fd buf 0 (Bytes.length buf) in
         for i = 0 to len - 1 do
-          let signal = signal_of_int (Char.code (Bytes.get buf i)) in
+          let signal = signal_of_char (Bytes.get buf i) in
           process_signal signal
         done
     done
@@ -825,7 +838,7 @@ module Signals = struct
 
   let send_to_manager =
     let buf = Bytes.create 1 in
-    fun fd signum ->
+    fun fd signal ->
       let rec loop fd =
         match Unix.write fd buf 0 1 with
         | exception Unix.Unix_error (EINTR, _, _) ->
@@ -833,7 +846,7 @@ module Signals = struct
         | 1 -> ()
         | _ -> assert false
       in
-      Bytes.set buf 0 (Char.chr signum);
+      Bytes.set buf 0 (char_of_signal signal);
       loop fd
   ;;
 
@@ -851,7 +864,7 @@ module Signals = struct
   ;;
 
   let handler fd signo =
-    let signal = signal_of_int signo in
+    let signal = signal_of_signo signo in
     match state_of_signal signal with
     | Not_managed -> ()
     | Generate_event | Handled ->
@@ -860,7 +873,7 @@ module Signals = struct
          (* Second Ctrl+C/Ctrl+Q will exit without waiting for writers *)
          set_exit_signals (Signal_handle dirty_exit)
        | _ -> ());
-      send_to_manager fd signo
+      send_to_manager fd signal
   ;;
 
   let prev_intr = ref Sys.Signal_default
@@ -873,6 +886,8 @@ module Signals = struct
     fdw
   )
 
+  external set : Unix.file_descr -> int -> unit = "lt_term_set_signal"
+
   let set_one prev signo (old_state:State.t) (new_state:State.t) =
     let fd = Lazy.force init in
     match old_state, new_state with
@@ -882,7 +897,7 @@ module Signals = struct
       Sys.set_signal signo !prev;
       prev := Signal_default
     | Not_managed, _ ->
-      prev := Sys.signal signo (Signal_handle (handler fd))
+      set fd signo
     | _ ->
       ()
   ;;

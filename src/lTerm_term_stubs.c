@@ -162,4 +162,40 @@ static void handle_signal(int signum)
     pthread_kill(signal_manager_thread, signum);
 }
 */
+
+#include <signal.h>
+#include <stdio.h>
+
+static int notify_fd;
+
+static void handle_signal(int signum)
+{
+  char c;
+  if (SIGINT   >= 0 && signum == SIGINT  ) c = 'i';
+  if (SIGQUIT  >= 0 && signum == SIGQUIT ) c = 'q';
+  if (SIGTSTP  >= 0 && signum == SIGTSTP ) c = 's';
+  if (SIGWINCH >= 0 && signum == SIGWINCH) c = 'w';
+  write(notify_fd, &c, 1);
+}
+
+CAMLextern int caml_convert_signal_number (int);
+
+CAMLprim value lt_term_set_signal(value fd, value val_signum)
+{
+  struct sigaction sa;
+  int signum = caml_convert_signal_number(Int_val(val_signum));
+
+  notify_fd = Int_val(fd);
+
+  if (signum < 0 || signum >= NSIG)
+    caml_invalid_argument("LTerm.Signals.set");
+
+  sa.sa_handler = handle_signal;
+  sa.sa_flags = 0;
+  sigemptyset(&sa.sa_mask);
+  if (sigaction(signum, &sa, NULL) == -1)
+    uerror("sigaction", Nothing);
+  return Val_unit;
+}
+
 #endif
