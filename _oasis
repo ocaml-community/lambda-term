@@ -157,6 +157,13 @@ Executable scroll
   MainIs: scroll.ml
   BuildDepends: lambda-term
 
+Executable scroll_debug
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: scroll_debug.ml
+  BuildDepends: lambda-term
+
 Flag images
   Description: Build ascii art example (requires camlimages)
   Default: false

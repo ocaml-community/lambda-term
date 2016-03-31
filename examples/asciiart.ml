@@ -62,13 +62,19 @@ open CamomileLibrary
 
 (* scrollable asciiart widget *)
 class asciiart img vscroll hscroll = object(self)
-  inherit t "asciiart"
+  inherit t "asciiart" as super
 
-  initializer
+  (*initializer
     vscroll#set_range (Array.length img);
-    hscroll#set_range (Array.length img.(0))
+    hscroll#set_range (Array.length img.(0))*)
 
   method can_focus = false
+
+  method set_allocation rect =
+    let size = size_of_rect rect in
+    vscroll#set_range (max 1 (Array.length img - size.rows));
+    hscroll#set_range (max 1 (Array.length img.(0) - size.cols));
+    super#set_allocation rect
 
   val style = 
     LTerm_style.({ none with foreground=Some white; 

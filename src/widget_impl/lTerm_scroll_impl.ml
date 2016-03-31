@@ -18,7 +18,6 @@ class type adjustment = object
   method set_offset : int -> unit
   method incr : unit
   method decr : unit
-  method scroll_bar_size : int
 end
 
 class virtual scrollbar ~default_scroll_bar_size = 
@@ -85,29 +84,69 @@ class virtual scrollbar ~default_scroll_bar_size =
       else
         self#set_offset (self#offset-1);
 
-  initializer self#on_event @@ fun ev ->
-    let open LTerm_mouse in
-    let open LTerm_key in
+    (* methods for setting offset from mouse click.
+      
+       ratio: scale whole scroll bar area into the number of steps.  The scroll
+              bar will not necessarily end up where clicked.  Also, the extremities
+              need to be clicked exactly.
+      
+       middle: place the middle of the scroll bar at the cursor.  Large scroll bars
+               will reduce the clickable area by their size.  Nice otherwise.
+      
+       left/right: place the edges of the scroll bar at the cursor.  Test only.
+                   Similar problem to middle. *)
 
-    let alloc = self#allocation in
+    method private mouse_scale_ratio scroll = 
+      let steps, size = self#scroll_bar_steps, self#scroll_bar_size in
+      map_range (self#scroll_window_size - 1) (steps - 1) scroll 
 
-    match ev with
-    | LTerm_event.Mouse m when m.button=Button1 && in_rect alloc (coord m) ->
-      let scroll = self#mouse_offset m alloc in
-      self#set_offset @@ self#window_of_scroll scroll;
-      true
+    method private mouse_scale_middle scroll = 
+      let size = self#scroll_bar_size in
+      scroll - (size/2)
 
-    | LTerm_event.Key { control = false; meta = false; shift = true; code } 
-      when code=self#key_scroll_decr ->
-      self#decr;
-      true
+    method private mouse_scale_left scroll = scroll
 
-    | LTerm_event.Key { control = false; meta = false; shift = true; code } 
-      when code=self#key_scroll_incr ->
-      self#incr;
-      true
+    method private mouse_scale_right scroll = 
+      let size = self#scroll_bar_size in
+      scroll - size + 1
 
-    | _ -> false
+    val mutable mouse_mode : [`ratio|`middle|`left|`right] = `ratio
+    method set_mouse_mode m = mouse_mode <- m
+    method private mouse_scale scroll = 
+      match mouse_mode with
+      | `ratio -> self#mouse_scale_ratio scroll
+      | `middle -> self#mouse_scale_middle scroll
+      | `left -> self#mouse_scale_left scroll
+      | `right -> self#mouse_scale_right scroll
+
+    (* event handling *)
+    initializer self#on_event @@ fun ev ->
+      let open LTerm_mouse in
+      let open LTerm_key in
+
+      let alloc = self#allocation in
+
+      match ev with
+      | LTerm_event.Mouse m when m.button=Button1 && in_rect alloc (coord m) ->
+        let scroll = self#mouse_offset m alloc in
+        self#set_offset @@ self#window_of_scroll @@ self#mouse_scale scroll;
+        true
+
+      | LTerm_event.Key { control = false; meta = false; shift = true; code } 
+        when code=self#key_scroll_decr ->
+        self#decr;
+        true
+
+      | LTerm_event.Key { control = false; meta = false; shift = true; code } 
+        when code=self#key_scroll_incr ->
+        self#incr;
+        true
+
+      | _ -> false
+
+    method debug_offset = scroll_bar_offset
+    method debug_size = self#scroll_bar_size
+    method debug_steps = self#scroll_bar_steps
 
   end
 
@@ -157,7 +196,9 @@ class hscrollbar ?size_request ?(default_scroll_bar_size=5) () = object(self)
   method private mouse_offset m alloc = m.LTerm_mouse.col - alloc.col1 
   method private key_scroll_incr = LTerm_key.Right
   method private key_scroll_decr = LTerm_key.Left
-  method private scroll_window_size = self#allocation.col2 - self#allocation.col1
+  method private scroll_window_size = 
+    let alloc = self#allocation in
+    alloc.col2 - alloc.col1
 
   method draw ctx focused = 
     let focus = (self :> t) = focused in

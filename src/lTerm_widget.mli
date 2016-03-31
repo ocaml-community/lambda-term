@@ -289,9 +289,13 @@ class type adjustment = object
   method decr : unit
     (** decrement offset by one step *)
 
-  method scroll_bar_size : int
-    (** size of scroll bar *)
+end
 
+(* XXX remove me *)
+class type scroll_debug = object
+  method debug_offset : int
+  method debug_size : int
+  method debug_steps : int
 end
 
 class vscrollbar : 
@@ -299,6 +303,14 @@ class vscrollbar :
   object
     inherit t
     inherit adjustment
+
+    method scroll_bar_size : int
+      (** size of scroll bar *)
+
+    method set_mouse_mode : [`ratio|`middle|`left|`right] -> unit
+
+    inherit scroll_debug
+
   end
 
 class hscrollbar : 
@@ -306,6 +318,14 @@ class hscrollbar :
   object
     inherit t
     inherit adjustment
+
+    method scroll_bar_size : int
+      (** size of scroll bar *)
+
+    method set_mouse_mode : [`ratio|`middle|`left|`right] -> unit
+
+    inherit scroll_debug
+
   end
 
 (** {6 Running in a terminal} *)

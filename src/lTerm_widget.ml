@@ -148,6 +148,12 @@ class ['a] radiobutton = ['a] LTerm_buttons_impl.radiobutton
    +-----------------------------------------------------------------+ *)
 
 class type adjustment = LTerm_scroll_impl.adjustment
+(* XXX remove me *)
+class type scroll_debug = object
+  method debug_offset : int
+  method debug_size : int
+  method debug_steps : int
+end
 class vscrollbar = LTerm_scroll_impl.vscrollbar
 class hscrollbar = LTerm_scroll_impl.hscrollbar
 
