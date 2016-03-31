@@ -12,6 +12,12 @@ module Bigstring = LTerm_bigstring
 
 module Screen = struct
   type t = Main | Alternative
+
+  let state_change_sequence a b =
+    match a, b with
+    | Alternative, Main -> "\027[?1049l"
+    | Main, Alternative -> "\027[?1049h"
+    | _ -> ""
 end
 
 module Mouse_events = struct
@@ -153,34 +159,36 @@ let protect mutex ~f =
   | exception e -> Mutex.unlock mutex; raise e
 
 module Notifier = struct
-  type 'a t =
-    { new_request : unit -> 'a
+  type ('a, 'b) methods =
+    { new_request : unit -> 'a * 'b
     ; notify      : 'a -> unit
     }
 
+  type 'a t = T : (_, 'a) methods -> 'a t
+
   let make ~new_request ~notify () =
-    { new_request
-    ; notify
-    }
+    T { new_request
+      ; notify
+      }
 
   module Request = struct
     type 'a notifier = 'a t
-    type t = T : 'a notifier * 'a -> t
-
-    let create notifier request =
-      T (notifier, request)
-    ;;
+    type t = T : ('a, _) methods * 'a -> t
 
     let notify (T (notifier, request)) =
       notifier.notify request
     ;;
+
+    let dummy = T ({ new_request = (fun () -> ((), ()))
+                   ; notify      = ignore
+                   },
+                   ())
   end
 
-  let new_request t = t.new_request ()
-
-  module Dummy = struct
-    let t = make ~new_request:ignore ~notify:ignore ()
-  end
+  let new_request (T methods) =
+    let sender, receiver = methods.new_request () in
+    (receiver, Request.T (methods, sender))
+  ;;
 
   module Default = struct
     type request =
@@ -237,8 +245,21 @@ module Notifier = struct
         end)
     ;;
 
+    let t = make ~new_request:(fun () -> let r = new_request () in (r, r)) ~notify ()
+  end
+
+  module Blocking = struct
+    let new_request () =
+      let req = Default.new_request () in
+      (req, lazy (Default.wait req))
+    ;;
+
+    let notify = Default.notify
+
     let t = make ~new_request ~notify ()
   end
+
+  let blocking = Blocking.t
 end
 
 module Sync = struct
@@ -257,9 +278,7 @@ module Sync = struct
     ; end_of_display = Do_not_change
     ; mode
     ; cursor
-    ; request = Notifier.Request.create
-                  Notifier.Dummy.t
-                  (Notifier.new_request Notifier.Dummy.t)
+    ; request = Notifier.Request.dummy
     }
   ;;
 (*
@@ -344,6 +363,7 @@ module Event_queue : sig
   val create : unit -> t
 
   val send : t -> LTerm_event.t -> unit
+  val send_many : t -> LTerm_event.t list -> unit
   val poll : t -> notifier:'a Notifier.t -> (LTerm_event.t, 'a) poll_result
 
   val wait_for_reader : t -> unit
@@ -362,6 +382,7 @@ end = struct
     type t [@@deriving sexp_of]
     val create  : unit -> t
     val enqueue : t -> LTerm_event.t -> unit
+    val enqueue_many : t -> LTerm_event.t list -> unit
     val dequeue : t -> LTerm_event.t option
     val clear   : t -> unit
     val is_empty : t -> bool
@@ -396,6 +417,12 @@ end = struct
         end
       | _ ->
         Queue.push ev t.queue
+    ;;
+
+    let rec enqueue_many t l =
+      match l with
+      | [] -> ()
+      | ev :: l -> enqueue t ev; enqueue_many t l
     ;;
 
     let dequeue t =
@@ -453,11 +480,23 @@ end = struct
         notify_all_locked t)
   ;;
 
+  let send_many t evs =
+    if evs <> [] then begin
+      protect t.mutex ~f:(fun () ->
+        match t.state with
+        | Closed   -> assert false
+        | Inactive -> Queue.enqueue_many t.pending_events evs
+        | Active   ->
+          Queue.enqueue_many t.pending_events evs;
+          notify_all_locked t)
+    end
+  ;;
+
   let add_notify_locked t ~notifier =
-    let request = Notifier.new_request notifier in
-    t.waiters <- Notifier.Request.create notifier request :: t.waiters;
+    let result, request = Notifier.new_request notifier in
+    t.waiters <- request :: t.waiters;
     Condition.broadcast t.got_reader;
-    Pending request
+    Pending result
   ;;
 
   let poll t ~notifier =
@@ -617,6 +656,16 @@ let add_event t ev =
   | Closed -> ()
   | _      -> Event_queue.send t.events ev
 
+let send_event t ev =
+  match t.state with
+  | Closed -> ()
+  | _      -> Event_queue.send t.events ev
+
+let send_events t evs =
+  match t.state with
+  | Closed -> ()
+  | _      -> Event_queue.send_many t.events evs
+
 let escape_time t = LTerm_unix.Event_parser.escape_time t.event_parser
 let set_escape_time t span = LTerm_unix.Event_parser.set_escape_time t.event_parser span
 
@@ -710,9 +759,9 @@ module Signals = struct
     let cmd =
       let mode = t.real_mode in
       String.concat ""
-        [ Mouse_events.state_change_sequence mode.mouse Disabled
-        ; if mode.screen = Alternative then "\027[?1049l" else ""
-        ; if t.real_cursor = Hidden    then "\027[?25h"   else ""
+        [ Mouse_events.state_change_sequence mode.mouse  Disabled
+        ; Screen.      state_change_sequence mode.screen Main
+        ; if t.real_cursor = Hidden then "\027[?25h" else ""
         ; match t.end_of_display with
         | None -> ""
         | Some ofs ->
@@ -921,11 +970,9 @@ module Event_reader = struct
   let rec loop t =
     (* Do not read stdin eagerly, wait for someone to request it *)
     Event_queue.wait_for_reader t.events;
-    match LTerm_unix.Event_parser.read t.event_parser with
-    | None -> loop t
-    | Some ev ->
-      Event_queue.send t.events ev;
-      loop t
+    let evs = LTerm_unix.Event_parser.read t.event_parser in
+    Event_queue.send_many t.events evs;
+    loop t
 end
 
 let poll_event t ~notifier =
@@ -989,7 +1036,7 @@ let grow_out_buf t len =
       let n = t.out_pos_written in
       Bigstring.blit
         ~src:t.out_buf ~dst:t.out_buf
-        ~src_pos:n ~dst_pos:0 ~len:n;
+        ~src_pos:n ~dst_pos:0 ~len:(t.out_pos - n);
       t.out_pos_written <- 0;
       t.out_pos         <- t.out_pos - n;
       t.syncing_up_to   <- t.syncing_up_to - n;
@@ -1038,13 +1085,16 @@ let add_3chars t a b c =
 ;;
 
 let add_substring t s ~pos ~len =
-  reserve t len;
-  let out_pos = t.out_pos in
-  Bigstring.blit_string ~src:s ~dst:t.out_buf ~src_pos:pos ~dst_pos:out_pos ~len;
-  t.out_pos <- out_pos + len;
+  if len > 0 then begin
+    reserve t len;
+    let out_pos = t.out_pos in
+    Bigstring.blit_string ~src:s ~dst:t.out_buf ~src_pos:pos ~dst_pos:out_pos ~len;
+    t.out_pos <- out_pos + len;
+  end
 ;;
 
-let add_string t s = add_substring t s ~pos:0 ~len:(String.length s)
+let add_string t s =
+  add_substring t s ~pos:0 ~len:(String.length s)
 
 let digit n = Char.chr (Char.code '0' + n)
 
@@ -1085,14 +1135,10 @@ let cursor_visible t =
 ;;
 
 let set_mode t (mode : Mode.t) =
-  if t.mode.mouse <> mode.mouse then
-    add_string t
-      (Mouse_events.state_change_sequence t.mode.mouse mode.mouse);
-  if t.mode.screen <> mode.screen then
-    add_string t
-      (match mode.screen with
-       | Main        -> "\027[?1049l"
-       | Alternative -> "\027[?1049h");
+  add_string t
+    (Mouse_events.state_change_sequence t.mode.mouse mode.mouse);
+  add_string t
+    (Screen.state_change_sequence t.mode.screen mode.screen);
   t.mode <- mode
 ;;
 
@@ -1219,66 +1265,15 @@ let render_char t ~char =
     add_uchar t (map_char char)
 ;;
 
-type render_kind = Render_screen | Render_box
-
-let render_gen t kind ?(old=[||]) (matrix : LTerm_draw.matrix) =
-  add_string t
-    (match kind with
-     | Render_screen -> "\027[H\027[0m" (* Go the top-left and reset attributes *)
-     | Render_box    -> "\r\027[0m"     (* Go the beginnig of line and reset attributes *)
-    );
-  (* The last displayed style. *)
-  let curr_style = ref LTerm_style.default in
-  let rows = Array.length matrix in
-  let old_rows =
-    let old_rows = Array.length old in
-    if rows = 0 || old_rows <> rows ||
-       Array.length matrix.(0) <> Array.length old.(0) then
-      0 (* No update if dimmensions changed *)
-    else
-      old_rows
-  in
-  for y = 0 to rows - 1 do
-    let line = matrix.(y) in
-    (* If the current line is equal to the displayed one, skip it *)
-    if y >= old_rows || line <> old.(y) then begin
-      for x = 0 to Array.length line - 1 do
-        let point = line.(x) in
-        let style = LTerm_style.on_default point.style in
-        if not (LTerm_style.equal !curr_style style) then begin
-          curr_style := style;
-          add_style t ~style;
-        end;
-        render_char t ~char:point.char;
-        curr_style := style
-      done
-    end;
-    if y < rows - 1 then add_char t '\n'
-  done;
-  add_string t
-    (match kind with
-     | Render_screen -> "\027[0m"
-     | Render_box    -> "\027[0m\r");
-;;
-
-let render t ?old matrix = render_gen t Render_screen ?old matrix
-
-let print_box t ?old matrix =
-  if Array.length matrix > 0 then
-    render_gen t Render_box ?old matrix
-  else
-    add_char t '\r'
-;;
-
 let nothing_from line mark =
-  let rec nothing_until_eol (line:LTerm_draw.point array) x =
+  let rec nothing_until_eol (line:LTerm_matrix_private.point array) x =
     if x = Array.length line then
       true
     else
       let c = Uchar.to_int line.(x).char in
       c = 10 || (c = 32 && nothing_until_eol line (x + 1))
   in
-  let rec nothing_before (line:LTerm_draw.point array) x mark =
+  let rec nothing_before (line:LTerm_matrix_private.point array) x mark =
     if x = mark then
       nothing_until_eol line x
     else
@@ -1288,26 +1283,20 @@ let nothing_from line mark =
   nothing_before line 0 mark
 ;;
 
-let print_box_with_newlines t ?(old=[||]) (matrix : LTerm_draw.matrix) =
-  (* Go the the beginnig of line and reset attributes *)
-  add_string t "\r\027[0m";
+let cast_matrix m = (m : LTerm_draw.Matrix.t :> LTerm_matrix_private.t)
+
+let empty_matrix = LTerm_draw.Matrix.create { cols = 0; rows = 0 }
+
+type raw_data = LTerm_matrix_private.point array array
+
+let render_loop t (old_data:raw_data) (new_data:raw_data) =
   (* The last displayed style. *)
   let curr_style = ref LTerm_style.default in
-  let rows = Array.length matrix in
-  let old_rows =
-    let old_rows = Array.length old in
-    if rows = 0 || old_rows <> rows ||
-       Array.length matrix.(0) <> Array.length old.(0) then
-      0 (* No update if dimmensions changed *)
-    else
-      old_rows
-  in
-  for y = 0 to rows - 1 do
-    let line = matrix.(y) in
+  for y = 0 to Array.length new_data - 1 do
+    let line = new_data.(y)          in
+    let cols = Array.length line - 1 in
     (* If the current line is equal to the displayed one, skip it *)
-    if y >= old_rows || line <> old.(y) then begin
-      let cols = Array.length line - 1 in
-      if cols < 0 then invalid_arg "LTerm.print_box_with_newlines";
+    if y >= Array.length old_data || line <> old_data.(y) then begin
       let x = ref 0 in
       let continue = ref true in
       while !x < cols && !continue do
@@ -1320,7 +1309,7 @@ let print_box_with_newlines t ?(old=[||]) (matrix : LTerm_draw.matrix) =
         let code = Uchar.to_int point.char in
         if code = 10 then begin
           (* Erase everything until the end of line, if needed. *)
-          if not (y < old_rows && nothing_from old.(y) !x) then
+          if not (y < Array.length old_data && nothing_from old_data.(y) !x) then
             add_3chars t '\027' '[' 'K';
           continue := false;
         end else begin
@@ -1329,16 +1318,43 @@ let print_box_with_newlines t ?(old=[||]) (matrix : LTerm_draw.matrix) =
         end
       done;
       let point = line.(!x) in
-      if Uchar.to_int point.char = 10 && y < rows - 1 then add_char t '\n'
+      if Uchar.to_int point.char = 10 && y < Array.length new_data - 1 then
+        add_char t '\n'
+    end else if y < Array.length new_data - 1 then begin
+      move t ~rows:1 ~cols:0;
+      (* Update the current style *)
+      let x = ref 0 in
+      while !x < cols - 1 && Uchar.to_int line.(!x).char <> 10 do incr x done;
+      curr_style := LTerm_style.on_default line.(!x).style
     end
-  done;
-  add_string t "\027[0m\r"
+  done
 ;;
 
-let print_box_with_newlines t ?old matrix =
-  if Array.length matrix > 0 then
-    print_box_with_newlines t ?old matrix
-  else
+let render_gen t ?(old=empty_matrix) matrix =
+  let matrix = cast_matrix matrix in
+  let old    = cast_matrix old    in
+  let old =
+    if matrix.size <> old.size then
+      (* No update if dimmensions changed *)
+      cast_matrix empty_matrix
+    else
+      old
+  in
+  render_loop t old.data matrix.data
+;;
+
+let render t ?old matrix =
+  add_string t "\027[H\027[0m"; (* Go the top-left and reset attributes *)
+  render_gen t ?old matrix;
+  add_string t "\027[0m"
+;;
+
+let print_box t ?old matrix =
+  if (LTerm_draw.Matrix.size matrix).rows > 0 then begin
+    add_string t "\r\027[0m";
+    render_gen t ?old matrix;
+    add_string t "\027[0m\r"
+  end else
     add_char t '\r'
 ;;
 
@@ -1446,24 +1462,24 @@ let commit ?end_of_display ~notifier t =
   | Closed -> failwith "LTerm.sync called on closed terminal"
   | Active | Inactive ->
     protect t.out_buf_mutex ~f:(fun () ->
-      let mode        = t.mode                        in
-      let cursor      = t.cursor                      in
-      let current_pos = t.out_pos                     in
-      let len         = current_pos - t.syncing_up_to in
-      let request     = Notifier.new_request notifier in
+      let mode         = t.mode                        in
+      let cursor       = t.cursor                      in
+      let current_pos  = t.out_pos                     in
+      let len          = current_pos - t.syncing_up_to in
+      let res, request = Notifier.new_request notifier in
       let sync : Sync.t =
         { len
         ; end_of_display = Set end_of_display
         ; mode
         ; cursor
-        ; request = Notifier.Request.create notifier request
+        ; request
         }
       in
       t.  mode_when_synced <- mode;
       t.cursor_when_synced <- cursor;
       t.syncing_up_to      <- current_pos;
       Thread_safe_queue.send t.syncs sync;
-      request)
+      res)
 ;;
 
 let commit_sync ?end_of_display t =

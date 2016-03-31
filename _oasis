@@ -54,19 +54,19 @@ Library "lambda-term2"
     LTerm_style,
     LTerm_geom,
     LTerm_draw,
+    LTerm_full_screen,
 #    LTerm_widget,
 #    LTerm_edit,
 #    LTerm_read_line,
     LTerm_text
-#    LTerm_ui,
 #    LTerm_resources,
 #    LTerm_inputrc,
 #    LTerm_history,
-#    LTerm_full_screen
   InternalModules:
     LTerm_bigstring,
     LTerm_color_mappings,
-    LTerm_ansi_parser
+    LTerm_ansi_parser,
+    LTerm_matrix_private
 #    LTerm_resource_lexer,
 #    widget_impl/LTerm_widget_base_impl,
 #    widget_impl/LTerm_buttons_impl,
@@ -93,6 +93,13 @@ Executable events
   Install: false
   CompiledObject: best
   MainIs: events.ml
+  BuildDepends: lambda-term2
+
+Executable mini_game
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: mini_game.ml
   BuildDepends: lambda-term2
 
 Executable colors

@@ -12,50 +12,91 @@
 open Zed
 open LTerm_geom
 
-(** Type of a point in a matrix of styled characters. *)
-type point =
-  { mutable char  : Uchar.t
-  ; mutable style : LTerm_style.t
-  } [@@deriving sexp]
+type context
+(** Type of a drawing contexts. *)
 
-type matrix = point array array [@@deriving sexp]
-    (** Type of a matrix of points. The matrix is indexed by lines
-        then columns, i.e. to access the point at line [l] and column
-        [c] in matrix [m] you should use [m.(l).(c)]. *)
+exception Out_of_bounds
+(** Exception raised when trying to access a point that is outside the bounds of a
+    context. *)
 
-val make_matrix : size -> matrix
-  (** [matrix size] creates a matrix of the given size containing only
-      blank characters. *)
+(** Underlying storage *)
+module Matrix : sig
+  type t = private LTerm_matrix_private.t
 
-val set_style : point -> style:LTerm_style.t -> unit
+  val size : t -> size
+
+  val create  : size -> t
+  (** Create a new matrix of the given size *)
+
+  val resize  : t -> size -> t
+  (** Resize a matrix, if necessary. If the size is unchanged, it returns the original
+      matrix, otherwise a new one where the intersection of the old and new one is
+      preserved.
+
+      In any case, you shouldn't use the original matrix after that. *)
+
+  val context : t -> context
+
+  val context_with_hidden_newlines : t -> context
+  (** Same as {!context} except that it accepts "hidden newlines" at the edge of the
+      screen. In this context you can add a hidden newline at the end of any row.
+
+      This is for the case where you want to print text ending with a newline character
+      and the text ends at the right border.
+
+      For instance with a terminal with 6 columns:
+
+      {[
+        abcdef
+        123456
+      ]}
+
+      Without a hidden newline at the end of [abcdef], selecting the two lines with the
+      mouse will select "abcdef123456". With a hidden newlines it will select
+      "abcdef\n123456". *)
+end
+
+val size : context -> size
+(** [size ctx] returns the size of the given context. *)
+
+val sub : context -> rect -> context
+(** [sub ctx rect] creates a sub-context from the given context. It raises
+    {!Out_of_bounds} if the rectangle is not contained in the given context.
+
+    The new context doesn't support hidden newlines, as this only make sense for the main
+    context.
+*)
+
+val clear : context -> unit
+(** [clear ctx] clears the given context. It resets all styles to their default and sets
+    characters to spaces. *)
 
 (** In all the following functions, the [style] argument defaults to [LTerm_style.none] *)
 
-type context [@@deriving sexp_of]
-  (** Type of contexts. A context is used for drawing. *)
+val set
+  :  context
+  -> row:int
+  -> col:int
+  -> ?style:LTerm_style.t
+  -> Uchar.t
+  -> unit
 
-val context : matrix -> size -> context
-  (** [context m s] creates a context from a matrix [m] of size
-      [s]. It raises [Invalid_argument] if [s] is not the size of
-      [m]. *)
+val set_style : context -> row:int -> col:int -> LTerm_style.t -> unit
 
-exception Out_of_bounds
-  (** Exception raised when trying to access a point that is outside
-      the bounds of a context. *)
+val set_hidden_newline : context -> row:int -> bool -> unit
+(** Raises [Invalid_argument] if the context doesn't support hidden newlines *)
 
-val size : context -> size
-  (** [size ctx] returns the size of the given context. *)
+val get
+  :  context
+  -> row:int
+  -> col:int
+  -> Uchar.t
 
-val matrix : context -> matrix
-
-val sub : context -> rect -> context
-  (** [sub ctx rect] creates a sub-context from the given context. It
-      raises {!Out_of_bounds} if the rectangle is not contained in the
-      given context. *)
-
-val clear : context -> unit
-  (** [clear ctx] clears the given context. It resets all styles to
-      their default and sets characters to spaces. *)
+val get_style
+  :  context
+  -> row:int
+  -> col:int
+  -> LTerm_style.t
 
 val fill
   :  context
@@ -68,19 +109,6 @@ val fill_style
   -> style:LTerm_style.t
   -> unit
 
-val point : context -> row:int -> col:int -> point
-  (** [point ctx row column] returns the point at given position in
-      [ctx]. It raises {!Out_of_bounds} if the coordinates are outside
-      the given context. *)
-
-val draw_char
-  :  context
-  -> row:int
-  -> col:int
-  -> ?style:LTerm_style.t
-  -> Uchar.t
-  -> unit
-
 module type Text_drawing = sig
   type t
 
@@ -91,6 +119,8 @@ module type Text_drawing = sig
     -> ?style:LTerm_style.t
     -> t
     -> unit
+  (** Draw some text on the given context. This handles hidden newlines properly on the
+      main context. *)
 
   val draw_aligned
     :  context

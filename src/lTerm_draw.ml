@@ -8,63 +8,36 @@
  *)
 
 open StdLabels
-open Zed
 
-type point =
+module G = LTerm_geom
+
+let space   = Uchar.of_char ' '
+let newline = Uchar.of_char '\n'
+
+type point = LTerm_matrix_private.point =
   { mutable char  : Uchar.t
   ; mutable style : LTerm_style.t
-  } [@@deriving sexp]
-
-type matrix = point array array [@@deriving sexp]
-
-let uspace = Uchar.of_char ' '
-
-let make_matrix (size : LTerm_geom.size) =
-  Array.init
-    size.rows
-    ~f:(fun _ ->
-      Array.init
-        size.cols
-        ~f:(fun _ -> { char  = uspace
-                     ; style = LTerm_style.default
-                     }))
-;;
-
-let set_style point ~style =
-  point.style <- LTerm_style.merge point.style style
-;;
-
-type context =
-  { matrix      : matrix
-  ; matrix_size : LTerm_geom.size
-  ; row1        : int
-  ; col1        : int
-  ; row2        : int
-  ; col2        : int
-  } [@@deriving sexp_of]
-
-let context m (s : LTerm_geom.size) =
-  if Array.length m <> s.rows then invalid_arg "LTerm_draw.context";
-  Array.iter m
-    ~f:(fun l -> if Array.length l <> s.cols then invalid_arg "LTerm_draw.context");
-  { matrix      = m
-  ; matrix_size = s
-  ; row1        = 0
-  ; col1        = 0
-  ; row2        = s.rows
-  ; col2        = s.cols
   }
 
-let size ctx : LTerm_geom.size =
+type context = LTerm_matrix_private.context =
+  { matrix          : point array array
+  ; row1            : int
+  ; col1            : int
+  ; row2            : int
+  ; col2            : int
+  ; hidden_newlines : bool
+  }
+
+module Matrix = LTerm_matrix_private
+
+let size ctx : G.size =
   { rows = ctx.row2 - ctx.row1
   ; cols = ctx.col2 - ctx.col1
   }
 
-let matrix ctx = ctx.matrix
-
 exception Out_of_bounds
 
-let sub ctx (rect:LTerm_geom.rect) =
+let sub ctx (rect:G.rect) =
   if rect.row1 < 0 || rect.col1 < 0 || rect.row1 > rect.row2 || rect.col1 > rect.col2 then
     raise Out_of_bounds;
   let row1 = ctx.row1 + rect.row1
@@ -72,36 +45,14 @@ let sub ctx (rect:LTerm_geom.rect) =
   and row2 = ctx.row1 + rect.row2
   and col2 = ctx.col1 + rect.col2 in
   if row2 > ctx.row2 || col2 > ctx.col2 then raise Out_of_bounds;
-  { ctx with row1; col1; row2; col2 }
-
-let space   = Uchar.of_char ' '
-let newline = Uchar.of_char '\n'
+  { ctx with row1; col1; row2; col2; hidden_newlines = false }
 
 let clear ctx =
   for row = ctx.row1 to ctx.row2 - 1 do
-    for col = ctx.col1 to ctx.col2 - 1 do
+    for col = ctx.col1 to ctx.col2 - (if ctx.hidden_newlines then 0 else 1) do
       let point = ctx.matrix.(row).(col) in
       point.char  <- space;
       point.style <- LTerm_style.default;
-    done
-  done
-
-let default_style = LTerm_style.none
-
-let fill ctx ?(style=default_style) ch =
-  for row = ctx.row1 to ctx.row2 - 1 do
-    for col = ctx.col1 to ctx.col2 - 1 do
-      let point = ctx.matrix.(row).(col) in
-      point.char <- ch;
-      set_style point ~style
-    done
-  done
-
-let fill_style ctx ~style =
-  for row = ctx.row1 to ctx.row2 - 1 do
-    for col = ctx.col1 to ctx.col2 - 1 do
-      let point = ctx.matrix.(row).(col) in
-      set_style point ~style
     done
   done
 
@@ -111,14 +62,70 @@ let point ctx ~row ~col =
   if row >= ctx.row2 || col >= ctx.col2 then raise Out_of_bounds;
   ctx.matrix.(row).(col)
 
+let get       ctx ~row ~col = (point ctx ~row ~col).char
+let get_style ctx ~row ~col = (point ctx ~row ~col).style
+
+let default_style = LTerm_style.none
+
+let set ctx ~row ~col ?(style=default_style) char =
+  let abs_row = ctx.row1 + row and abs_col = ctx.col1 + col in
+  if row >= 0 && col >= 0 && abs_row < ctx.row2 && abs_col < ctx.col2 then begin
+    let pt = ctx.matrix.(row).(col) in
+    pt.char <- char;
+    pt.style <- LTerm_style.merge pt.style style
+  end
+;;
+
+let set_point_style pt ~style =
+  pt.style <- LTerm_style.merge pt.style style
+;;
+
+let set_style ctx ~row ~col style =
+  let abs_row = ctx.row1 + row and abs_col = ctx.col1 + col in
+  if row >= 0 && col >= 0 && abs_row < ctx.row2 && abs_col < ctx.col2 then begin
+    let pt = ctx.matrix.(row).(col) in
+    set_point_style pt style
+  end
+;;
+
+let set_hidden_newline ctx ~row state =
+  if not ctx.hidden_newlines then
+    invalid_arg "LTerm_draw.set_hidden_newline";
+  if row < 0 then raise Out_of_bounds;
+  let row = ctx.row1 + row in
+  if row >= ctx.row2 then raise Out_of_bounds;
+  let pt = ctx.matrix.(row).(ctx.row2) in
+  pt.char <- if state then newline else space
+;;
+
+let fill ctx ?(style=default_style) ch =
+  for row = ctx.row1 to ctx.row2 - 1 do
+    for col = ctx.col1 to ctx.col2 - 1 do
+      let point = ctx.matrix.(row).(col) in
+      point.char <- ch;
+      set_point_style point ~style
+    done
+  done
+;;
+
+let fill_style ctx ~style =
+  for row = ctx.row1 to ctx.row2 - 1 do
+    for col = ctx.col1 to ctx.col2 - 1 do
+      let point = ctx.matrix.(row).(col) in
+      set_point_style point ~style
+    done
+  done
+;;
+
 let draw_char ctx ~row ~col ?(style=default_style) ch =
   if row >= 0 && col >= 0 then begin
     let row = ctx.row1 + row and col = ctx.col1 + col in
     if row < ctx.row2 && col < ctx.col2 then
       let point = ctx.matrix.(row).(col) in
       point.char <- ch;
-      set_style point ~style
+      set_point_style point ~style
   end
+;;
 
 module type Text_drawing = sig
   type t
@@ -134,7 +141,7 @@ module type Text_drawing = sig
   val draw_aligned
     :  context
     -> row:int
-    -> align:LTerm_geom.Horz_alignment.t
+    -> align:G.Horz_alignment.t
     -> ?style:LTerm_style.t
     -> t
     -> unit
@@ -153,17 +160,19 @@ module Make_text_drawing(Text : sig
     let rec loop row col ofs =
       if ofs < Text.limit txt then begin
         let ch = Text.char txt ofs in
-        if ch = newline then
+        if ch = newline then begin
+          if ctx.hidden_newlines && col = ctx.row2 then
+            ctx.matrix.(row).(col).char <- newline;
           loop (row + 1) ctx.col1 (Text.next txt ofs)
-        else begin
+        end else begin
           if row >= ctx.row1
           && row <  ctx.row2
           && col >= ctx.col1
           && col <  ctx.col2 then begin
             let point = ctx.matrix.(row).(col) in
             point.char <- ch;
-            set_style point ~style;
-            set_style point ~style:(Text.style txt ofs)
+            set_point_style point ~style;
+            set_point_style point ~style:(Text.style txt ofs)
           end;
           loop row (col + 1) (Text.next txt ofs)
         end
@@ -172,7 +181,7 @@ module Make_text_drawing(Text : sig
     loop (ctx.row1 + row) (ctx.col1 + col) 0
   ;;
 
-  let draw_aligned ctx ~row ~(align:LTerm_geom.Horz_alignment.t)
+  let draw_aligned ctx ~row ~(align:G.Horz_alignment.t)
         ?(style=default_style) txt =
     let rec line_length ofs len =
       if ofs = Text.limit txt then
@@ -187,17 +196,17 @@ module Make_text_drawing(Text : sig
     let rec loop row col ofs =
       if ofs < Text.limit txt then begin
         let ch = Text.char txt ofs in
-        if ch = newline then
+        if ch = newline then begin
           Text.next txt ofs
-        else begin
+        end else begin
           if row >= ctx.row1
           && row <  ctx.row2
           && col >= ctx.col1
           && col <  ctx.col2 then begin
             let point = ctx.matrix.(row).(col) in
             point.char <- ch;
-            set_style point ~style;
-            set_style point ~style:(Text.style txt ofs)
+            set_point_style point ~style;
+            set_point_style point ~style:(Text.style txt ofs)
           end;
           loop row (col + 1) (Text.next txt ofs)
         end
@@ -458,32 +467,32 @@ let draw_piece ctx ~row ~col ?(style=default_style) piece =
   && row < ctx.row2
   && col < ctx.col2 then begin
     let piece =
-      if row > 0 then
+      if row > ctx.row1 then
         update_piece ctx piece (row - 1) col Piece.Bits.top Piece.Bits.bottom
       else
         piece
     in
     let piece =
-      if row < ctx.matrix_size.rows - 1 then
+      if row < ctx.row2 - 1 then
         update_piece ctx piece (row + 1) col Piece.Bits.bottom Piece.Bits.top
       else
         piece
     in
     let piece =
-      if col > 0 then begin
+      if col > ctx.col1 then begin
         update_piece ctx piece row (col - 1) Piece.Bits.left Piece.Bits.right
       end else
         piece
     in
     let piece =
-      if col < ctx.matrix_size.cols - 1 then begin
+      if col < ctx.col2 - 1 then begin
         update_piece ctx piece row (col + 1) Piece.Bits.right Piece.Bits.left
       end else
         piece
     in
     let point = ctx.matrix.(row).(col) in
     point.char <- Piece.to_char piece;
-    set_style point ~style
+    set_point_style point ~style
   end;
 ;;
 
@@ -503,7 +512,7 @@ let draw_vline ctx ~row ~col ~len ?(style=default_style) connection =
 
 let draw_frame ctx rect ?(style=default_style)
       connection =
-  let { LTerm_geom. col1; col2; row1; row2 } = rect in
+  let { G. col1; col2; row1; row2 } = rect in
   let hline = Piece.hline connection in
   let vline = Piece.vline connection in
   for col = col1 + 1 to col2 - 2 do

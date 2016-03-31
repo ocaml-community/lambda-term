@@ -194,15 +194,21 @@ module Signal = struct
     | Susp -> "susp"
 end
 
+module User = struct
+  type t = ..
+end
+
 type t =
-  | Text         of string
-  | Char         of Modifiers.t * char
-  | Uchar        of Modifiers.t * Uchar.t
-  | Key          of Modifiers.t * Key.t
-  | Sequence     of string
-  | Button_down  of Modifiers.t * int * LTerm_geom.coord
-  | Button_up    of Modifiers.t * int * LTerm_geom.coord
-  | Signal       of Signal.t
+  | Char          of Modifiers.t * char
+  | Uchar         of Modifiers.t * Uchar.t
+  | Key           of Modifiers.t * Key.t
+  | Sequence      of string
+  | Button_down   of Modifiers.t * int * LTerm_geom.coord
+  | Button_up     of Modifiers.t * int * LTerm_geom.coord
+  | Button_motion of Modifiers.t * int * LTerm_geom.coord
+  | Mouse_motion  of Modifiers.t * LTerm_geom.coord
+  | User          of User.t
+  | Signal        of Signal.t
   | Resume
   | Resize
   | Closed
@@ -216,7 +222,6 @@ let string_of_coord (c : LTerm_geom.coord) =
 ;;
 
 let to_string = function
-  | Text s                -> s
   | Char  (m, ' ')        -> Modifiers.to_string m ^ "space"
   | Char  (m, c)          -> Modifiers.to_string m ^ Zed_utf8.singleton
                                                        (Uchar.of_char c)
@@ -227,10 +232,15 @@ let to_string = function
                                (Modifiers.to_string m) b (string_of_coord c)
   | Button_up   (m, b, c) -> Printf.sprintf "%sbutton-up-%d%s"
                                (Modifiers.to_string m) b (string_of_coord c)
+  | Button_motion (m, b, c) -> Printf.sprintf "%sbutton-motion-%d%s"
+                                 (Modifiers.to_string m) b (string_of_coord c)
+  | Mouse_motion (m, c) -> Printf.sprintf "%smouse-motion%s"
+                             (Modifiers.to_string m) (string_of_coord c)
   | Signal s              -> Signal.to_string s
   | Resume                -> "resume"
   | Resize                -> "resize"
   | Closed                -> "closed"
+  | User _                -> "user-event"
 ;;
 
 type pattern =
@@ -253,20 +263,23 @@ let make_char m n =
 let zero_coord : LTerm_geom.coord = { row = 0; col = 0 }
 
 let patterns =
-  [ No_mod   ("\027%s"               , fun s -> Sequence s)
-  ; No_mod   ("intr"                 , Signal Intr)
-  ; No_mod   ("quit"                 , Signal Quit)
-  ; No_mod   ("susp"                 , Signal Susp)
-  ; No_mod   ("resume"               , Resume)
-  ; No_mod   ("resize"               , Resize)
-  ; No_mod   ("closed"               , Closed)
-  ; With_mod ("space"                , fun m -> Char (m, ' '))
-  ; With_mod ("U+%x"                 , fun m n -> make_char m n)
-  ; With_mod ("button-down-%u"       , fun m b -> Button_down (m, b, zero_coord))
-  ; With_mod ("button-up-%u"         , fun m b -> Button_up (m, b, zero_coord))
-  ; With_mod ("button-down-%u-%u:%u" , fun m b row col -> Button_down (m, b, {row; col}))
-  ; With_mod ("button-up-%u-%u:%u"   , fun m b row col -> Button_up (m, b, {row; col}))
-  ; No_mod   ("%s"                   , fun s -> Text s)
+  [ No_mod   ("\027%s"                , fun s -> Sequence s)
+  ; No_mod   ("intr"                  , Signal Intr)
+  ; No_mod   ("quit"                  , Signal Quit)
+  ; No_mod   ("susp"                  , Signal Susp)
+  ; No_mod   ("resume"                , Resume)
+  ; No_mod   ("resize"                , Resize)
+  ; No_mod   ("closed"                , Closed)
+  ; With_mod ("space"                 , fun m -> Char (m, ' '))
+  ; With_mod ("U+%x"                  , fun m n -> make_char m n)
+  ; With_mod ("button-down-%u"        , fun m b -> Button_down (m, b, zero_coord))
+  ; With_mod ("button-up-%u"          , fun m b -> Button_up (m, b, zero_coord))
+  ; With_mod ("button-motion-%u"      , fun m b -> Button_motion (m, b, zero_coord))
+  ; With_mod ("mouse-motion"          , fun m -> Mouse_motion (m, zero_coord))
+  ; With_mod ("button-down-%u-%u:%u"  , fun m b row col -> Button_down (m, b, {row; col}))
+  ; With_mod ("button-up-%u-%u:%u"    , fun m b row col -> Button_up (m, b, {row; col}))
+  ; With_mod ("button-motion-%u-%u:%u", fun m b row col -> Button_motion (m, b, {row; col}))
+  ; With_mod ("mouse-motion-%u:%u"    , fun m row col -> Mouse_motion (m, {row; col}))
   ]
 ;;
 
@@ -278,7 +291,7 @@ let patterns =
 
 let rec search_patterns m s patterns =
   match patterns with
-  | [] ->  Text s
+  | [] -> invalid_arg "LTerm_event.of_string"
   | No_mod (pat, f) :: rest ->
     if m = Modifiers.N then try_pattern pat f m s rest else search_patterns m s rest
   | With_mod (pat, f) :: rest ->

@@ -33,7 +33,7 @@ module Event_parser : sig
   (** Discard all pending characters in the internal buffer. *)
   val discard : t -> unit
 
-  (** Readers one event from the given [t]. This is a blocking operation, which in
+  (** Reads at least one event from the given [t]. This is a blocking operation, which in
       particular might sleep for [escape_time] it it needs to after reading the escape
       character.
 
@@ -41,7 +41,7 @@ module Event_parser : sig
       it re-enabled in the meantime.
 
       Calls to read for a given [t] must be serialized. *)
-  val read : t -> LTerm_event.t option
+  val read : t -> LTerm_event.t list
 
   (** Enable/disable the event parser *)
   val set_active : t -> bool -> unit

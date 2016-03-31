@@ -71,18 +71,23 @@ module Signal : sig
     | Susp (** Ctrl+Z *)
 end
 
-(** The [Text] case could be split in multiple [Char] or [Uchar] events but this turn out
-    to be quite slow when pasting text with the mouse. *)
+module User : sig
+  type t = ..
+end
+
 type t =
-  | Text        of string (** Text without escape sequence (including newlines) *)
-  | Char        of Modifiers.t * char (** Ascii characters *)
-  | Uchar       of Modifiers.t * Uchar.t
-  | Key         of Modifiers.t * Key.t
-  | Sequence    of string
-  | Button_down of Modifiers.t * int * LTerm_geom.coord (** Mouse button pressed  *)
-  | Button_up   of Modifiers.t * int * LTerm_geom.coord (** Mouse button released *)
-  | Signal      of Signal.t (** Signal received             *)
-  | Resume                  (** Resuming from a TSTP signal *)
+  | Char          of Modifiers.t * char (** Ascii characters *)
+  | Uchar         of Modifiers.t * Uchar.t
+  | Key           of Modifiers.t * Key.t
+  | Sequence      of string
+  | Button_down   of Modifiers.t * int * LTerm_geom.coord (** Mouse button pressed  *)
+  | Button_up     of Modifiers.t * int * LTerm_geom.coord (** Mouse button released *)
+  | Button_motion of Modifiers.t * int * LTerm_geom.coord (** Mouse motion while button
+                                                              pressed *)
+  | Mouse_motion  of Modifiers.t * LTerm_geom.coord
+  | User          of User.t
+  | Signal        of Signal.t (** Signal received             *)
+  | Resume                    (** Resuming from a TSTP signal *)
   | Resize
   | Closed
 

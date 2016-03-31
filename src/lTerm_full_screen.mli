@@ -1,24 +1,21 @@
 (** Full screen applications *)
 
-open Async.Std
-
-type t
+type 'state t
 
 val create
-  :  LTerm.t
+  :  ?terminal:LTerm.t
   -> ?setup_signals:bool
-  -> ?enable_mouse:bool
-  -> (LTerm_draw.context -> LTerm_geom.coord option)
-  -> t
+  -> ?mouse_events:LTerm.Mouse_events.t
+  -> (LTerm_draw.context -> 'state -> LTerm_geom.coord option)
+  -> 'state t
 
-val quit : t -> unit Deferred.t
+val quit : _ t -> unit
 
-(** Queue a refresh request *)
-val refresh : t -> unit
+(** Queue a refresh request. *)
+val refresh : _ t -> unit
 
-(** The next draw will be a full draw *)
-val force_redraw : t -> unit
+val size : _ t -> LTerm_geom.size
 
-val size : t -> LTerm_geom.size
+val run_sync : 'a t -> init:'a -> f:('a -> LTerm_event.t -> 'a) -> 'a
 
-val wait : ?no_text:bool -> t -> LTerm_event.t Deferred.t
+val send_event : _ t -> LTerm_event.t -> unit

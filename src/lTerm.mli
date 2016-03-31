@@ -132,10 +132,12 @@ module Notifier : sig
       thread (a thread internal to lambda-term). [notify] should always be quick, as it
       will block *)
   val make
-    :  new_request:(unit -> 'a)
+    :  new_request:(unit -> 'a * 'b)
     -> notify:('a -> unit)
     -> unit
-    -> 'a t
+    -> 'b t
+
+  val blocking : unit Lazy.t t
 end
 
 type ('a, 'b) poll_result =
@@ -149,6 +151,9 @@ type ('a, 'b) poll_result =
     This can be used to integrate lambda-term with a custom main loop, or a cooperative
     library like Lwt or Async. *)
 val poll_event : t -> notifier:'a Notifier.t -> (LTerm_event.t, 'a) poll_result
+
+val send_event  : t -> LTerm_event.t      -> unit
+val send_events : t -> LTerm_event.t list -> unit
 
 (** {6 State change} *)
 
@@ -293,11 +298,11 @@ val clear_screen : t -> toto
 
 val clear_contents : t -> unit
 *)
-val render : t -> ?old:LTerm_draw.matrix -> LTerm_draw.matrix -> unit
+val render : t -> ?old:LTerm_draw.Matrix.t -> LTerm_draw.Matrix.t -> unit
 (** Render an offscreen array to the given terminal. [old] is the currently displayed
     matrix. If specified it is used to reduce the amount of text sent to the terminal. *)
 
-val print_box : t -> ?old:LTerm_draw.matrix -> LTerm_draw.matrix -> unit
+val print_box : t -> ?old:LTerm_draw.Matrix.t -> LTerm_draw.Matrix.t -> unit
 (** [print_box term matrix] prints the contents of [matrix] starting
     at current cursor row. Note that when you have the choice
     between using {!fprints} and {!print_box} you should use
@@ -306,22 +311,6 @@ val print_box : t -> ?old:LTerm_draw.matrix -> LTerm_draw.matrix -> unit
 
     The cursor is moved to the beginning of the last displayed
     line. *)
-
-val print_box_with_newlines : t -> ?old:LTerm_draw.matrix -> LTerm_draw.matrix -> unit
-(** [print_box term matrix] Same as {!print_box} but [matrix]
-    may contains newline characters. It must contain one more column
-    that the terminal (in case a line of the length of the terminal
-    ends with a newline).
-
-    The difference between {!print_box} and
-    {!print_box_with_newlines} is that when the text is selected in
-    the terminal, with {!print_box} it will always be a box with the
-    dimensions of [matrix]. With {!print_box_with_newlines} it may
-    contains lines longer than the width of the terminal.
-
-    The contents of a line after the first newline character (if
-    any) in a row of [matrix] is ignored. The rest of the line get
-    the style of the newline character. *)
 
 (** {6 Well known instances} *)
 

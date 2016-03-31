@@ -1005,22 +1005,8 @@ module Event_parser = struct
       Key (N, Backspace)
     | '\x20' .. '\x7e' | '\x80' .. '\xff' as byte ->
       (* Text *)
-      let start_of_text = t.ofs in
-      let end_of_text   = scan_text t (start_of_text + 1) in
-      t.ofs <- end_of_text;
-      if end_of_text = start_of_text + 1 then
-        (* Fast path for the common case *)
-        make_char N byte
-      else begin
-        let s =
-          Bigstring.sub_string t.buffer
-            ~pos:start_of_text
-            ~len:(end_of_text - start_of_text)
-        in
-        match Zed_utf8.check s with
-        | Ok 1 -> make_uchar N (Zed_utf8.extract s 0)
-        | _    -> Text s
-      end
+      let ch = parse_uchar t ~can_refill ~start:t.ofs byte in
+      make_uchar N ch
     | '\x1b' ->
       (* Escape sequences *)
       match peek_escape t ~can_refill ~start:(t.ofs + 1) with
@@ -1076,14 +1062,10 @@ module Event_parser = struct
           let saved_ofs = t.ofs in
           try
             t.ofs <- t.ofs + 3;
-            let mask = fetch_next_uchar t |> Uchar.to_int in
-            let col  = fetch_next_uchar t |> Uchar.to_int in
-            let row  = fetch_next_uchar t |> Uchar.to_int in
-            let coord : LTerm_geom.coord =
-              { col = col - 33
-              ; row = row - 33
-              }
-            in
+            let mask = (fetch_next_uchar t |> Uchar.to_int) - 32 in
+            let col  = (fetch_next_uchar t |> Uchar.to_int) - 33 in
+            let row  = (fetch_next_uchar t |> Uchar.to_int) - 33 in
+            let coord : LTerm_geom.coord = { col; row } in
             let modifiers : LTerm_event.Modifiers.t =
               match mask land 0b00011000 with
               | 0b00000000 -> N
@@ -1092,31 +1074,33 @@ module Event_parser = struct
               | 0b00011000 -> C_M
               | _ -> assert false
             in
-            if mask = 0b00100011 then begin
-              let button_pressed = t.button_pressed in
-              if button_pressed < 0 then
-                discard_event ()
+            let is_motion = mask land 32 <> 0 in
+            if mask land 3 = 3 (* button up *) then begin
+              if is_motion then
+                Mouse_motion (modifiers, coord)
               else begin
-                t.button_pressed <- -1;
-                Button_up (modifiers, button_pressed, coord)
+                let button_pressed = t.button_pressed in
+                if button_pressed < 0 then
+                  (* This is what xterm does *)
+                  Mouse_motion (modifiers, coord)
+                else begin
+                  t.button_pressed <- -1;
+                  Button_up (modifiers, button_pressed, coord)
+                end
               end
             end else begin
-              let button =
-                match mask land 0b11000111 with
-                | 0b00000000 -> 0
-                | 0b00000001 -> 1
-                | 0b00000010 -> 2
-                | 0b01000000 -> 3
-                | 0b01000001 -> 4
-                | 0b01000010 -> 5
-                | 0b01000011 -> 6
-                | 0b01000100 -> 7
-                | 0b01000101 -> 8
-                | _          -> -1
-              in
-              t.button_pressed <- button;
-              if button < 0 then discard_event ();
-              Button_down (modifiers, button, coord)
+              let button = (mask land 7) + (((mask land 64) lsr 6) * 3) + 1 in
+              if is_motion then begin
+                if button = 4 || button = 5 then
+                  (* Special case for the wheel *)
+                  Mouse_motion (modifiers, coord)
+                else
+                  Button_motion (modifiers, button, coord)
+              end else begin
+                let button = (mask land 7) + (((mask land 64) lsr 6) * 3) + 1 in
+                if button <= 3 then t.button_pressed <- button;
+                Button_down (modifiers, button, coord)
+              end
             end
           with Need_more when not can_refill ->
             t.ofs <- saved_ofs + 3;
@@ -1156,6 +1140,23 @@ module Event_parser = struct
       | `Read 0   -> raise End_of_file
       | `Read _   -> read t
       | `Disabled -> None
+  ;;
+
+  let rec immediately_available_events t acc =
+    if t.ofs = t.max then
+      List.rev acc
+    else
+      match parse_event t ~can_refill:true with
+      | event -> immediately_available_events t (event :: acc)
+      | exception Discard_event -> immediately_available_events t acc
+      | exception Need_more -> List.rev acc
+  ;;
+
+  let read t =
+    match read t with
+    | None -> []
+    | Some ev -> ev :: immediately_available_events t []
+  ;;
 
   let set_active t active = t.active <- active
 end
