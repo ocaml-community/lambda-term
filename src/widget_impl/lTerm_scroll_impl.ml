@@ -16,26 +16,31 @@ class type adjustment = object
   method set_range : int -> unit
   method offset : int
   method set_offset : int -> unit
+  method on_offset_change : ?switch:LTerm_widget_callbacks.switch -> 
+    (int -> unit) -> unit
   method incr : unit
   method decr : unit
 end
 
-class virtual scrollbar ~default_scroll_bar_size = 
+class virtual scrollbar = 
   let map_range range1 range2 offset1 = 
-    let map_range range1 range2 offset1 = 
-      max 0. (min range2 (range2 *. offset1 /. range1)) 
-    in
-    let rnd x = int_of_float (x +. 0.5) in
-    rnd @@ map_range 
-      (float_of_int range1)
-      (float_of_int range2)
-      (float_of_int offset1)
+    if range1 = 0 then 0 
+    else
+      let map_range range1 range2 offset1 = 
+        max 0. (min range2 (range2 *. offset1 /. range1)) 
+      in
+      let rnd x = int_of_float (x +. 0.5) in
+      rnd @@ map_range 
+        (float_of_int range1)
+        (float_of_int range2)
+        (float_of_int offset1)
   in
   object(self)
     inherit t "scrollbar"
 
     method can_focus = true
 
+    (* style *)
     val mutable focused_style = LTerm_style.none
     val mutable unfocused_style = LTerm_style.none
     method update_resources =
@@ -43,13 +48,54 @@ class virtual scrollbar ~default_scroll_bar_size =
       focused_style <- LTerm_resources.get_style (rc ^ ".focused") resources;
       unfocused_style <- LTerm_resources.get_style (rc ^ ".unfocused") resources
 
+    (* callback *)
+    val offset_change_callbacks = Lwt_sequence.create ()
+    method on_offset_change ?switch (f : int -> unit) = 
+      LTerm_widget_callbacks.register switch offset_change_callbacks f
+
+    (* adjustable *)
     val mutable range = 0
     val mutable offset = 0
     method range = range
     method set_range r = range <- max 0 r
     method offset = offset
-    method set_offset o = offset <- max 0 (min (range-1) o); self#queue_draw
-    method scroll_bar_size = default_scroll_bar_size
+    method set_offset o = 
+      let o' = max 0 (min (range-1) o) in
+      if offset <> o' then begin
+        offset <- o';  
+        LTerm_widget_callbacks.exec_callbacks offset_change_callbacks o'
+      end;
+      self#queue_draw
+    
+    val mutable scroll_bar_mode : [ `fixed of int | `dynamic of int ] = `fixed 5
+    method set_scroll_bar_mode m = scroll_bar_mode <- m
+    
+    method private scroll_bar_size_fixed size = 
+      let wsize = self#scroll_window_size in
+      if wsize <= size then max 1 (wsize-1)
+      else max 1 size
+
+    method private scroll_bar_size_dynamic max_step_size = 
+      if max_step_size <= 0 then
+        max 1 (self#scroll_window_size / max 1 range)
+      else
+        let wsize = max 1. (float_of_int self#scroll_window_size) in
+        let range = max 1. (float_of_int range) in
+        let max_step_size = float_of_int max_step_size in
+        (* minimum number of steps *)
+        let min_bar_steps = range /. max_step_size in 
+        (* computed size *)
+        let size = wsize /. range in
+        let steps = wsize -. size +. 1. in
+        if steps > min_bar_steps then max 1 (int_of_float (wsize -. min_bar_steps +. 1.))
+        else max 1 (int_of_float size)
+        (*max 1 (int_of_float (wsize -. min_bar_steps +. 1.))*)
+
+
+    method scroll_bar_size = 
+      match scroll_bar_mode with
+      | `fixed size -> self#scroll_bar_size_fixed size
+      | `dynamic step -> self#scroll_bar_size_dynamic step
 
     method virtual private mouse_offset : LTerm_mouse.t -> rect -> int
     method virtual private key_scroll_incr : LTerm_key.code
@@ -84,40 +130,27 @@ class virtual scrollbar ~default_scroll_bar_size =
       else
         self#set_offset (self#offset-1);
 
-    (* methods for setting offset from mouse click.
-      
-       ratio: scale whole scroll bar area into the number of steps.  The scroll
-              bar will not necessarily end up where clicked.  Also, the extremities
-              need to be clicked exactly.
-      
-       middle: place the middle of the scroll bar at the cursor.  Large scroll bars
-               will reduce the clickable area by their size.  Nice otherwise.
-      
-       left/right: place the edges of the scroll bar at the cursor.  Test only.
-                   Similar problem to middle. *)
-
+    (* scale whole scroll bar area into the number of steps.  The scroll
+       bar will not necessarily end up where clicked.  Add a small dead_zone
+       at far left and right *)
     method private mouse_scale_ratio scroll = 
       let steps, size = self#scroll_bar_steps, self#scroll_bar_size in
-      map_range (self#scroll_window_size - 1) (steps - 1) scroll 
+      let wsize = self#scroll_window_size in
+      let dead_zone = if wsize < 12 then wsize/4 else 3 in
+      map_range (wsize - dead_zone - 1) (steps - 1) (scroll - dead_zone/2)
 
+    (* place the middle of the scroll bar at the cursor.  Large scroll bars
+       will reduce the clickable area by their size. *)
     method private mouse_scale_middle scroll = 
       let size = self#scroll_bar_size in
       scroll - (size/2)
 
-    method private mouse_scale_left scroll = scroll
-
-    method private mouse_scale_right scroll = 
-      let size = self#scroll_bar_size in
-      scroll - size + 1
-
-    val mutable mouse_mode : [`ratio|`middle|`left|`right] = `ratio
+    val mutable mouse_mode : [`middle | `ratio] = `middle
     method set_mouse_mode m = mouse_mode <- m
     method private mouse_scale scroll = 
       match mouse_mode with
-      | `ratio -> self#mouse_scale_ratio scroll
       | `middle -> self#mouse_scale_middle scroll
-      | `left -> self#mouse_scale_left scroll
-      | `right -> self#mouse_scale_right scroll
+      | `ratio -> self#mouse_scale_ratio scroll
 
     (* event handling *)
     initializer self#on_event @@ fun ev ->
@@ -150,11 +183,10 @@ class virtual scrollbar ~default_scroll_bar_size =
 
   end
 
-class vscrollbar ?size_request ?(default_scroll_bar_size=5) () = object(self)
-  inherit scrollbar ~default_scroll_bar_size
+class vscrollbar ?(width=2) () = object(self)
+  inherit scrollbar 
 
-  method size_request = 
-    match size_request with None -> { rows=0; cols=2 } | Some(x) -> x
+  method size_request = { rows=0; cols=width }
 
   method private mouse_offset m alloc = m.LTerm_mouse.row - alloc.row1 
   method private key_scroll_incr = LTerm_key.Down
@@ -187,11 +219,10 @@ class vscrollbar ?size_request ?(default_scroll_bar_size=5) () = object(self)
 
 end
 
-class hscrollbar ?size_request ?(default_scroll_bar_size=5) () = object(self)
-  inherit scrollbar ~default_scroll_bar_size
+class hscrollbar ?(height=2) () = object(self)
+  inherit scrollbar 
   
-  method size_request = 
-    match size_request with None -> { rows=2; cols=0 } | Some(x) -> x
+  method size_request = { rows=height; cols=0 }
 
   method private mouse_offset m alloc = m.LTerm_mouse.col - alloc.col1 
   method private key_scroll_incr = LTerm_key.Right

@@ -96,12 +96,11 @@ end
 let with_scrollbar ?down widget = 
   let vbox = new vbox in
   let hbox = new hbox in
-  let vscroll = (* make scroll bars roughly the same size *)
-    new vscrollbar ~size_request:{rows=0;cols=3} ~default_scroll_bar_size:5 () 
-  in
-  let hscroll = 
-    new hscrollbar ~size_request:{rows=2;cols=0} ~default_scroll_bar_size:10 () 
-  in
+  (* make scroll bars roughly the same size *)
+  let vscroll = new vscrollbar ~width:3 () in
+  vscroll#set_scroll_bar_mode (`fixed 5);
+  let hscroll = new hscrollbar ~height:2 () in
+  hscroll#set_scroll_bar_mode (`fixed 10);
   let spacing = new spacing ~rows:2 ~cols:3 () in
   let widget = widget vscroll hscroll in
   hbox#add widget;

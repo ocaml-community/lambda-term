@@ -281,6 +281,9 @@ class type adjustment = object
     The scrollbars will call [queue_draw] when [set_offset]
     is called. *)
 
+  method on_offset_change : ?switch:LTerm_widget_callbacks.switch -> 
+     (int -> unit) -> unit
+
   method incr : unit
     (** increment offset by one step 
     
@@ -298,8 +301,7 @@ class type scroll_debug = object
   method debug_steps : int
 end
 
-class vscrollbar : 
-  ?size_request:LTerm_geom.size -> ?default_scroll_bar_size:int -> unit ->
+class vscrollbar : ?width:int -> unit ->
   object
     inherit t
     inherit adjustment
@@ -307,14 +309,15 @@ class vscrollbar :
     method scroll_bar_size : int
       (** size of scroll bar *)
 
-    method set_mouse_mode : [`ratio|`middle|`left|`right] -> unit
+    method set_mouse_mode : [`middle | `ratio] -> unit
+
+    method set_scroll_bar_mode : [ `fixed of int | `dynamic of int ] -> unit
 
     inherit scroll_debug
 
   end
 
-class hscrollbar : 
-  ?size_request:LTerm_geom.size -> ?default_scroll_bar_size:int -> unit ->
+class hscrollbar : ?height:int -> unit ->
   object
     inherit t
     inherit adjustment
@@ -322,7 +325,9 @@ class hscrollbar :
     method scroll_bar_size : int
       (** size of scroll bar *)
 
-    method set_mouse_mode : [`ratio|`middle|`left|`right] -> unit
+    method set_scroll_bar_mode : [ `fixed of int | `dynamic of int ] -> unit
+
+    method set_mouse_mode : [`middle | `ratio] -> unit
 
     inherit scroll_debug
 
