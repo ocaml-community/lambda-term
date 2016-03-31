@@ -164,18 +164,17 @@ static void handle_signal(int signum)
 */
 
 #include <signal.h>
-#include <stdio.h>
 
 static int notify_fd;
 
 static void handle_signal(int signum)
 {
-  char c;
+  char c = 0;
   if (SIGINT   >= 0 && signum == SIGINT  ) c = 'i';
   if (SIGQUIT  >= 0 && signum == SIGQUIT ) c = 'q';
   if (SIGTSTP  >= 0 && signum == SIGTSTP ) c = 's';
   if (SIGWINCH >= 0 && signum == SIGWINCH) c = 'w';
-  write(notify_fd, &c, 1);
+  if (c) write(notify_fd, &c, 1);
 }
 
 CAMLextern int caml_convert_signal_number (int);

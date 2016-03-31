@@ -39,7 +39,7 @@ let () =
       Unix.c_vtime = 0;
       Unix.c_isig = false;
   };
-  print_string "\027[?1003h;\027[?1004h";
+  print_string "\027[?1003h\027[?1004h";
   flush stdout;
   (* Read and print key sequences. *)
   print_endline "press 'q' to quit";
@@ -67,7 +67,7 @@ let () =
     with exn ->
       `Exn exn
   in
-  print_string "\027[?1003l;\027[?1004l";
+  print_string "\027[?1003l\027[?1004l";
   flush stdout;
   (* Reset terminal attributes. *)
   Unix.tcsetattr Unix.stdin Unix.TCSAFLUSH attr;

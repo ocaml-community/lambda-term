@@ -1296,36 +1296,34 @@ let render_loop t (old_data:raw_data) (new_data:raw_data) =
     let line = new_data.(y)          in
     let cols = Array.length line - 1 in
     (* If the current line is equal to the displayed one, skip it *)
-    if y >= Array.length old_data || line <> old_data.(y) then begin
-      let x = ref 0 in
-      let continue = ref true in
-      while !x < cols && !continue do
-        let point = line.(!x) in
-        let style = LTerm_style.on_default point.style in
-        if not (LTerm_style.equal !curr_style style) then begin
-          curr_style := style;
-          add_style t ~style;
-        end;
-        let code = Uchar.to_int point.char in
-        if code = 10 then begin
-          (* Erase everything until the end of line, if needed. *)
-          if not (y < Array.length old_data && nothing_from old_data.(y) !x) then
-            add_3chars t '\027' '[' 'K';
-          continue := false;
-        end else begin
-          render_char t ~char:point.char;
-          incr x;
-        end
-      done;
+    let same_as_before = y < Array.length old_data && line = old_data.(y) in
+    let x = ref 0 in
+    let continue = ref true in
+    while !x < cols && !continue do
+      let point = line.(!x) in
+      let style = LTerm_style.on_default point.style in
+      if not (LTerm_style.equal !curr_style style) then begin
+        curr_style := style;
+        add_style t ~style;
+      end;
+      let code = Uchar.to_int point.char in
+      if code = 10 then begin
+        (* Erase everything until the end of line, if needed. *)
+        if not (y < Array.length old_data && nothing_from old_data.(y) !x) then
+          add_3chars t '\027' '[' 'K';
+        continue := false;
+      end else begin
+        render_char t ~char:point.char;
+        incr x;
+      end;
+      if same_as_before then continue := false;
+    done;
+    if same_as_before then
+      move t ~rows:1 ~cols:(-1)
+    else begin
       let point = line.(!x) in
       if Uchar.to_int point.char = 10 && y < Array.length new_data - 1 then
-        add_char t '\n'
-    end else if y < Array.length new_data - 1 then begin
-      move t ~rows:1 ~cols:0;
-      (* Update the current style *)
-      let x = ref 0 in
-      while !x < cols - 1 && Uchar.to_int line.(!x).char <> 10 do incr x done;
-      curr_style := LTerm_style.on_default line.(!x).style
+        add_char t '\n';
     end
   done
 ;;

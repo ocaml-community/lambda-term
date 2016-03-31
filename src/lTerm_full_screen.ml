@@ -150,6 +150,7 @@ let close t =
 ;;
 
 let rec run_sync t ~init:state ~f =
+  idle t ~state;
   match Term.poll_event t.term ~notifier:Term.Notifier.blocking with
   | Pending wait ->
     idle t ~state;
