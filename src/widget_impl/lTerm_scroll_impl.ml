@@ -148,7 +148,7 @@ class virtual scrollbar =
     method private mouse_scale_ratio scroll = 
       let steps, size = self#scroll_bar_steps, self#scroll_bar_size in
       let wsize = self#scroll_window_size in
-      let dead_zone = wsize / 10 in (* ~10% at each end *)
+      let dead_zone = wsize / 5 in (* ~10% at each end *)
       map_range (wsize - dead_zone - 1) (steps - 1) (scroll - dead_zone/2)
 
     (* place the middle of the scroll bar at the cursor.  Large scroll bars

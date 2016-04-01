@@ -61,43 +61,54 @@ open LTerm_geom
 open CamomileLibrary
 
 (* scrollable asciiart widget *)
-class asciiart img voffset hoffset = object(self)
+class asciiart img = object(self)
   inherit t "asciiart" as super
 
   method can_focus = false
 
+  (* scroll interface *)
   method document_size = { 
-    rows = Array.length img;
-    cols = Array.length img.(0);
+    rows = img#height / !avg_rows;
+    cols = img#width / !avg_cols;
   }
+
+  val mutable voffset = 0
+  val mutable hoffset = 0
+  method set_voffset o = voffset <- o
+  method set_hoffset o = hoffset <- o
 
   val style = 
     LTerm_style.({ none with foreground=Some white; 
                              background=Some black }) 
 
+  (* buffer the image - reconvert when the scale changes *)
+  val mutable stored_img : (int * int * (int array array)) option = None
+  method img = 
+    match stored_img with
+    | Some(r, c, i) when r = !avg_rows && c = !avg_cols -> i
+    | _ -> stored_img <- Some(!avg_rows, !avg_cols, indices img); self#img
+
   method draw ctx focused = 
     let { rows; cols } = LTerm_draw.size ctx in
+    let img = self#img in
     for row=0 to rows-1 do
       for col=0 to cols-1 do
         LTerm_draw.draw_char ~style ctx row col @@ 
           UChar.of_char palette.[ 
-            try img.(row + !voffset).(col + !hoffset) with _ -> 0 
+            try img.(row + voffset).(col + hoffset) with _ -> 0 
           ]
       done
     done
 
 end
 
-let with_scrollbar ?down img widget = 
+(* place vertical and horizontal scroll bars around the picture *)
+let with_scrollbar ?down widget = 
   let vbox = new vbox in
   let hbox = new hbox in
-  let voffset, hoffset = ref 0, ref 0 in
-  let widget = widget voffset hoffset in
   (* make scroll bars roughly the same size *)
   let vscroll = new vscrollbar_for_widget ~width:3 widget in
-  vscroll#on_offset_change (fun o -> voffset := o);
   let hscroll = new hscrollbar_for_widget ~height:2 widget in
-  hscroll#on_offset_change (fun o -> hoffset := o);
   let spacing = new spacing ~rows:2 ~cols:3 () in
   hbox#add widget;
   hbox#add ~expand:false (new vline);
@@ -116,13 +127,13 @@ let with_scrollbar ?down img widget =
   vbox
 
 let main () = 
-  let img = indices (load !filename) in
+  let img = load !filename in
 
   let waiter, wakener = wait () in
   let exit = new button "exit" in
   exit#on_click (wakeup wakener);
 
-  let vbox = with_scrollbar ~down:(exit :> t) img (new asciiart img) in
+  let vbox = with_scrollbar ~down:(exit :> t) (new asciiart img) in
   vbox#add ~expand:false (new hline);
   vbox#add ~expand:false exit;
 
@@ -130,8 +141,17 @@ let main () =
   top#set vbox;
 
   top#on_event (function (* quit with escape key *)
-    LTerm_event.Key{LTerm_key.code=LTerm_key.Escape} -> 
-      wakeup wakener (); false | _ -> false);
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Escape} -> 
+      wakeup wakener (); false 
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c} when c = UChar.of_char 'w' ->
+      avg_rows := max 1 (!avg_rows - 1); top#queue_draw; true
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c} when c = UChar.of_char 's' ->
+      avg_rows := !avg_rows + 1; top#queue_draw; true
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c} when c = UChar.of_char 'a' ->
+      avg_cols := max 1 (!avg_cols - 1); top#queue_draw; true
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c} when c = UChar.of_char 'd' ->
+      avg_cols := !avg_cols + 1; top#queue_draw; true
+    | _ -> false);
 
   Lazy.force LTerm.stdout >>= fun term ->
   LTerm.enable_mouse term >>= fun () ->

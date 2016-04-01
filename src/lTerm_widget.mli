@@ -345,8 +345,16 @@ class hscrollbar : ?height:int -> unit -> scrollbar
 (** Type of widget containing a scrollable document *)
 class type scrollable_widget = object
   inherit t
+
   method document_size : LTerm_geom.size
     (** Size of the document *)
+
+  method set_voffset : int -> unit
+    (** Set vertical offset *)
+
+  method set_hoffset : int -> unit
+    (** Set horizontal offset *)
+
 end
 
 (** Vertical scrollbar for scrollable widgets *)

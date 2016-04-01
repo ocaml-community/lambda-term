@@ -174,10 +174,15 @@ class hscrollbar = LTerm_scroll_impl.hscrollbar
 class type scrollable_widget = object
   inherit t
   method document_size : LTerm_geom.size
+  method set_voffset : int -> unit
+  method set_hoffset : int -> unit
 end
 
 class vscrollbar_for_widget ?width (widget : #scrollable_widget) = object(self)
   inherit vscrollbar ?width () as super
+
+  initializer
+    super#on_offset_change widget#set_voffset
 
   method size_request = { super#size_request with rows=widget#size_request.rows  } 
 
@@ -201,6 +206,9 @@ end
 
 class hscrollbar_for_widget ?height (widget : #scrollable_widget) = object(self)
   inherit hscrollbar ?height () as super
+
+  initializer
+    super#on_offset_change widget#set_hoffset
 
   method size_request = { super#size_request with cols=widget#size_request.cols  } 
 
