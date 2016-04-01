@@ -21,11 +21,9 @@ class scroll_label scroll = object(self)
     let alloc = size_of_rect scroll#allocation in
     LTerm_draw.fill_style ctx style;
     LTerm_draw.draw_string_aligned ctx 0 H_align_center ~style
-      (Printf.sprintf "%i/%i | %ix%i | %i/%i/%i" 
+      (Printf.sprintf "%i/%i | %ix%i" 
         scroll#offset scroll#range
-        alloc.rows alloc.cols
-        scroll#debug_offset scroll#debug_size scroll#debug_steps
-      )
+        alloc.rows alloc.cols)
 
 end
 
@@ -63,6 +61,7 @@ let main () =
     vbox#add ~expand:false (new label "mouse mode");
     vbox#add ~expand:false (new radiobutton mouse_mode "middle" `middle);
     vbox#add ~expand:false (new radiobutton mouse_mode "ratio" `ratio);
+    vbox#add ~expand:false (new radiobutton mouse_mode "auto" `auto);
     vbox#add ~expand:true (new spacing ());
     vbox
   in

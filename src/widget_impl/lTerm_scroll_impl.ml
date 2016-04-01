@@ -198,10 +198,6 @@ class virtual scrollbar =
 
       | _ -> false
 
-    method debug_offset = scroll_bar_offset
-    method debug_size = self#scroll_bar_size
-    method debug_steps = self#scroll_bar_steps
-
   end
 
 class vscrollbar ?(width=2) () = object(self)
@@ -212,7 +208,9 @@ class vscrollbar ?(width=2) () = object(self)
   method private mouse_offset m alloc = m.LTerm_mouse.row - alloc.row1 
   method private key_scroll_incr = LTerm_key.Down
   method private key_scroll_decr = LTerm_key.Up
-  method private scroll_window_size = self#allocation.row2 - self#allocation.row1
+  method private scroll_window_size =
+    let alloc = self#allocation in
+    alloc.row2 - alloc.row1
 
   method draw ctx focused = 
     let focus = (self :> t) = focused in

@@ -149,13 +149,6 @@ class ['a] radiobutton = ['a] LTerm_buttons_impl.radiobutton
 
 class type adjustment = LTerm_scroll_impl.adjustment
 
-(* XXX remove me *)
-class type scroll_debug = object
-  method debug_offset : int
-  method debug_size : int
-  method debug_steps : int
-end
-
 class type scrollbar = object
   inherit t
   inherit adjustment
@@ -173,42 +166,59 @@ class type scrollbar = object
 
   method set_max_scroll_bar_size : int -> unit
 
-  inherit scroll_debug
-
 end
 
 class vscrollbar = LTerm_scroll_impl.vscrollbar
 class hscrollbar = LTerm_scroll_impl.hscrollbar
 
-class vscrollbar_for_widget ?width document_size (widget : #t) = object
-  inherit vscrollbar ?width () as self
+class type scrollable_widget = object
+  inherit t
+  method document_size : LTerm_geom.size
+end
 
-  method size_request = { self#size_request with rows=widget#size_request.rows  } 
+class vscrollbar_for_widget ?width (widget : #scrollable_widget) = object(self)
+  inherit vscrollbar ?width () as super
 
-  method set_allocation r = 
-    let size = size_of_rect r in
-    self#set_allocation r;
-    let window_size = size.rows in
-    let range = max 0 (document_size-window_size) in
-    self#set_range range;
-    self#set_mouse_mode `auto;
-    self#set_scroll_bar_mode (`dynamic window_size)
+  method size_request = { super#size_request with rows=widget#size_request.rows  } 
+
+  val mutable document_size : int = 0
+  method private set_modes = 
+    let doc_size = widget#document_size.rows in
+    if doc_size <> document_size then begin
+      document_size <- doc_size;
+      let window_size = (size_of_rect widget#allocation).rows in
+      let range = max 0 (document_size-window_size) in
+      super#set_range range;
+      super#set_mouse_mode `auto;
+      super#set_scroll_bar_mode (`dynamic window_size)
+    end
+
+  method draw ctx focused = 
+    self#set_modes;
+    super#draw ctx focused
 
 end
 
-class hscrollbar_for_widget ?height document_size (widget : #t) = object
-  inherit hscrollbar ?height () as self
+class hscrollbar_for_widget ?height (widget : #scrollable_widget) = object(self)
+  inherit hscrollbar ?height () as super
 
-  method size_request = { self#size_request with cols=widget#size_request.cols  } 
+  method size_request = { super#size_request with cols=widget#size_request.cols  } 
 
-  method set_allocation r = 
-    let size = size_of_rect r in
-    self#set_allocation r;
-    let window_size = size.cols in
-    let range = max 0 (document_size-window_size) in
-    self#set_range range;
-    self#set_mouse_mode `auto;
-    self#set_scroll_bar_mode (`dynamic window_size)
+  val mutable document_size : int = 0
+  method private set_modes = 
+    let doc_size = widget#document_size.cols in
+    if doc_size <> document_size then begin
+      document_size <- doc_size;
+      let window_size = (size_of_rect widget#allocation).cols in
+      let range = max 0 (document_size-window_size) in
+      super#set_range range;
+      super#set_mouse_mode `auto;
+      super#set_scroll_bar_mode (`dynamic window_size)
+    end
+
+  method draw ctx focused = 
+    self#set_modes;
+    super#draw ctx focused
 
 end
 

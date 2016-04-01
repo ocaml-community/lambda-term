@@ -283,6 +283,7 @@ class type adjustment = object
 
   method on_offset_change : ?switch:LTerm_widget_callbacks.switch -> 
      (int -> unit) -> unit
+    (** [on_offset_change ?switch f] calls f when the offset changes. *)
 
   method incr : unit
     (** increment offset by one step 
@@ -294,40 +295,65 @@ class type adjustment = object
 
 end
 
-(* XXX remove me *)
-class type scroll_debug = object
-  method debug_offset : int
-  method debug_size : int
-  method debug_steps : int
-end
-
 class type scrollbar = object
   inherit t
   inherit adjustment
 
   method scroll_bar_size : int
-    (** size of scroll bar *)
+    (** Size of scroll bar *)
 
   method scroll_of_mouse : int -> int
-    (** convert mouse coord to a scroll offset *)
+    (** Convert mouse coord to a scroll offset *)
 
   method set_scroll_bar_mode : [ `fixed of int | `dynamic of int ] -> unit
+    (** Configure how the size of the scrollbar is calculated.
+
+     [`fixed x] sets the size to x.
+
+     [`dynamic 0] sets the size to reflect the ratio between 
+     the range and scroll window size.
+
+     [`dynamic x] (x>0) interprets [x] as the size of the view and
+     sets the size of the scroll bar to reflect the amount of
+     content displayed. *)
 
   method set_mouse_mode : [ `middle | `ratio | `auto ] -> unit
+    (** Configure how a mouse coordinate is converted to a scroll bar offest.
+     
+     [`middle] sets the middle of the scrollbar to the position clicked.
+
+     [`ratio] computes the offset relative to the scroll bar and scroll window sizes,
+     with a 10% deadzone at the extremities.
+
+     [`auto] chooses [`middle] mode if the scroll bar size is less than half the window
+     size and [`ratio] otherwise. *)
 
   method set_min_scroll_bar_size : int -> unit
+    (** Set the minimum scroll bar size (default:1) *)
 
   method set_max_scroll_bar_size : int -> unit
-
-  inherit scroll_debug
+    (** Set the maximum scroll bar size (default: scroll window size *)
 
 end
 
+(** Vertically oriented scrollbar *)
 class vscrollbar : ?width:int -> unit -> scrollbar
+
+(** Horizontally oriented scrollbar *)
 class hscrollbar : ?height:int -> unit -> scrollbar
 
-class vscrollbar_for_widget : ?width:int -> int -> #t -> scrollbar
-class hscrollbar_for_widget : ?height:int -> int -> #t -> scrollbar
+(** Type of widget containing a scrollable document *)
+class type scrollable_widget = object
+  inherit t
+  method document_size : LTerm_geom.size
+    (** Size of the document *)
+end
+
+(** Vertical scrollbar for scrollable widgets *)
+class vscrollbar_for_widget : ?width:int -> #scrollable_widget -> scrollbar
+
+(** Horizontal scrollbar for scrollable widgets *)
+class hscrollbar_for_widget : ?height:int -> #scrollable_widget -> scrollbar
 
 (** {6 Running in a terminal} *)
 

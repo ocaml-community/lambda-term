@@ -61,20 +61,15 @@ open LTerm_geom
 open CamomileLibrary
 
 (* scrollable asciiart widget *)
-class asciiart img vscroll hscroll = object(self)
+class asciiart img voffset hoffset = object(self)
   inherit t "asciiart" as super
-
-  (*initializer
-    vscroll#set_range (Array.length img);
-    hscroll#set_range (Array.length img.(0))*)
 
   method can_focus = false
 
-  method set_allocation rect =
-    let size = size_of_rect rect in
-    vscroll#set_range (max 1 (Array.length img - size.rows));
-    hscroll#set_range (max 1 (Array.length img.(0) - size.cols));
-    super#set_allocation rect
+  method document_size = { 
+    rows = Array.length img;
+    cols = Array.length img.(0);
+  }
 
   val style = 
     LTerm_style.({ none with foreground=Some white; 
@@ -86,23 +81,24 @@ class asciiart img vscroll hscroll = object(self)
       for col=0 to cols-1 do
         LTerm_draw.draw_char ~style ctx row col @@ 
           UChar.of_char palette.[ 
-            try img.(row + vscroll#offset).(col + hscroll#offset) with _ -> 0 
+            try img.(row + !voffset).(col + !hoffset) with _ -> 0 
           ]
       done
     done
 
 end
 
-let with_scrollbar ?down widget = 
+let with_scrollbar ?down img widget = 
   let vbox = new vbox in
   let hbox = new hbox in
+  let voffset, hoffset = ref 0, ref 0 in
+  let widget = widget voffset hoffset in
   (* make scroll bars roughly the same size *)
-  let vscroll = new vscrollbar ~width:3 () in
-  vscroll#set_scroll_bar_mode (`fixed 5);
-  let hscroll = new hscrollbar ~height:2 () in
-  hscroll#set_scroll_bar_mode (`fixed 10);
+  let vscroll = new vscrollbar_for_widget ~width:3 widget in
+  vscroll#on_offset_change (fun o -> voffset := o);
+  let hscroll = new hscrollbar_for_widget ~height:2 widget in
+  hscroll#on_offset_change (fun o -> hoffset := o);
   let spacing = new spacing ~rows:2 ~cols:3 () in
-  let widget = widget vscroll hscroll in
   hbox#add widget;
   hbox#add ~expand:false (new vline);
   hbox#add ~expand:false vscroll;
@@ -126,7 +122,7 @@ let main () =
   let exit = new button "exit" in
   exit#on_click (wakeup wakener);
 
-  let vbox = with_scrollbar ~down:(exit :> t) (new asciiart img) in
+  let vbox = with_scrollbar ~down:(exit :> t) img (new asciiart img) in
   vbox#add ~expand:false (new hline);
   vbox#add ~expand:false exit;
 
