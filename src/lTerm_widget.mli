@@ -301,37 +301,33 @@ class type scroll_debug = object
   method debug_steps : int
 end
 
-class vscrollbar : ?width:int -> unit ->
-  object
-    inherit t
-    inherit adjustment
+class type scrollbar = object
+  inherit t
+  inherit adjustment
 
-    method scroll_bar_size : int
-      (** size of scroll bar *)
+  method scroll_bar_size : int
+    (** size of scroll bar *)
 
-    method set_mouse_mode : [`middle | `ratio] -> unit
+  method scroll_of_mouse : int -> int
+    (** convert mouse coord to a scroll offset *)
 
-    method set_scroll_bar_mode : [ `fixed of int | `dynamic of int ] -> unit
+  method set_scroll_bar_mode : [ `fixed of int | `dynamic of int ] -> unit
 
-    inherit scroll_debug
+  method set_mouse_mode : [ `middle | `ratio | `auto ] -> unit
 
-  end
+  method set_min_scroll_bar_size : int -> unit
 
-class hscrollbar : ?height:int -> unit ->
-  object
-    inherit t
-    inherit adjustment
+  method set_max_scroll_bar_size : int -> unit
 
-    method scroll_bar_size : int
-      (** size of scroll bar *)
+  inherit scroll_debug
 
-    method set_scroll_bar_mode : [ `fixed of int | `dynamic of int ] -> unit
+end
 
-    method set_mouse_mode : [`middle | `ratio] -> unit
+class vscrollbar : ?width:int -> unit -> scrollbar
+class hscrollbar : ?height:int -> unit -> scrollbar
 
-    inherit scroll_debug
-
-  end
+class vscrollbar_for_widget : ?width:int -> int -> #t -> scrollbar
+class hscrollbar_for_widget : ?height:int -> int -> #t -> scrollbar
 
 (** {6 Running in a terminal} *)
 

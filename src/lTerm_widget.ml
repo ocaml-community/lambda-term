@@ -148,14 +148,69 @@ class ['a] radiobutton = ['a] LTerm_buttons_impl.radiobutton
    +-----------------------------------------------------------------+ *)
 
 class type adjustment = LTerm_scroll_impl.adjustment
+
 (* XXX remove me *)
 class type scroll_debug = object
   method debug_offset : int
   method debug_size : int
   method debug_steps : int
 end
+
+class type scrollbar = object
+  inherit t
+  inherit adjustment
+
+  method scroll_bar_size : int
+    (** size of scroll bar *)
+
+  method scroll_of_mouse : int -> int
+
+  method set_scroll_bar_mode : [ `fixed of int | `dynamic of int ] -> unit
+
+  method set_mouse_mode : [ `middle | `ratio | `auto ] -> unit
+
+  method set_min_scroll_bar_size : int -> unit
+
+  method set_max_scroll_bar_size : int -> unit
+
+  inherit scroll_debug
+
+end
+
 class vscrollbar = LTerm_scroll_impl.vscrollbar
 class hscrollbar = LTerm_scroll_impl.hscrollbar
+
+class vscrollbar_for_widget ?width document_size (widget : #t) = object
+  inherit vscrollbar ?width () as self
+
+  method size_request = { self#size_request with rows=widget#size_request.rows  } 
+
+  method set_allocation r = 
+    let size = size_of_rect r in
+    self#set_allocation r;
+    let window_size = size.rows in
+    let range = max 0 (document_size-window_size) in
+    self#set_range range;
+    self#set_mouse_mode `auto;
+    self#set_scroll_bar_mode (`dynamic window_size)
+
+end
+
+class hscrollbar_for_widget ?height document_size (widget : #t) = object
+  inherit hscrollbar ?height () as self
+
+  method size_request = { self#size_request with cols=widget#size_request.cols  } 
+
+  method set_allocation r = 
+    let size = size_of_rect r in
+    self#set_allocation r;
+    let window_size = size.cols in
+    let range = max 0 (document_size-window_size) in
+    self#set_range range;
+    self#set_mouse_mode `auto;
+    self#set_scroll_bar_mode (`dynamic window_size)
+
+end
 
 (* +-----------------------------------------------------------------+
    | Running in a terminal                                           |

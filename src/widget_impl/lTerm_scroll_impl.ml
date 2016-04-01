@@ -67,6 +67,8 @@ class virtual scrollbar =
       end;
       self#queue_draw
     
+    (* configuration of the scroll bar *)
+
     val mutable scroll_bar_mode : [ `fixed of int | `dynamic of int ] = `fixed 5
     method set_scroll_bar_mode m = scroll_bar_mode <- m
     
@@ -75,32 +77,40 @@ class virtual scrollbar =
       if wsize <= size then max 1 (wsize-1)
       else max 1 size
 
-    method private scroll_bar_size_dynamic max_step_size = 
-      if max_step_size <= 0 then
+    method private scroll_bar_size_dynamic view_size = 
+      if view_size <= 0 then
         max 1 (self#scroll_window_size / max 1 range)
       else
-        let wsize = max 1. (float_of_int self#scroll_window_size) in
-        let range = max 1. (float_of_int range) in
-        let max_step_size = float_of_int max_step_size in
-        (* minimum number of steps *)
-        let min_bar_steps = range /. max_step_size in 
-        (* computed size *)
-        let size = wsize /. range in
-        let steps = wsize -. size +. 1. in
-        if steps > min_bar_steps then max 1 (int_of_float (wsize -. min_bar_steps +. 1.))
-        else max 1 (int_of_float size)
-        (*max 1 (int_of_float (wsize -. min_bar_steps +. 1.))*)
+        let range = float_of_int range in
+        let scroll_size = float_of_int @@ self#scroll_window_size in
+        let view_size = float_of_int view_size in
+        let doc_size = view_size +. range in
+        int_of_float @@ scroll_size *. view_size /. doc_size
 
+    val mutable min_scroll_bar_size : int option = None
+    method private min_scroll_bar_size = 
+      match min_scroll_bar_size with None -> 1 | Some(x) -> x
+    method set_min_scroll_bar_size min = min_scroll_bar_size <- Some(min)
+     
+    val mutable max_scroll_bar_size : int option = None
+    method private max_scroll_bar_size = 
+      match max_scroll_bar_size with None -> self#scroll_window_size | Some(x) -> x
+    method set_max_scroll_bar_size max = max_scroll_bar_size <- Some(max)
 
     method scroll_bar_size = 
+      max self#min_scroll_bar_size @@ min self#max_scroll_bar_size @@
       match scroll_bar_mode with
       | `fixed size -> self#scroll_bar_size_fixed size
-      | `dynamic step -> self#scroll_bar_size_dynamic step
+      | `dynamic size -> self#scroll_bar_size_dynamic size
+
+    (* virtual methods needed to abstract over vert/horz scrollbars *)
 
     method virtual private mouse_offset : LTerm_mouse.t -> rect -> int
     method virtual private key_scroll_incr : LTerm_key.code
     method virtual private key_scroll_decr : LTerm_key.code
     method virtual private scroll_window_size : int
+
+    (* coordinate system conversions *)
 
     method private scroll_bar_steps = 
       self#scroll_window_size - self#scroll_bar_size + 1
@@ -130,13 +140,15 @@ class virtual scrollbar =
       else
         self#set_offset (self#offset-1);
 
+    (* mouse click control *)
+
     (* scale whole scroll bar area into the number of steps.  The scroll
        bar will not necessarily end up where clicked.  Add a small dead_zone
        at far left and right *)
     method private mouse_scale_ratio scroll = 
       let steps, size = self#scroll_bar_steps, self#scroll_bar_size in
       let wsize = self#scroll_window_size in
-      let dead_zone = if wsize < 12 then wsize/4 else 3 in
+      let dead_zone = wsize / 10 in (* ~10% at each end *)
       map_range (wsize - dead_zone - 1) (steps - 1) (scroll - dead_zone/2)
 
     (* place the middle of the scroll bar at the cursor.  Large scroll bars
@@ -145,14 +157,23 @@ class virtual scrollbar =
       let size = self#scroll_bar_size in
       scroll - (size/2)
 
-    val mutable mouse_mode : [`middle | `ratio] = `middle
+    method private mouse_scale_auto scroll = 
+      if self#scroll_bar_size > self#scroll_window_size/2 then 
+        self#mouse_scale_ratio scroll
+      else 
+        self#mouse_scale_middle scroll
+
+    val mutable mouse_mode : [ `middle | `ratio | `auto ] = `middle
     method set_mouse_mode m = mouse_mode <- m
-    method private mouse_scale scroll = 
+
+    method scroll_of_mouse scroll = 
       match mouse_mode with
       | `middle -> self#mouse_scale_middle scroll
       | `ratio -> self#mouse_scale_ratio scroll
+      | `auto -> self#mouse_scale_auto scroll
 
     (* event handling *)
+
     initializer self#on_event @@ fun ev ->
       let open LTerm_mouse in
       let open LTerm_key in
@@ -162,7 +183,7 @@ class virtual scrollbar =
       match ev with
       | LTerm_event.Mouse m when m.button=Button1 && in_rect alloc (coord m) ->
         let scroll = self#mouse_offset m alloc in
-        self#set_offset @@ self#window_of_scroll @@ self#mouse_scale scroll;
+        self#set_offset @@ self#window_of_scroll @@ self#scroll_of_mouse scroll;
         true
 
       | LTerm_event.Key { control = false; meta = false; shift = true; code } 

@@ -51,7 +51,7 @@ let main () =
 
   let scrolls = List.map 
     (fun range -> add_scroll vbox ~range ~size:1)
-    [ 10; 30; 60; 100; 200; 1000 ]
+    [ 0; 10; 30; 60; 100; 200; 1000 ]
   in
 
   let mouse_mode = 
@@ -78,15 +78,14 @@ let main () =
       scroll#set_range range; (* mini-scroll bars to test the scroll bars...?! *)
       scroll#set_mouse_mode `middle;
       scroll#set_scroll_bar_mode (`fixed 1);
-      vbox#add ~expand:false (new spacing ~cols:10 ());
+      vbox#add ~expand:false (new spacing ~cols:range ());
       vbox#add ~expand:false scroll;
       button, scroll, vbox
     in
 
-
     vbox#add ~expand:false (new label "scroll mode");
-    let f,fr,fb = ranged_widget scroll_mode "fixed " `fixed 20 in
-    let d,dr,db = ranged_widget scroll_mode "dynamic " `dynamic 20 in
+    let f,fr,fb = ranged_widget scroll_mode "fixed " `fixed 10 in
+    let d,dr,db = ranged_widget scroll_mode "dynamic " `dynamic 10 in
     let sbox = 
       let in_frame w = let f = new frame in f#set w; f in
       let v1 = new vbox in
@@ -104,7 +103,7 @@ let main () =
 
     let set_mode f o = List.iter (fun h -> h#set_scroll_bar_mode (f o)) scrolls in
     let fixed o = `fixed ((o*5)+1) in
-    let dynamic o = `dynamic o in
+    let dynamic o = `dynamic (o*50) in
 
     scroll_mode#on_state_change (function
       | None -> ()
