@@ -183,16 +183,18 @@ class vscrollbar_for_document ?width (doc : #scrollable_document) = object(self)
   initializer
     super#on_offset_change doc#set_voffset
 
-  val mutable document_size : int = 0
+  val mutable document_size = 0
+  val mutable page_size = 0
   method private set_modes = 
-    let doc_size = doc#document_size.rows in
-    if doc_size <> document_size then begin
-      document_size <- doc_size;
-      let window_size = doc#page_size.rows in
-      let range = max 0 (document_size-window_size+1) in
+    let document_size' = doc#document_size.rows in
+    let page_size' = doc#page_size.rows in
+    if document_size' <> document_size || page_size' <> page_size then begin
+      document_size <- document_size';
+      page_size <- page_size';
+      let range = max 0 (document_size-page_size+1) in
       super#set_range range;
       super#set_mouse_mode `auto;
-      super#set_scroll_bar_mode (`dynamic window_size)
+      super#set_scroll_bar_mode (`dynamic page_size)
     end
 
   method draw ctx focused = 
@@ -207,16 +209,18 @@ class hscrollbar_for_document ?height (doc : #scrollable_document) = object(self
   initializer
     super#on_offset_change doc#set_hoffset
 
-  val mutable document_size : int = 0
+  val mutable document_size = 0
+  val mutable page_size = 0
   method private set_modes = 
-    let doc_size = doc#document_size.cols in
-    if doc_size <> document_size then begin
-      document_size <- doc_size;
-      let window_size = doc#page_size.cols in
-      let range = max 0 (document_size-window_size+1) in
+    let document_size' = doc#document_size.cols in
+    let page_size' = doc#page_size.cols in
+    if document_size' <> document_size || page_size' <> page_size then begin
+      document_size <- document_size';
+      page_size <- page_size';
+      let range = max 0 (document_size-page_size+1) in
       super#set_range range;
       super#set_mouse_mode `auto;
-      super#set_scroll_bar_mode (`dynamic window_size)
+      super#set_scroll_bar_mode (`dynamic page_size)
     end
 
   method draw ctx focused = 
