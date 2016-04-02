@@ -57,7 +57,9 @@ class virtual scrollbar =
     val mutable range = 0
     val mutable offset = 0
     method range = range
-    method set_range r = range <- max 0 r
+    method set_range r = 
+      range <- max 0 r;
+      self#set_offset offset (* ensure offset is clipped to the new range *)
     method offset = offset
     method set_offset o = 
       let o' = max 0 (min (range-1) o) in
