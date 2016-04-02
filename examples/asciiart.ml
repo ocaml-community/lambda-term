@@ -72,6 +72,8 @@ class asciiart img = object(self)
     cols = img#width / !avg_cols;
   }
 
+  method page_size = size_of_rect self#allocation
+
   val mutable voffset = 0
   val mutable hoffset = 0
   method set_voffset o = voffset <- o
@@ -107,8 +109,8 @@ let with_scrollbar ?down widget =
   let vbox = new vbox in
   let hbox = new hbox in
   (* make scroll bars roughly the same size *)
-  let vscroll = new vscrollbar_for_widget ~width:3 widget in
-  let hscroll = new hscrollbar_for_widget ~height:2 widget in
+  let vscroll = new vscrollbar_for_document ~width:3 widget in
+  let hscroll = new hscrollbar_for_document ~height:2 widget in
   let spacing = new spacing ~rows:2 ~cols:3 () in
   hbox#add widget;
   hbox#add ~expand:false (new vline);

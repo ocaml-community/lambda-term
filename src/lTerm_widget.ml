@@ -154,7 +154,6 @@ class type scrollbar = object
   inherit adjustment
 
   method scroll_bar_size : int
-    (** size of scroll bar *)
 
   method scroll_of_mouse : int -> int
 
@@ -171,28 +170,26 @@ end
 class vscrollbar = LTerm_scroll_impl.vscrollbar
 class hscrollbar = LTerm_scroll_impl.hscrollbar
 
-class type scrollable_widget = object
-  inherit t
+class type scrollable_document = object
   method document_size : LTerm_geom.size
+  method page_size : LTerm_geom.size
   method set_voffset : int -> unit
   method set_hoffset : int -> unit
 end
 
-class vscrollbar_for_widget ?width (widget : #scrollable_widget) = object(self)
+class vscrollbar_for_document ?width (doc : #scrollable_document) = object(self)
   inherit vscrollbar ?width () as super
 
   initializer
-    super#on_offset_change widget#set_voffset
-
-  method size_request = { super#size_request with rows=widget#size_request.rows  } 
+    super#on_offset_change doc#set_voffset
 
   val mutable document_size : int = 0
   method private set_modes = 
-    let doc_size = widget#document_size.rows in
+    let doc_size = doc#document_size.rows in
     if doc_size <> document_size then begin
       document_size <- doc_size;
-      let window_size = (size_of_rect widget#allocation).rows in
-      let range = max 0 (document_size-window_size) in
+      let window_size = doc#page_size.rows in
+      let range = max 0 (document_size-window_size+1) in
       super#set_range range;
       super#set_mouse_mode `auto;
       super#set_scroll_bar_mode (`dynamic window_size)
@@ -204,21 +201,19 @@ class vscrollbar_for_widget ?width (widget : #scrollable_widget) = object(self)
 
 end
 
-class hscrollbar_for_widget ?height (widget : #scrollable_widget) = object(self)
+class hscrollbar_for_document ?height (doc : #scrollable_document) = object(self)
   inherit hscrollbar ?height () as super
 
   initializer
-    super#on_offset_change widget#set_hoffset
-
-  method size_request = { super#size_request with cols=widget#size_request.cols  } 
+    super#on_offset_change doc#set_hoffset
 
   val mutable document_size : int = 0
   method private set_modes = 
-    let doc_size = widget#document_size.cols in
+    let doc_size = doc#document_size.cols in
     if doc_size <> document_size then begin
       document_size <- doc_size;
-      let window_size = (size_of_rect widget#allocation).cols in
-      let range = max 0 (document_size-window_size) in
+      let window_size = doc#page_size.cols in
+      let range = max 0 (document_size-window_size+1) in
       super#set_range range;
       super#set_mouse_mode `auto;
       super#set_scroll_bar_mode (`dynamic window_size)

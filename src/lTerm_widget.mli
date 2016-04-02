@@ -343,11 +343,13 @@ class vscrollbar : ?width:int -> unit -> scrollbar
 class hscrollbar : ?height:int -> unit -> scrollbar
 
 (** Type of widget containing a scrollable document *)
-class type scrollable_widget = object
-  inherit t
+class type scrollable_document = object
 
   method document_size : LTerm_geom.size
     (** Size of the document *)
+
+  method page_size : LTerm_geom.size
+    (** Size of a page *)
 
   method set_voffset : int -> unit
     (** Set vertical offset *)
@@ -358,10 +360,10 @@ class type scrollable_widget = object
 end
 
 (** Vertical scrollbar for scrollable widgets *)
-class vscrollbar_for_widget : ?width:int -> #scrollable_widget -> scrollbar
+class vscrollbar_for_document : ?width:int -> #scrollable_document -> scrollbar
 
 (** Horizontal scrollbar for scrollable widgets *)
-class hscrollbar_for_widget : ?height:int -> #scrollable_widget -> scrollbar
+class hscrollbar_for_document : ?height:int -> #scrollable_document -> scrollbar
 
 (** {6 Running in a terminal} *)
 
