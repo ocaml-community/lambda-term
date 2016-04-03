@@ -337,10 +337,10 @@ class type scrollbar = object
 end
 
 (** Vertically oriented scrollbar *)
-class vscrollbar : ?width:int -> unit -> scrollbar
+class vscrollbar : ?rc:string -> ?width:int -> unit -> scrollbar
 
 (** Horizontally oriented scrollbar *)
-class hscrollbar : ?height:int -> unit -> scrollbar
+class hscrollbar : ?rc:string -> ?height:int -> unit -> scrollbar
 
 (** Type of widget containing a scrollable document *)
 class type scrollable_document = object
@@ -364,6 +364,12 @@ class vscrollbar_for_document : ?width:int -> #scrollable_document -> scrollbar
 
 (** Horizontal scrollbar for scrollable widgets *)
 class hscrollbar_for_document : ?height:int -> #scrollable_document -> scrollbar
+
+(** Vertical slider *)
+class vslider : int -> scrollbar
+
+(** Horizontal slider *)
+class hslider : int -> scrollbar
 
 (** {6 Running in a terminal} *)
 

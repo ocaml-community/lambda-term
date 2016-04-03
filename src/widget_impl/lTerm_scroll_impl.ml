@@ -5,11 +5,6 @@ class t = LTerm_widget_base_impl.t
 
 let hbar = 0x2550
 let vbar = 0x2551
-let lbar = 0x2560
-let rbar = 0x2563
-let tbar = 0x2566
-let bbar = 0x2569
-let xbar = 0x256c
 
 class type adjustment = object
   method range : int
@@ -22,7 +17,7 @@ class type adjustment = object
   method decr : unit
 end
 
-class virtual scrollbar = 
+class virtual scrollbar rc = 
   let map_range range1 range2 offset1 = 
     if range1 = 0 then 0 
     else
@@ -36,17 +31,28 @@ class virtual scrollbar =
         (float_of_int offset1)
   in
   object(self)
-    inherit t "scrollbar"
+    inherit t rc
 
     method can_focus = true
 
     (* style *)
     val mutable focused_style = LTerm_style.none
     val mutable unfocused_style = LTerm_style.none
+    val mutable bar_style : [ `filled | `outline ] = `outline
+    val mutable show_track = false
     method update_resources =
       let rc = self#resource_class and resources = self#resources in
       focused_style <- LTerm_resources.get_style (rc ^ ".focused") resources;
-      unfocused_style <- LTerm_resources.get_style (rc ^ ".unfocused") resources
+      unfocused_style <- LTerm_resources.get_style (rc ^ ".unfocused") resources;
+      bar_style <- 
+        (match LTerm_resources.get (rc ^ ".barstyle") resources with
+        | "filled" -> `filled
+        | "outline" | "" -> `outline
+        | str -> Printf.ksprintf failwith "invalid scrollbar style");
+      show_track <- 
+        (match LTerm_resources.get_bool (rc ^ ".track") resources with
+        | Some(x) -> x
+        | None -> false)
 
     (* callback *)
     val offset_change_callbacks = Lwt_sequence.create ()
@@ -202,10 +208,29 @@ class virtual scrollbar =
 
       | _ -> false
 
+    (* drawing *)
+    method private draw_bar ctx style rect =
+      let open LTerm_draw in
+      let { cols; rows } = size_of_rect rect in
+      if cols=1 || rows=1 || bar_style=`filled then
+        let x = 
+          CamomileLibrary.UChar.of_int @@
+            if bar_style=`filled then 0x2588
+            else if cols=1 then vbar
+            else hbar
+        in
+        for c=rect.col1 to rect.col2-1 do
+          for r=rect.row1 to rect.row2-1 do
+            draw_char ctx r c ~style x
+          done
+        done
+      else
+        draw_frame ctx rect ~style Light
+
   end
 
-class vscrollbar ?(width=2) () = object(self)
-  inherit scrollbar 
+class vscrollbar ?(rc="scrollbar") ?(width=2) () = object(self)
+  inherit scrollbar rc
 
   method size_request = { rows=0; cols=width }
 
@@ -217,33 +242,27 @@ class vscrollbar ?(width=2) () = object(self)
     alloc.row2 - alloc.row1
 
   method draw ctx focused = 
+    let open LTerm_draw in
     let focus = (self :> t) = focused in
-    let { cols; _ } = LTerm_draw.size ctx in
+    let { cols; _ } = size ctx in
 
     let style = if focus then focused_style else unfocused_style in
-    LTerm_draw.fill_style ctx style;
+    fill_style ctx style;
 
     let offset = self#scroll_of_window @@ self#offset in
 
-    let open LTerm_draw in
-    if cols = 1 then
-      for r=offset to offset+self#scroll_bar_size-1 do
-        draw_char ctx r 0 ~style (CamomileLibrary.UChar.of_int vbar)
-      done
-    else if self#scroll_bar_size = 1 then
-      for c=0 to cols-1 do
-        draw_char ctx offset c ~style (CamomileLibrary.UChar.of_int hbar)
-      done
-    else
-      draw_frame ctx
-        { row1 = offset; col1 = 0;
-          row2 = offset + self#scroll_bar_size; col2 = cols }
-        ~style Light
+    let rect =  
+      { row1 = offset; col1 = 0;
+        row2 = offset + self#scroll_bar_size; col2 = cols }
+    in
+
+    (if show_track then draw_vline ctx 0 (cols/2) self#scroll_bar_size ~style Light);
+    self#draw_bar ctx style rect
 
 end
 
-class hscrollbar ?(height=2) () = object(self)
-  inherit scrollbar 
+class hscrollbar ?(rc="scrollbar") ?(height=2) () = object(self)
+  inherit scrollbar rc
   
   method size_request = { rows=height; cols=0 }
 
@@ -255,28 +274,22 @@ class hscrollbar ?(height=2) () = object(self)
     alloc.col2 - alloc.col1
 
   method draw ctx focused = 
+    let open LTerm_draw in
     let focus = (self :> t) = focused in
-    let { rows; _ } = LTerm_draw.size ctx in
+    let { rows; _ } = size ctx in
 
     let style = if focus then focused_style else unfocused_style in
-    LTerm_draw.fill_style ctx style;
+    fill_style ctx style;
 
     let offset = self#scroll_of_window @@ self#offset in
 
-    let open LTerm_draw in
-    if rows = 1 then
-      for c=offset to offset+self#scroll_bar_size-1 do
-        draw_char ctx 0 c ~style (CamomileLibrary.UChar.of_int hbar) (* 0x25a2? *)
-      done
-    else if self#scroll_bar_size = 1 then
-      for r=0 to rows-1 do
-        draw_char ctx r offset ~style (CamomileLibrary.UChar.of_int vbar)
-      done
-    else
-      draw_frame ctx
-        { row1 = 0; col1 = offset;
-          row2 = rows; col2 = offset + self#scroll_bar_size }
-        ~style Light
+    let rect = 
+      { row1 = 0; col1 = offset;
+        row2 = rows; col2 = offset + self#scroll_bar_size }
+    in
+
+    (if show_track then draw_hline ctx (rows/2) 0 self#scroll_window_size ~style Light);
+    self#draw_bar ctx style rect
 
 end
 

@@ -71,28 +71,22 @@ let main () =
     let scroll_mode = new radiogroup in
 
     let ranged_widget group name value range = 
-      let vbox = new vbox in
       let button = new radiobutton group name value in
-      let scroll = new hscrollbar ~height:1 () in
-      scroll#set_range range; (* mini-scroll bars to test the scroll bars...?! *)
-      scroll#set_mouse_mode `middle;
-      scroll#set_scroll_bar_mode (`fixed 1);
-      vbox#add ~expand:false (new spacing ~cols:range ());
-      vbox#add ~expand:false scroll;
-      button, scroll, vbox
+      let scroll = new hslider range in
+      button, scroll
     in
 
     vbox#add ~expand:false (new label "scroll mode");
-    let f,fr,fb = ranged_widget scroll_mode "fixed " `fixed 10 in
-    let d,dr,db = ranged_widget scroll_mode "dynamic " `dynamic 10 in
+    let f,fr = ranged_widget scroll_mode "fixed " `fixed 10 in
+    let d,dr = ranged_widget scroll_mode "dynamic " `dynamic 10 in
     let sbox = 
       let in_frame w = let f = new frame in f#set w; f in
       let v1 = new vbox in
       v1#add ~expand:true f;
       v1#add ~expand:true d;
       let v2 = new vbox in
-      v2#add ~expand:false (in_frame fb);
-      v2#add ~expand:false (in_frame db);
+      v2#add ~expand:false (in_frame fr);
+      v2#add ~expand:false (in_frame dr);
       let h = new hbox in
       h#add ~expand:false v1;
       h#add ~expand:false v2;

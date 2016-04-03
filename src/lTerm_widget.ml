@@ -229,6 +229,24 @@ class hscrollbar_for_document ?height (doc : #scrollable_document) = object(self
 
 end
 
+class vslider rng = object(self)
+  inherit vscrollbar ~rc:"slider" ~width:1 ()
+  method size_request = { rows=rng; cols=1 }
+  initializer
+    self#set_mouse_mode `middle;
+    self#set_scroll_bar_mode (`fixed 1);
+    range <- max 0 rng
+end
+
+class hslider rng = object(self)
+  inherit hscrollbar ~rc:"slider" ~height:1 ()
+  method size_request = { rows=1; cols=rng }
+  initializer
+    self#set_mouse_mode `middle;
+    self#set_scroll_bar_mode (`fixed 1);
+    range <- max 0 rng
+end
+
 (* +-----------------------------------------------------------------+
    | Running in a terminal                                           |
    +-----------------------------------------------------------------+ *)
