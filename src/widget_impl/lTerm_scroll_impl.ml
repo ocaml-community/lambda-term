@@ -80,7 +80,9 @@ class virtual scrollbar =
       else max 1 size
 
     method private scroll_bar_size_dynamic view_size = 
-      if view_size <= 0 then
+      if range <= 1 then
+        self#scroll_window_size
+      else if view_size <= 0 then
         max 1 (self#scroll_window_size / max 1 range)
       else
         let range = float_of_int range in
