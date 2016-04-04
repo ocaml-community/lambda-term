@@ -21,7 +21,9 @@ let rec loop term =
 let () =
   print_endline "press escape to exit";
   let term = Lazy.force Terminal.std in
-  Terminal.Signals.(set handled);
+  Terminal.Signals.set { intr = Generate_event
+                       ; quit = Generate_event
+                       ; susp = Generate_event };
   Terminal.modify_mode term ~mouse:Any ~raw:true ~echo:false;
   Terminal.commit_sync term;
   loop term;

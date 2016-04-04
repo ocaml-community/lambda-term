@@ -112,25 +112,12 @@ CAMLprim value lt_term_set_size_from_fd(value fd, value val_size)
 /* +-----------------------------------------------------------------+
    | Signals management                                              |
    +-----------------------------------------------------------------+ */
-/*
-#ifndef SIGINT
-#define SIGINT -1
-#endif
-#ifndef SIGQUIT
-#define SIGQUIT -1
-#endif
-#ifndef SIGTSTP
-#define SIGTSTP -1
-#endif
-#ifndef SIGWINCH
-#define SIGWINCH -1
-#endif
 
-static pthread_t signal_manager_thread;
-static int volatile got_intr  = 0;
-static int volatile got_quit  = 0;
-static int volatile got_susp  = 0;
-static int volatile got_winch = 0;
+#include <pthread.h>
+#include <signal.h>
+#include <assert.h>
+
+static pthread_t signal_manager_thread = 0;
 
 CAMLprim value lt_term_init_signal_manager_thread()
 {
@@ -138,53 +125,19 @@ CAMLprim value lt_term_init_signal_manager_thread()
   return Val_unit;
 }
 
-CAMLprim value lt_term_get_and_clear_signals(value result)
-{
-  Field(result, 0) = Val_bool(got_intr);
-  Field(result, 1) = Val_bool(got_quit);
-  Field(result, 2) = Val_bool(got_susp);
-  Field(result, 3) = Val_bool(got_winch);
-  got_intr  = 0;
-  got_quit  = 0;
-  got_susp  = 0;
-  got_winch = 0;
-  return Val_unit;
-}
-
 static void handle_signal(int signum)
 {
-  if (pthread_self() == signal_manager_thread) {
-    if (SIGINT   >= 0 && signum == SIGINT  ) got_intr  = 1;
-    if (SIGQUIT  >= 0 && signum == SIGQUIT ) got_quit  = 1;
-    if (SIGTSTP  >= 0 && signum == SIGTSTP ) got_tstp  = 1;
-    if (SIGWINCH >= 0 && signum == SIGWINCH) got_winch = 1;
-  } else
-    pthread_kill(signal_manager_thread, signum);
-}
-*/
-
-#include <signal.h>
-
-static int notify_fd;
-
-static void handle_signal(int signum)
-{
-  char c = 0;
-  if (SIGINT   >= 0 && signum == SIGINT  ) c = 'i';
-  if (SIGQUIT  >= 0 && signum == SIGQUIT ) c = 'q';
-  if (SIGTSTP  >= 0 && signum == SIGTSTP ) c = 's';
-  if (SIGWINCH >= 0 && signum == SIGWINCH) c = 'w';
-  if (c) write(notify_fd, &c, 1);
+  assert(pthread_self() != signal_manager_thread);
+  pthread_kill(signal_manager_thread, signum);
 }
 
 CAMLextern int caml_convert_signal_number (int);
+CAMLextern int caml_rev_convert_signal_number (int);
 
-CAMLprim value lt_term_set_signal(value fd, value val_signum)
+CAMLprim value lt_term_set_signal(value val_signum)
 {
   struct sigaction sa;
   int signum = caml_convert_signal_number(Int_val(val_signum));
-
-  notify_fd = Int_val(fd);
 
   if (signum < 0 || signum >= NSIG)
     caml_invalid_argument("LTerm.Signals.set");
@@ -195,6 +148,11 @@ CAMLprim value lt_term_set_signal(value fd, value val_signum)
   if (sigaction(signum, &sa, NULL) == -1)
     uerror("sigaction", Nothing);
   return Val_unit;
+}
+
+CAMLprim value lt_term_ocaml_signal_of_signo(value val_signo)
+{
+  return (Val_int(caml_rev_convert_signal_number(Int_val(val_signo))));
 }
 
 #endif

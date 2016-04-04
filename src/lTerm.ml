@@ -863,82 +863,47 @@ module Signals = struct
        | Winch -> assert false)
   ;;
 
-  let signal_manager_loop fd =
-    let buf = Bytes.create 4096 in
-    let timeout =
-      match LTerm_unix.sigwinch with
-      | Some _ -> -1.0
-      | None   -> 0.5 (* Check the size every half second *)
-    in
+  external init_signal_manager_thread : unit -> unit = "lt_term_init_signal_manager_thread"
+  external ocaml_signal_of_signo : int -> int = "lt_term_ocaml_signal_of_signo"
+
+  let all_sigs =
+    let sigs = Sys.[sigint; sigquit; sigtstp] in
+    match LTerm_unix.sigwinch with
+    | Some n -> n :: sigs
+    | None   -> sigs
+  ;;
+
+  let signal_manager_loop () =
+    init_signal_manager_thread ();
+    ignore (Thread.sigmask SIG_BLOCK all_sigs : int list);
     while true do
-      match Unix.select [fd] [] [] timeout with
-      | exception Unix.Unix_error (EINTR, _, _) ->
-        ()
-      | [], [], [] ->
-        process_signal Winch
-      | _ ->
-        let len = Unix.read fd buf 0 (Bytes.length buf) in
-        for i = 0 to len - 1 do
-          let signal = signal_of_char (Bytes.get buf i) in
-          process_signal signal
-        done
+      let signo = Thread.wait_signal all_sigs |> ocaml_signal_of_signo in
+      process_signal (signal_of_signo signo)
     done
   ;;
 
-  let send_to_manager =
-    let buf = Bytes.create 1 in
-    fun fd signal ->
-      let rec loop fd =
-        match Unix.write fd buf 0 1 with
-        | exception Unix.Unix_error (EINTR, _, _) ->
-          loop fd
-        | 1 -> ()
-        | _ -> assert false
-      in
-      Bytes.set buf 0 (char_of_signal signal);
-      loop fd
-  ;;
-
-  let set_exit_signals behavior =
-    Sys.set_signal Sys.sigint  behavior;
-    Sys.set_signal Sys.sigquit behavior
-  ;;
-
-  (* Cleanup without waiting for the writer threads *)
-  let dirty_exit (signo : int) =
-    (* Third Ctrl+C/Ctrl+Q just exit without cleaning *)
-    set_exit_signals Signal_default;
-    abort ();
-    sys_exit signo
-  ;;
-
-  let handler fd signo =
-    let signal = signal_of_signo signo in
-    match state_of_signal signal with
-    | Not_managed -> ()
-    | Generate_event | Handled ->
-      (match signal with
-       | Intr | Quit ->
-         (* Second Ctrl+C/Ctrl+Q will exit without waiting for writers *)
-         set_exit_signals (Signal_handle dirty_exit)
-       | _ -> ());
-      send_to_manager fd signal
+  let sigwinch_emul () =
+    while true do
+      (try Thread.delay 0.5 with Unix.Unix_error (EINTR, _, _) ->  ());
+      process_signal Winch
+    done;
   ;;
 
   let prev_intr = ref Sys.Signal_default
   let prev_quit = ref Sys.Signal_default
   let prev_susp = ref Sys.Signal_default
 
+  external set : int -> unit = "lt_term_set_signal"
+
   let init = lazy(
-    let fdr, fdw = Unix.pipe () in
-    ignore (Thread.create signal_manager_loop fdr : Thread.t);
-    fdw
+    ignore (Thread.create signal_manager_loop () : Thread.t);
+    match LTerm_unix.sigwinch with
+    | Some n -> set n
+    | None   -> ignore (Thread.create sigwinch_emul () : Thread.t);
   )
 
-  external set : Unix.file_descr -> int -> unit = "lt_term_set_signal"
-
   let set_one prev signo (old_state:State.t) (new_state:State.t) =
-    let fd = Lazy.force init in
+    Lazy.force init;
     match old_state, new_state with
     | Not_managed, Not_managed ->
       ()
@@ -946,7 +911,7 @@ module Signals = struct
       Sys.set_signal signo !prev;
       prev := Signal_default
     | Not_managed, _ ->
-      set fd signo
+      set signo
     | _ ->
       ()
   ;;
@@ -1538,7 +1503,7 @@ let check_utf8 = lazy(
 ;;
 
 let create ?(windows=Sys.win32) ?(model=default_model) (fd_in, fd_out) =
-  ignore (Lazy.force Signals.init : Unix.file_descr);
+  Lazy.force Signals.init;
   Lazy.force check_utf8;
   if Unix.isatty fd_in && (fd_in = fd_out || Unix.isatty fd_out) then begin
     (* Colors stuff. *)
