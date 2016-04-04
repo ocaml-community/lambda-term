@@ -230,19 +230,15 @@ module Notifier = struct
 
     let wait t =
       protect t.mutex ~f:(fun () ->
-        if not t.notified then begin
-          Condition.wait t.cond t.mutex;
-          t.notified <- false;
-        end;
+        if not t.notified then Condition.wait t.cond t.mutex;
+        t.notified <- false;
         free t)
     ;;
 
     let wait_without_freeing t =
       protect t.mutex ~f:(fun () ->
-        if not t.notified then begin
-          Condition.wait t.cond t.mutex;
-          t.notified <- false;
-        end)
+        if not t.notified then Condition.wait t.cond t.mutex;
+        t.notified <- false)
     ;;
 
     let t = make ~new_request:(fun () -> let r = new_request () in (r, r)) ~notify ()

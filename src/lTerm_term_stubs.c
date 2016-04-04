@@ -127,8 +127,8 @@ CAMLprim value lt_term_init_signal_manager_thread()
 
 static void handle_signal(int signum)
 {
-  assert(pthread_self() != signal_manager_thread);
-  pthread_kill(signal_manager_thread, signum);
+  if (!pthread_equal(pthread_self(), signal_manager_thread))
+    pthread_kill(signal_manager_thread, signum);
 }
 
 CAMLextern int caml_convert_signal_number (int);
