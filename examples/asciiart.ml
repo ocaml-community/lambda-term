@@ -63,8 +63,9 @@ open CamomileLibrary
 (* scrollable asciiart widget *)
 class asciiart img = object(self)
   inherit t "asciiart" as super
+  inherit default_scrollable_document 
 
-  method can_focus = false
+  method can_focus = true
 
   (* scroll interface *)
   method document_size = { 
@@ -73,11 +74,6 @@ class asciiart img = object(self)
   }
 
   method page_size = size_of_rect self#allocation
-
-  val mutable voffset = 0
-  val mutable hoffset = 0
-  method set_voffset o = voffset <- o
-  method set_hoffset o = hoffset <- o
 
   val style = 
     LTerm_style.({ none with foreground=Some white; 
@@ -97,10 +93,22 @@ class asciiart img = object(self)
       for col=0 to cols-1 do
         LTerm_draw.draw_char ~style ctx row col @@ 
           UChar.of_char palette.[ 
-            try img.(row + voffset).(col + hoffset) with _ -> 0 
+            try img.(row + self#voffset).(col + self#hoffset) with _ -> 0 
           ]
       done
     done
+
+  initializer self#on_event (fun ev ->
+    let open LTerm_mouse in
+    match ev with
+    | LTerm_event.Mouse m when m.button=Button1 ->
+      let alloc = self#allocation in
+      let size = size_of_rect alloc in
+      (* delta from center of screen *)
+      self#set_voffset (self#voffset + m.LTerm_mouse.row - alloc.row1 - size.rows/2);
+      self#set_hoffset (self#hoffset + m.LTerm_mouse.col - alloc.col1 - size.cols/2);
+      true
+    | _ -> false)
 
 end
 

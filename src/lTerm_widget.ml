@@ -173,8 +173,21 @@ class hscrollbar = LTerm_scroll_impl.hscrollbar
 class type scrollable_document = object
   method document_size : LTerm_geom.size
   method page_size : LTerm_geom.size
+  method voffset : int 
+  method hoffset : int 
   method set_voffset : int -> unit
   method set_hoffset : int -> unit
+end
+
+class virtual default_scrollable_document = object
+  method virtual document_size : LTerm_geom.size
+  method virtual page_size : LTerm_geom.size
+  val mutable voffset = 0
+  val mutable hoffset = 0
+  method voffset = voffset
+  method hoffset = hoffset
+  method set_voffset o = voffset <- o
+  method set_hoffset o = hoffset <- o 
 end
 
 class vscrollbar_for_document ?width (doc : #scrollable_document) = object(self)
@@ -198,6 +211,9 @@ class vscrollbar_for_document ?width (doc : #scrollable_document) = object(self)
     end
 
   method draw ctx focused = 
+    (if doc#voffset <> self#offset then 
+      self#set_offset doc#voffset; (* pick up offset from widget *) 
+      doc#set_voffset self#offset); (* in case the offset was clipped *)
     self#set_modes;
     super#draw ctx focused
 
@@ -224,6 +240,9 @@ class hscrollbar_for_document ?height (doc : #scrollable_document) = object(self
     end
 
   method draw ctx focused = 
+    (if doc#hoffset <> self#offset then 
+      self#set_offset doc#hoffset;
+      doc#set_hoffset self#offset);
     self#set_modes;
     super#draw ctx focused
 

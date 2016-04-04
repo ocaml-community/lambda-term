@@ -351,12 +351,27 @@ class type scrollable_document = object
   method page_size : LTerm_geom.size
     (** Size of a page *)
 
+  method voffset : int
+    (** Get vertical offset *)
+
+  method hoffset : int
+    (** Get horizontal offset *)
+
   method set_voffset : int -> unit
     (** Set vertical offset *)
 
   method set_hoffset : int -> unit
     (** Set horizontal offset *)
 
+end
+
+class virtual default_scrollable_document : object
+  method virtual document_size : LTerm_geom.size
+  method virtual page_size : LTerm_geom.size
+  method voffset : int
+  method hoffset : int
+  method set_voffset : int -> unit
+  method set_hoffset : int -> unit
 end
 
 (** Vertical scrollbar for scrollable widgets *)
