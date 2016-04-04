@@ -167,7 +167,7 @@ let newline = UChar.of_char '\n'
 class edit ?(clipboard = clipboard) ?(macro = macro) () =
   let locale, set_locale = S.create None in
 object(self)
-  inherit LTerm_widget.t "edit"
+  inherit LTerm_widget.t "edit" as super
 
   method clipboard = clipboard
   method macro = macro
@@ -282,8 +282,35 @@ object(self)
          | _ ->
              false)
 
+  method document_size =
+    { cols = 0; rows = Zed_lines.count (Zed_edit.lines self#engine) }
+
+  val mutable size = { cols = 0; rows = 0 }
+  method! set_allocation rect =
+    size <- size_of_rect rect;
+    super#set_allocation rect
+
+  method page_size = size_of_rect self#allocation
+
+  (* CR-someday jdimino for jdimino: add a way for a widget to tell
+     that it wants to expand as much as possible. *)
+  method size_request = { cols = 1_000_000; rows = 1_000_000 }
+
   val mutable shift = 0
   val mutable start = 0
+
+  method set_voffset n =
+    start <- n;
+    let line_set = Zed_edit.lines engine in
+    let cursor_offset = Zed_cursor.get_position cursor in
+    let cursor_line = Zed_lines.line_index line_set cursor_offset in
+    if cursor_line < start then
+      Zed_edit.move_line context (start - cursor_line);
+    if cursor_line >= start + size.rows then
+      Zed_edit.move_line context (start + size.rows - 1 - cursor_line);
+    self#queue_draw
+
+  method set_hoffset (_:int) = ()
 
   method draw ctx focused =
     let open LTerm_draw in
