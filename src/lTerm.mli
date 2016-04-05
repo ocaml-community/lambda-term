@@ -152,8 +152,8 @@ type ('a, 'b) poll_result =
     library like Lwt or Async. *)
 val poll_event : t -> notifier:'a Notifier.t -> (LTerm_event.t, 'a) poll_result
 
-val send_event  : t -> LTerm_event.t      -> unit
-val send_events : t -> LTerm_event.t list -> unit
+val send_event  : t -> LTerm_event.User.t      -> unit
+val send_events : t -> LTerm_event.User.t list -> unit
 
 (** {6 State change} *)
 

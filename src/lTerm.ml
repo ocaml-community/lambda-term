@@ -372,9 +372,8 @@ end = struct
 
        - it contains at most one Resize
        - it contains at most one Resume
-       - it never contains a Resume followed (immediately or not) by a Resize
 
-       It can however contains a Resize followed (immediately or not) by a Resume. *)
+       [Resize _] events are mapped to the last observed size. *)
     type t [@@deriving sexp_of]
     val create  : unit -> t
     val enqueue : t -> LTerm_event.t -> unit
@@ -387,25 +386,29 @@ end = struct
       { queue : LTerm_event.t Queue.t
       ; mutable resume_in_queue : bool
       ; mutable resize_in_queue : bool
+      ; mutable last_observed_size : LTerm_geom.size
       } [@@deriving sexp_of]
 
     let create () =
-      { queue = Queue.create ()
-      ; resume_in_queue = false
-      ; resize_in_queue = false
+      { queue              = Queue.create ()
+      ; resume_in_queue    = false
+      ; resize_in_queue    = false
+      ; last_observed_size = { rows = 0; cols = 0 }
       }
     ;;
 
     let enqueue t (ev : LTerm_event.t) =
       match ev with
-      | Resize ->
-        (* If the user already has to handle a Resize/Resume there is no need to queue
-           another Resize. This avoid accumulating events when the terminal is not in
-           use. *)
-        if not (t.resize_in_queue || t.resume_in_queue) then begin
-          t.resize_in_queue <- true;
-          Queue.push ev t.queue
-        end;
+      | Resize size ->
+        if size <> t.last_observed_size then begin
+          t.last_observed_size <- size;
+          (* If the user already has to handle a Resize there is no need to queue another
+             one. This also avoid accumulating events when the terminal is not in use. *)
+          if not t.resize_in_queue then begin
+            t.resize_in_queue <- true;
+            Queue.push ev t.queue;
+          end
+        end
       | Resume ->
         if not t.resume_in_queue then begin
           t.resume_in_queue <- true;
@@ -415,21 +418,26 @@ end = struct
         Queue.push ev t.queue
     ;;
 
-    let rec enqueue_many t l =
-      match l with
-      | [] -> ()
-      | ev :: l -> enqueue t ev; enqueue_many t l
-    ;;
+    let enqueue_many t l = List.iter l ~f:(enqueue t)
 
     let dequeue t =
       if Queue.is_empty t.queue then
         None
       else begin
         let ev = Queue.pop t.queue in
-        (match ev with
-         | Resize -> t.resize_in_queue <- false
-         | Resume -> t.resume_in_queue <- false
-         | _           -> ());
+        let ev =
+          match ev with
+          | Resize size ->
+            t.resize_in_queue <- false;
+            if size = t.last_observed_size then
+              ev
+            else
+              Resize t.last_observed_size
+          | Resume ->
+            t.resume_in_queue <- false;
+            ev
+          | _ -> ev
+        in
         Some ev
       end
     ;;
@@ -655,12 +663,14 @@ let add_event t ev =
 let send_event t ev =
   match t.state with
   | Closed -> ()
-  | _      -> Event_queue.send t.events ev
+  | _      -> Event_queue.send t.events (User ev)
 
 let send_events t evs =
   match t.state with
   | Closed -> ()
-  | _      -> Event_queue.send_many t.events evs
+  | _      ->
+    Event_queue.send_many t.events (List.map evs ~f:(fun ev ->
+      LTerm_event.User ev))
 
 let escape_time t = LTerm_unix.Event_parser.escape_time t.event_parser
 let set_escape_time t span = LTerm_unix.Event_parser.set_escape_time t.event_parser span
@@ -824,22 +834,16 @@ module Signals = struct
   ;;
 
   let broadcast_event event =
-    protect Global.mutex ~f:(fun () ->
-      List.iter (fun t -> add_event t event) !Global.terminals)
+    List.iter !Global.terminals ~f:(fun t -> add_event t event)
   ;;
 
   let broadcast_resize () =
     let send t =
       match get_size_from_fd t.fd_out with
-      | size ->
-        if size <> t.size then begin
-          t.size <- size;
-          add_event t Resize
-        end
+      | size -> add_event t (Resize size)
       | exception _ -> ()
     in
-    protect Global.mutex ~f:(fun () ->
-      List.iter send !Global.terminals)
+    List.iter !Global.terminals ~f:send
   ;;
 
   (* Called by the signal manager thread *)
@@ -937,7 +941,10 @@ module Event_reader = struct
 end
 
 let poll_event t ~notifier =
-  Event_queue.poll t.events ~notifier
+  let result = Event_queue.poll t.events ~notifier in
+  match result with
+  | Ready (Resize size) -> t.size <- size; result
+  | _ -> result
 ;;
 
 let rec read_event_sync t =
@@ -1593,7 +1600,7 @@ let set_active t active =
     Event_queue.set_active t.events true;
     let size = get_size_from_fd t.fd_out in
     if size <> t.size then begin
-      add_event t Resize;
+      add_event t (Resize size);
       t.size <- size;
     end;
 ;;

@@ -88,7 +88,7 @@ type t =
   | User          of User.t
   | Signal        of Signal.t (** Signal received             *)
   | Resume                    (** Resuming from a TSTP signal *)
-  | Resize
+  | Resize        of LTerm_geom.size
   | Closed
 
 val to_string : t -> string

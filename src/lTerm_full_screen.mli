@@ -14,8 +14,9 @@ val quit : _ t -> unit
 (** Queue a refresh request. *)
 val refresh : _ t -> unit
 
+(** Size of the terminal *)
 val size : _ t -> LTerm_geom.size
 
 val run_sync : 'a t -> init:'a -> f:('a -> LTerm_event.t -> 'a) -> 'a
 
-val send_event : _ t -> LTerm_event.t -> unit
+val send_event : _ t -> LTerm_event.User.t -> unit

@@ -69,7 +69,7 @@ let read_console_input fd : LTerm_event.t =
     Key (mods, key)
   | Button_down (mods, button, coord) ->
     Button_down (mods, button, coord)
-  | Resize -> Resize
+  | Resize -> Resize { rows = 0; cols = 0 }
 
 type text_attributes =
   { foreground : int

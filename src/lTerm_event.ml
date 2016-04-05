@@ -210,7 +210,7 @@ type t =
   | User          of User.t
   | Signal        of Signal.t
   | Resume
-  | Resize
+  | Resize        of LTerm_geom.size
   | Closed
 
 let hash = Hashtbl.hash
@@ -238,7 +238,7 @@ let to_string = function
                              (Modifiers.to_string m) (string_of_coord c)
   | Signal s              -> Signal.to_string s
   | Resume                -> "resume"
-  | Resize                -> "resize"
+  | Resize s              -> Printf.sprintf "resize-%d:%d" s.rows s.cols
   | Closed                -> "closed"
   | User _                -> "user-event"
 ;;
@@ -260,7 +260,8 @@ let make_char m n =
     Uchar (m, Uchar.of_int n)
 ;;
 
-let zero_coord : LTerm_geom.coord = { row = 0; col = 0 }
+let zero_size  : LTerm_geom.size  = { rows = 0; cols = 0 }
+let zero_coord : LTerm_geom.coord = { row  = 0; col  = 0 }
 
 let patterns =
   [ No_mod   ("\027%s"                , fun s -> Sequence s)
@@ -268,7 +269,8 @@ let patterns =
   ; No_mod   ("quit"                  , Signal Quit)
   ; No_mod   ("susp"                  , Signal Susp)
   ; No_mod   ("resume"                , Resume)
-  ; No_mod   ("resize"                , Resize)
+  ; No_mod   ("resize"                , Resize zero_size)
+  ; No_mod   ("resize-%u:%u"          , fun rows cols -> Resize {rows; cols})
   ; No_mod   ("closed"                , Closed)
   ; With_mod ("space"                 , fun m -> Char (m, ' '))
   ; With_mod ("U+%x"                  , fun m n -> make_char m n)

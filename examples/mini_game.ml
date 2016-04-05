@@ -46,7 +46,7 @@ type Event.User.t += Timeout
 let send_timeouts app =
   while true do
     Thread.delay 0.05;
-    Full_screen.send_event app (User Timeout)
+    Full_screen.send_event app Timeout
   done
 ;;
 
