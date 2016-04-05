@@ -830,6 +830,7 @@ module Signals = struct
         Thread_safe_queue.send t.syncs sync;
       );
       List.iter (fun t -> add_event t Resume) !Global.terminals;
+      Global.state := Normal;
       Condition.broadcast Global.resume)
   ;;
 
