@@ -285,6 +285,14 @@ class type adjustment = object
      (int -> unit) -> unit
     (** [on_offset_change ?switch f] calls f when the offset changes. *)
 
+end
+
+class type scrollable_adjustment = object
+
+  (* public interface *)
+
+  inherit adjustment
+
   method incr : unit
     (** increment offset by one step 
     
@@ -293,8 +301,27 @@ class type adjustment = object
   method decr : unit
     (** decrement offset by one step *)
 
+  method set_scroll_bar_mode : [ `fixed of int | `dynamic of int ] -> unit
+  method set_mouse_mode : [ `middle | `ratio | `auto ] -> unit
+  method set_min_scroll_bar_size : int -> unit
+  method set_max_scroll_bar_size : int -> unit
+
+  (* private scrollbar interface *)
+
+  method set_scroll_window_size : int -> unit
+  method set_scroll_bar_offset : int -> unit
+  method scroll_window_size : int
+  method scroll_bar_size : int
+  method scroll_bar_steps : int
+  method scroll_of_window : int -> int
+  method window_of_scroll : int -> int
+  method scroll_of_mouse : int -> int
+
 end
 
+class default_scrollable_adjustment : scrollable_adjustment
+
+(*
 class type scrollbar = object
   inherit t
   inherit adjustment
@@ -335,13 +362,58 @@ class type scrollbar = object
     (** Set the maximum scroll bar size (default: scroll window size *)
 
 end
+*)
 
 (** Vertically oriented scrollbar *)
-class vscrollbar : ?rc:string -> ?width:int -> unit -> scrollbar
+class vscrollbar_for_adjustment  : ?rc:string -> ?width:int -> #scrollable_adjustment -> t
 
 (** Horizontally oriented scrollbar *)
-class hscrollbar : ?rc:string -> ?height:int -> unit -> scrollbar
+class hscrollbar_for_adjustment  : ?rc:string -> ?height:int -> #scrollable_adjustment -> t
 
+class vscrollbar : ?rc:string -> ?width:int -> unit -> object
+  inherit t
+  inherit scrollable_adjustment
+end
+
+class hscrollbar : ?rc:string -> ?height:int -> unit -> object
+  inherit t
+  inherit scrollable_adjustment
+end
+
+class type scrollable_document = object
+
+  method set_document_size : LTerm_geom.size -> unit
+    (** Size of the document *)
+
+  method set_page_size : LTerm_geom.size -> unit
+    (** Size of a page *)
+
+  method vscroll : scrollable_adjustment
+  method hscroll : scrollable_adjustment
+
+end
+
+class default_scrollable_document : scrollable_document
+
+(** Vertical scrollbar for scrollable widgets *)
+class vscrollbar_for_document : ?width:int -> #scrollable_document -> t
+
+(** Horizontal scrollbar for scrollable widgets *)
+class hscrollbar_for_document : ?height:int -> #scrollable_document -> t
+
+(** Vertical slider *)
+class vslider : int -> object
+  inherit t
+  inherit scrollable_adjustment
+end
+
+(** Horizontal slider *)
+class hslider : int -> object
+  inherit t
+  inherit scrollable_adjustment
+end
+
+(*
 (** Type of widget containing a scrollable document *)
 class type scrollable_document = object
 
@@ -385,7 +457,7 @@ class vslider : int -> scrollbar
 
 (** Horizontal slider *)
 class hslider : int -> scrollbar
-
+*)
 (** {6 Running in a terminal} *)
 
 val run : LTerm.t -> ?save_state : bool -> ?load_resources : bool -> ?resources_file : string -> #t -> 'a Lwt.t -> 'a Lwt.t
