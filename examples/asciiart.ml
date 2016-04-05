@@ -74,9 +74,7 @@ class asciiart img = object(self)
   }
 
   initializer
-    doc#set_document_size self#document_size;
-    doc#vscroll#on_offset_change (fun _ -> self#queue_draw);
-    doc#hscroll#on_offset_change (fun _ -> self#queue_draw)
+    doc#set_document_size self#document_size
 
   method set_allocation r = 
     super#set_allocation r;
@@ -133,6 +131,10 @@ class asciiart img = object(self)
       avg_cols := !avg_cols + 1; 
       doc#set_document_size self#document_size;
       self#queue_draw; true
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Next_page} ->
+      doc#page.down (); self#queue_draw; true
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Prev_page} ->
+      doc#page.up (); self#queue_draw; true
     | _ -> false)
 
 end

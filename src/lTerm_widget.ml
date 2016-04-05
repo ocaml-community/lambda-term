@@ -164,6 +164,7 @@ class hscrollbar = LTerm_scroll_impl.hscrollbar
 class type scrollable_document = object
   method set_document_size : LTerm_geom.size -> unit
   method set_page_size : LTerm_geom.size -> unit
+  method page : (unit -> unit) LTerm_geom.directions 
   method vscroll : scrollable_adjustment
   method hscroll : scrollable_adjustment
 end
@@ -193,6 +194,14 @@ class default_scrollable_document = object(self)
   method set_page_size size = 
     page_size <- size;
     self#update
+
+  method page = 
+    {
+      left  = (fun () -> hscroll#set_offset (hscroll#offset - page_size.cols));
+      right = (fun () -> hscroll#set_offset (hscroll#offset + page_size.cols));
+      up    = (fun () -> vscroll#set_offset (vscroll#offset - page_size.rows));
+      down  = (fun () -> vscroll#set_offset (vscroll#offset + page_size.rows));
+    }
 
   method vscroll = vscroll
   method hscroll = hscroll
