@@ -121,9 +121,10 @@ class default_scrollable_adjustment = object(self)
       | `fixed size -> self#scroll_bar_size_fixed size
       | `dynamic size -> self#scroll_bar_size_dynamic size
     in
-    (if scroll_bar_size <> size then 
+    (if scroll_bar_size <> size then begin
       scroll_bar_size <- size;
-      LTerm_widget_callbacks.exec_callbacks scrollbar_change_callbacks ());
+      LTerm_widget_callbacks.exec_callbacks scrollbar_change_callbacks ()
+    end);
     size
 
   method private scroll_bar_steps = 
@@ -132,9 +133,10 @@ class default_scrollable_adjustment = object(self)
   val mutable scroll_bar_offset = 0
   method private set_scroll_bar_offset o = 
     let offset = max 0 (min (self#scroll_bar_steps-1) o) in
-    (if scroll_bar_offset <> offset then 
+    (if scroll_bar_offset <> offset then begin
       scroll_bar_offset <- offset;
-      LTerm_widget_callbacks.exec_callbacks scrollbar_change_callbacks ())
+      LTerm_widget_callbacks.exec_callbacks scrollbar_change_callbacks ()
+    end)
 
   method private window_of_scroll offset = 
     self#set_scroll_bar_offset offset;

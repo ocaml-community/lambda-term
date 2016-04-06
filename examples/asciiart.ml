@@ -115,6 +115,7 @@ class asciiart img = object(self)
       self#hscroll#set_offset 
         (self#hscroll#offset + m.LTerm_mouse.col - alloc.col1 - size.cols/2);
       true
+    (* adjust scale, which changes the document size *)
     | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c} when c = UChar.of_char 'w' ->
       avg_rows := max 1 (!avg_rows - 1);
       doc#set_document_size self#document_size;
@@ -131,6 +132,7 @@ class asciiart img = object(self)
       avg_cols := !avg_cols + 1; 
       doc#set_document_size self#document_size;
       self#queue_draw; true
+    (* page up/down *)
     | LTerm_event.Key{LTerm_key.code=LTerm_key.Next_page} ->
       doc#page.down (); self#queue_draw; true
     | LTerm_event.Key{LTerm_key.code=LTerm_key.Prev_page} ->
