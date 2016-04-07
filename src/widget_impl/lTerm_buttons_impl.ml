@@ -19,7 +19,11 @@ class t = LTerm_widget_base_impl.t
 
 let space = Char(UChar.of_char ' ')
 
-class button initial_label = object(self)
+class button ?(brackets=("< "," >")) initial_label =
+  let bl, br = brackets in
+  let brackets_size = String.length bl + String.length br in
+
+  object(self)
   inherit t "button" as super
 
   method can_focus = true
@@ -29,7 +33,7 @@ class button initial_label = object(self)
   method on_click ?switch f =
     register switch click_callbacks f
 
-  val mutable size_request = { rows = 1; cols = 4 + Zed_utf8.length initial_label }
+  val mutable size_request = { rows = 1; cols = brackets_size + Zed_utf8.length initial_label }
   method size_request = size_request
 
   val mutable label = initial_label
@@ -38,7 +42,7 @@ class button initial_label = object(self)
 
   method set_label text =
     label <- text;
-    size_request <- { rows = 1; cols = 4 + Zed_utf8.length text };
+    size_request <- { rows = 1; cols = brackets_size + Zed_utf8.length text };
     self#queue_draw
 
   initializer
@@ -73,7 +77,8 @@ class button initial_label = object(self)
     let { rows; cols } = LTerm_draw.size ctx in
     let len = Zed_utf8.length label in
     self#apply_style ctx focused;
-    LTerm_draw.draw_string ctx (rows / 2) ((cols - len - 4) / 2) (Printf.sprintf "< %s >" label)
+    LTerm_draw.draw_string ctx (rows / 2) ((cols - len - brackets_size) / 2) 
+      (Printf.sprintf "%s%s%s" bl label br)
 end
 
 class checkbutton initial_label initial_state = object(self)

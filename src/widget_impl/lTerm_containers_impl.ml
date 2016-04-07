@@ -319,18 +319,24 @@ class frame = object(self)
           self#queue_draw
       | None ->
           ()
+  val mutable label = ""
+  val mutable align = H_align_left
+  method set_label ?(alignment=H_align_left) l = 
+    label <- l;
+    align <- alignment
 
   method draw ctx focused =
     let size = LTerm_draw.size ctx in
     LTerm_draw.fill_style ctx style;
     if size.rows >= 1 && size.cols >= 1 then begin
-      LTerm_draw.draw_frame
-        ctx
+      let rect = 
         { row1 = 0;
           col1 = 0;
           row2 = size.rows;
           col2 = size.cols }
-        connection;
+      in
+      (if label = "" then LTerm_draw.draw_frame ctx rect connection
+      else LTerm_draw.draw_frame_labelled ctx rect ~alignment:align label connection);
       if size.rows > 2 && size.cols > 2 then
         match child with
           | Some widget ->

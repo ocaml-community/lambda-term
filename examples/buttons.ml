@@ -14,7 +14,7 @@ let main () =
   let waiter, wakener = wait () in
 
   let vbox = new vbox in
-  let button = new button "exit" in
+  let button = new button ~brackets:("[ "," ]") "exit" in
   let label = new label "_" in
   button#on_click (wakeup wakener);
   vbox#add button;
@@ -38,6 +38,7 @@ let main () =
 
   let frame = new frame in
   frame#set vbox;
+  frame#set_label ~alignment:LTerm_geom.H_align_center "Button test";
 
   Lazy.force LTerm.stdout >>= fun term ->
   LTerm.enable_mouse term >>= fun () ->
