@@ -40,7 +40,6 @@ Library "lambda-term"
     lwt (>= 2.4.0),
     lwt.unix,
     lwt.react,
-    xdg-basedir (>= 0.0.2),
     zed (>= 1.2)
   XMETADescription: Cross-platform library for terminal manipulation
   Path: src
