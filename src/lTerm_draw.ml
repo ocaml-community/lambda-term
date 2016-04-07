@@ -109,14 +109,20 @@ let size ctx = {
 
 exception Out_of_bounds
 
-let sub ctx rect =
-  if rect.row1 < 0 || rect.col1 < 0 || rect.row1 > rect.row2 || rect.col1 > rect.col2 then raise Out_of_bounds;
-  let row1 = ctx.ctx_row1 + rect.row1
-  and col1 = ctx.ctx_col1 + rect.col1
-  and row2 = ctx.ctx_row1 + rect.row2
-  and col2 = ctx.ctx_col1 + rect.col2 in
-  if row2 > ctx.ctx_row2 || col2 > ctx.ctx_col2 then raise Out_of_bounds;
-  { ctx with ctx_row1 = row1; ctx_col1 = col1; ctx_row2 = row2; ctx_col2 = col2 }
+let sub_opt ctx rect =
+  if rect.row1 < 0 || rect.col1 < 0 || rect.row1 > rect.row2 || rect.col1 > rect.col2 then None
+  else
+    let row1 = ctx.ctx_row1 + rect.row1
+    and col1 = ctx.ctx_col1 + rect.col1
+    and row2 = ctx.ctx_row1 + rect.row2
+    and col2 = ctx.ctx_col1 + rect.col2 in
+    if row2 > ctx.ctx_row2 || col2 > ctx.ctx_col2 then None
+    else Some { ctx with ctx_row1 = row1; ctx_col1 = col1; ctx_row2 = row2; ctx_col2 = col2 }
+
+let sub ctx rect = 
+  match sub_opt ctx rect with 
+  | None -> raise Out_of_bounds 
+  | Some(ctx) -> ctx
 
 let space = UChar.of_char ' '
 let newline = UChar.of_char '\n'
@@ -589,7 +595,7 @@ let draw_frame ctx rect ?style connection =
 
 let draw_frame_labelled ctx rect ?style ?(alignment=H_align_left) label connection = 
   draw_frame ctx rect ?style connection;
-  try 
-    let ctx = sub ctx { row1=0; row2=1; col1=1; col2=rect.col2-1 } in
-    draw_string_aligned ctx rect.row1 alignment label
-  with Out_of_bounds -> ()
+  let rect = { row1 = rect.row1; row2 = rect.row1+1; col1 = rect.col1+1; col2 = rect.col2-1 } in
+  match sub_opt ctx rect with
+  | Some(ctx) -> draw_string_aligned ctx 0 alignment label
+  | None -> ()
