@@ -1,4 +1,183 @@
 true: bin_annot
 <**/*.ml{,i}>: warn(-40)
 # OASIS_START
+# DO NOT EDIT (digest: f12ba400c7843bbf5596c40bead94720)
+# Ignore VCS directories, you can use the same kind of rule outside
+# OASIS_START/STOP if you want to exclude directories that contains
+# useless stuff for the build process
+true: annot, bin_annot
+<**/.svn>: -traverse
+<**/.svn>: not_hygienic
+".bzr": -traverse
+".bzr": not_hygienic
+".hg": -traverse
+".hg": not_hygienic
+".git": -traverse
+".git": not_hygienic
+"_darcs": -traverse
+"_darcs": not_hygienic
+# Library lambda-term
+"src/lambda-term.cmxs": use_lambda-term
+<src/*.ml{,i,y}>: oasis_library_lambda_term_ccopt
+<src/widget_impl/*.ml{,i,y}>: oasis_library_lambda_term_ccopt
+"src/lTerm_term_stubs.c": oasis_library_lambda_term_ccopt
+"src/lTerm_unix_stubs.c": oasis_library_lambda_term_ccopt
+"src/lTerm_windows_stubs.c": oasis_library_lambda_term_ccopt
+<src/lambda-term.{cma,cmxa}>: oasis_library_lambda_term_cclib
+"src/liblambda-term_stubs.lib": oasis_library_lambda_term_cclib
+"src/dlllambda-term_stubs.dll": oasis_library_lambda_term_cclib
+"src/liblambda-term_stubs.a": oasis_library_lambda_term_cclib
+"src/dlllambda-term_stubs.so": oasis_library_lambda_term_cclib
+<src/lambda-term.{cma,cmxa}>: use_liblambda-term_stubs
+<src/*.ml{,i,y}>: pkg_lwt
+<src/*.ml{,i,y}>: pkg_lwt.react
+<src/*.ml{,i,y}>: pkg_lwt.unix
+<src/*.ml{,i,y}>: pkg_zed
+<src/widget_impl/*.ml{,i,y}>: pkg_lwt
+<src/widget_impl/*.ml{,i,y}>: pkg_lwt.react
+<src/widget_impl/*.ml{,i,y}>: pkg_lwt.unix
+<src/widget_impl/*.ml{,i,y}>: pkg_zed
+"src/lTerm_term_stubs.c": pkg_lwt
+"src/lTerm_term_stubs.c": pkg_lwt.react
+"src/lTerm_term_stubs.c": pkg_lwt.unix
+"src/lTerm_term_stubs.c": pkg_zed
+"src/lTerm_unix_stubs.c": pkg_lwt
+"src/lTerm_unix_stubs.c": pkg_lwt.react
+"src/lTerm_unix_stubs.c": pkg_lwt.unix
+"src/lTerm_unix_stubs.c": pkg_zed
+"src/lTerm_windows_stubs.c": pkg_lwt
+"src/lTerm_windows_stubs.c": pkg_lwt.react
+"src/lTerm_windows_stubs.c": pkg_lwt.unix
+"src/lTerm_windows_stubs.c": pkg_zed
+# Executable events
+<examples/events.{native,byte}>: pkg_lwt
+<examples/events.{native,byte}>: pkg_lwt.react
+<examples/events.{native,byte}>: pkg_lwt.unix
+<examples/events.{native,byte}>: pkg_zed
+<examples/events.{native,byte}>: use_lambda-term
+# Executable colors
+<examples/colors.{native,byte}>: pkg_lwt
+<examples/colors.{native,byte}>: pkg_lwt.react
+<examples/colors.{native,byte}>: pkg_lwt.unix
+<examples/colors.{native,byte}>: pkg_zed
+<examples/colors.{native,byte}>: use_lambda-term
+# Executable colors_256
+<examples/colors_256.{native,byte}>: pkg_lwt
+<examples/colors_256.{native,byte}>: pkg_lwt.react
+<examples/colors_256.{native,byte}>: pkg_lwt.unix
+<examples/colors_256.{native,byte}>: pkg_zed
+<examples/colors_256.{native,byte}>: use_lambda-term
+# Executable rgb
+<examples/rgb.{native,byte}>: pkg_lwt
+<examples/rgb.{native,byte}>: pkg_lwt.react
+<examples/rgb.{native,byte}>: pkg_lwt.unix
+<examples/rgb.{native,byte}>: pkg_zed
+<examples/rgb.{native,byte}>: use_lambda-term
+# Executable move
+<examples/move.{native,byte}>: pkg_lwt
+<examples/move.{native,byte}>: pkg_lwt.react
+<examples/move.{native,byte}>: pkg_lwt.unix
+<examples/move.{native,byte}>: pkg_zed
+<examples/move.{native,byte}>: use_lambda-term
+# Executable hello
+<examples/hello.{native,byte}>: pkg_lwt
+<examples/hello.{native,byte}>: pkg_lwt.react
+<examples/hello.{native,byte}>: pkg_lwt.unix
+<examples/hello.{native,byte}>: pkg_zed
+<examples/hello.{native,byte}>: use_lambda-term
+# Executable clock
+<examples/clock.{native,byte}>: pkg_lwt
+<examples/clock.{native,byte}>: pkg_lwt.react
+<examples/clock.{native,byte}>: pkg_lwt.unix
+<examples/clock.{native,byte}>: pkg_zed
+<examples/clock.{native,byte}>: use_lambda-term
+# Executable buttons
+<examples/buttons.{native,byte}>: pkg_lwt
+<examples/buttons.{native,byte}>: pkg_lwt.react
+<examples/buttons.{native,byte}>: pkg_lwt.unix
+<examples/buttons.{native,byte}>: pkg_zed
+<examples/buttons.{native,byte}>: use_lambda-term
+# Executable focus
+<examples/focus.{native,byte}>: pkg_lwt
+<examples/focus.{native,byte}>: pkg_lwt.react
+<examples/focus.{native,byte}>: pkg_lwt.unix
+<examples/focus.{native,byte}>: pkg_zed
+<examples/focus.{native,byte}>: use_lambda-term
+# Executable checkbuttons
+<examples/checkbuttons.{native,byte}>: pkg_lwt
+<examples/checkbuttons.{native,byte}>: pkg_lwt.react
+<examples/checkbuttons.{native,byte}>: pkg_lwt.unix
+<examples/checkbuttons.{native,byte}>: pkg_zed
+<examples/checkbuttons.{native,byte}>: use_lambda-term
+# Executable radiobuttons
+<examples/radiobuttons.{native,byte}>: pkg_lwt
+<examples/radiobuttons.{native,byte}>: pkg_lwt.react
+<examples/radiobuttons.{native,byte}>: pkg_lwt.unix
+<examples/radiobuttons.{native,byte}>: pkg_zed
+<examples/radiobuttons.{native,byte}>: use_lambda-term
+# Executable shell
+<examples/shell.{native,byte}>: pkg_lwt
+<examples/shell.{native,byte}>: pkg_lwt.react
+<examples/shell.{native,byte}>: pkg_lwt.unix
+<examples/shell.{native,byte}>: pkg_str
+<examples/shell.{native,byte}>: pkg_zed
+<examples/shell.{native,byte}>: use_lambda-term
+<examples/*.ml{,i,y}>: pkg_str
+# Executable repl
+<examples/repl.{native,byte}>: pkg_lwt
+<examples/repl.{native,byte}>: pkg_lwt.react
+<examples/repl.{native,byte}>: pkg_lwt.unix
+<examples/repl.{native,byte}>: pkg_zed
+<examples/repl.{native,byte}>: use_lambda-term
+# Executable modal
+<examples/modal.{native,byte}>: pkg_lwt
+<examples/modal.{native,byte}>: pkg_lwt.react
+<examples/modal.{native,byte}>: pkg_lwt.unix
+<examples/modal.{native,byte}>: pkg_zed
+<examples/modal.{native,byte}>: use_lambda-term
+# Executable read-password
+<examples/read_password.{native,byte}>: pkg_lwt
+<examples/read_password.{native,byte}>: pkg_lwt.react
+<examples/read_password.{native,byte}>: pkg_lwt.unix
+<examples/read_password.{native,byte}>: pkg_zed
+<examples/read_password.{native,byte}>: use_lambda-term
+# Executable read-yes-no
+<examples/read_yes_no.{native,byte}>: pkg_lwt
+<examples/read_yes_no.{native,byte}>: pkg_lwt.react
+<examples/read_yes_no.{native,byte}>: pkg_lwt.unix
+<examples/read_yes_no.{native,byte}>: pkg_zed
+<examples/read_yes_no.{native,byte}>: use_lambda-term
+# Executable editor
+<examples/editor.{native,byte}>: pkg_lwt
+<examples/editor.{native,byte}>: pkg_lwt.react
+<examples/editor.{native,byte}>: pkg_lwt.unix
+<examples/editor.{native,byte}>: pkg_zed
+<examples/editor.{native,byte}>: use_lambda-term
+<examples/*.ml{,i,y}>: pkg_lwt
+<examples/*.ml{,i,y}>: pkg_lwt.react
+<examples/*.ml{,i,y}>: pkg_lwt.unix
+<examples/*.ml{,i,y}>: pkg_zed
+<examples/*.ml{,i,y}>: use_lambda-term
+# Executable lambda-term-actions
+<tools/lambda_term_actions.{native,byte}>: pkg_lwt
+<tools/lambda_term_actions.{native,byte}>: pkg_lwt.react
+<tools/lambda_term_actions.{native,byte}>: pkg_lwt.unix
+<tools/lambda_term_actions.{native,byte}>: pkg_zed
+<tools/lambda_term_actions.{native,byte}>: use_lambda-term
+<tools/*.ml{,i,y}>: pkg_lwt
+<tools/*.ml{,i,y}>: pkg_lwt.react
+<tools/*.ml{,i,y}>: pkg_lwt.unix
+<tools/*.ml{,i,y}>: pkg_zed
+<tools/*.ml{,i,y}>: use_lambda-term
+# Executable history-stress-test
+<tests/history_stress_test.{native,byte}>: pkg_lwt
+<tests/history_stress_test.{native,byte}>: pkg_lwt.react
+<tests/history_stress_test.{native,byte}>: pkg_lwt.unix
+<tests/history_stress_test.{native,byte}>: pkg_zed
+<tests/history_stress_test.{native,byte}>: use_lambda-term
+<tests/*.ml{,i,y}>: pkg_lwt
+<tests/*.ml{,i,y}>: pkg_lwt.react
+<tests/*.ml{,i,y}>: pkg_lwt.unix
+<tests/*.ml{,i,y}>: pkg_zed
+<tests/*.ml{,i,y}>: use_lambda-term
 # OASIS_STOP
