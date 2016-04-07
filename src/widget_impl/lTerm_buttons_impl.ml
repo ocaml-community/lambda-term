@@ -47,8 +47,7 @@ class button initial_label = object(self)
          | LTerm_event.Key { control = false; meta = false; shift = false; code = Enter } ->
              exec_callbacks click_callbacks ();
              true
-         | LTerm_event.Mouse m when
-            m.button = Button1 && in_rect self#allocation (coord m) ->
+         | LTerm_event.Mouse m when m.button = Button1 ->
              exec_callbacks click_callbacks ();
              true
          | _ ->
@@ -94,7 +93,7 @@ class checkbutton initial_label initial_state = object(self)
         | LTerm_event.Key { control = false; meta = false; shift = false; code }
           when (code = Enter || code = space) -> update ()
         | LTerm_event.Mouse m 
-          when m.button = Button1 && in_rect self#allocation (coord m) -> update ()
+          when m.button = Button1 -> update ()
         | _ ->
             false);
     self#set_resource_class "checkbutton"
@@ -165,8 +164,7 @@ class ['a] radiobutton (group : 'a radiogroup) initial_label (id : 'a) = object(
       match ev with
       | LTerm_event.Key { control = false; meta = false; shift = false; code }
         when (code = Enter || code = space) -> update ()
-      | LTerm_event.Mouse m when
-        m.button = Button1 && in_rect self#allocation (coord m) -> update ()
+      | LTerm_event.Mouse m when m.button = Button1 -> update ()
       | _ -> false);
     self#set_resource_class "radiobutton";
     group#register_object (self :> 'a radio)
