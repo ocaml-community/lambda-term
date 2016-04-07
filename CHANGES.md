@@ -1,3 +1,14 @@
+1.10 (2016-04-07)
+-----------------
+
+* add support for editing the current input with an external editor
+  (action `edit-with-external-editor`), bound to `C-x C-e` by default
+* add forward search in history (action `next-search`), bound to `M-s` by default
+* add support for mouse clicks on widgets
+  (thanks to Andrew Ray)
+* add support for looking up files in XDG locations
+  (thanks to Genki Marshall)
+
 1.9 (2015-06-23)
 ----------------
 
@@ -28,7 +39,7 @@
 * fix OpenBSD builds
 
 1.5 (2013-08-07)
----------------
+----------------
 
 * workaround camomile raising the wrong exception for encoding
   failures
