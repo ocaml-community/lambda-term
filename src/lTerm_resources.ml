@@ -1,3 +1,4 @@
+
 (*
  * lTerm_resources.ml
  * ------------------
@@ -26,6 +27,25 @@ let home =
 
 type xdg_location = Cache | Config | Data
 
+module XDGBD = struct
+  let ( / ) = Filename.concat
+
+  let get env_var unix_default win32_default =
+    try
+      Sys.getenv env_var
+    with Not_found ->
+      if Sys.win32 then win32_default else unix_default
+
+  let cache  = get "XDG_CACHE_HOME"  (home / ".cache")           (home / "Local Settings" / "Cache")
+  let config = get "XDG_CONFIG_HOME" (home / ".config")          (home / "Local Settings")
+  let data   = get "XDG_DATA_HOME"   (home / ".local" / "share") (try Sys.getenv "AppData" with Not_found -> "")
+
+  let user_dir = function
+    | Cache  -> cache
+    | Config -> config
+    | Data   -> data
+end
+
 let xdgbd_warning loc file_name =
   let loc_name = match loc with
     | Cache  -> "$XDG_CACHE_HOME"
@@ -42,11 +62,7 @@ let xdgbd_file ~loc ?(allow_legacy_location=false) name =
     let () = xdgbd_warning loc home_file in
     home_file
   else
-    let loc_file = match loc with
-      | Cache  -> XDGBaseDir.Cache.user_file
-      | Config -> XDGBaseDir.Config.user_file
-      | Data   -> XDGBaseDir.Data.user_file in
-    loc_file name
+    Filename.concat (XDGBD.user_dir loc) name
 
 (* +-----------------------------------------------------------------+
    | Types                                                           |

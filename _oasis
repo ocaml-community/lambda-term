@@ -39,7 +39,6 @@ Library "lambda-term2"
   BuildDepends:
     threads,
     react,
-    xdg-basedir (>= 0.0.2),
     zed2 (>= 2.0),
     zed2.bigarray
   XMETADescription: Cross-platform library for terminal manipulation
