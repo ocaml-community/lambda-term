@@ -1113,9 +1113,9 @@ object(self)
     Filename.temp_file "lambda-term" ".txt"
 
   method external_editor =
-    match Sys.getenv "EDITOR" with
-    | exception Not_found -> "vi"
-    | editor -> editor
+    try
+      Sys.getenv "EDITOR"
+    with Not_found -> "vi"
 
   method private exec = function
     | Accept :: _ when S.value self#mode = Edition ->
