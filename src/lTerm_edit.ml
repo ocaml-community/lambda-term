@@ -164,12 +164,17 @@ let dummy_cursor = Zed_edit.new_cursor dummy_engine
 let dummy_context = Zed_edit.context dummy_engine dummy_cursor
 let newline = UChar.of_char '\n'
 
+class scrollable = object(self)
+  inherit LTerm_widget.scrollable
+  method calculate_range page_size document_size = (document_size - page_size/2)
+end
+
 class edit ?(clipboard = clipboard) ?(macro = macro) () =
   let locale, set_locale = S.create None in
 object(self)
   inherit LTerm_widget.t "edit" as super
 
-  val vscroll = new LTerm_widget.scrollable
+  val vscroll = new scrollable
   method vscroll = vscroll
 
   method clipboard = clipboard
@@ -212,9 +217,6 @@ object(self)
   val mutable start = 0
   val mutable start_line = 0
   val mutable size = { cols = 0; rows = 0 }
-  method start = start
-  method shift = shift
-  method start_line = start_line
 
   method private update_window_position = 
     let line_set = Zed_edit.lines engine in
@@ -236,7 +238,7 @@ object(self)
       if cursor_line < start_line' || cursor_line >= start_line' + size.rows then begin
         (*let start_line' = max 0 (cursor_line - size.rows / 2) in*)
         let line_count = Zed_lines.count line_set in
-        let start_line' = min line_count (max 0 (cursor_line - size.rows + 1)) in
+        let start_line' = min line_count (max 0 (cursor_line - size.rows / 2)) in
         start <- Zed_lines.line_start line_set start_line';
         start_line'
       end else
@@ -341,12 +343,7 @@ object(self)
      that it wants to expand as much as possible. *)
   method size_request = { cols = 1_000_000; rows = 1_000_000 }
 
-  val mutable offset_count = 0
-  method offset_count = offset_count
-  val mutable delta = 0
-  method delta = delta
   initializer vscroll#on_offset_change (fun n -> 
-    offset_count <- offset_count + 1;
  
     (* find what line the cursor is currently on. *)
     let line_set = Zed_edit.lines engine in
@@ -358,14 +355,12 @@ object(self)
     
     if cursor_line < start_line then begin
       let d = start_line - cursor_line in
-      Zed_edit.move_line context d; (* first row *)
-      delta <- d;
+      Zed_edit.move_line context d (* first row *)
     end else if cursor_line >= start_line + size.rows then begin
       let line_count = Zed_lines.count line_set in
       let line = max 0 (min (line_count+1) (start_line + size.rows - 1)) in (* last row *)
       let d = line - cursor_line in
-      Zed_edit.move_line context d;
-      delta <- d;
+      Zed_edit.move_line context d
     end;
     self#queue_draw;
   )

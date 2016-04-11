@@ -74,12 +74,6 @@ class edit : ?clipboard : Zed_edit.clipboard -> ?macro : action Zed_macro.t -> u
   method engine : edit Zed_edit.t
     (** The edition engine used by this widget. *)
 
-  method start : int (* XXX delete me *)
-  method shift : int
-  method start_line : int
-  method offset_count : int
-  method delta : int
-
   method cursor : Zed_cursor.t
     (** The cursor used by this widget. *)
 
