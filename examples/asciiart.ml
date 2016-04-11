@@ -110,7 +110,7 @@ class asciiart img = object(self)
       done
     done
 
-  initializer self#on_event (fun ev ->
+  method private event_handler ev =
     let open LTerm_mouse in
     match ev with
     | LTerm_event.Mouse m when m.button=Button1 ->
@@ -139,12 +139,20 @@ class asciiart img = object(self)
       avg_cols := !avg_cols + 1; 
       hscroll#set_document_size self#document_size.cols;
       self#queue_draw; true
+    | _ -> false
+
+  method private scroll_handler = function
     (* page up/down *)
     | LTerm_event.Key{LTerm_key.code=LTerm_key.Next_page} ->
       vscroll#set_offset @@ vscroll#page_next; self#queue_draw; true
     | LTerm_event.Key{LTerm_key.code=LTerm_key.Prev_page} ->
       vscroll#set_offset @@ vscroll#page_prev; self#queue_draw; true
-    | _ -> false)
+    | _ -> false
+
+  initializer 
+    vscroll#add_scroll_event_handler self#scroll_handler;
+    hscroll#add_scroll_event_handler self#scroll_handler;
+    self#on_event (fun ev -> self#event_handler ev || self#scroll_handler ev)
 
 end
 

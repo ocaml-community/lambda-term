@@ -330,6 +330,15 @@ class type scrollable_adjustment = object
     (** [on_scrollbar_change ?switch f] calls f when the scrollbar is changed and
      needs to be re-drawn. *)
 
+  method scroll_event_handler : LTerm_event.t -> bool
+    (** event handlers run by the scrollbar widget *)
+
+  method set_scroll_event_handler : (LTerm_event.t -> bool) -> unit
+    (** set event handler *)
+
+  method add_scroll_event_handler : (LTerm_event.t -> bool) -> unit
+    (** add event handlers *)
+
 end
 
 (* Automatic configuration of the scrollbar.

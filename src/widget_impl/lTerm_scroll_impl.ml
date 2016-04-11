@@ -196,6 +196,15 @@ class scrollable_adjustment = object(self)
   method page_prev = self#offset - page_size
   method page_next = self#offset + page_size
 
+  val mutable scroll_event_handler : (LTerm_event.t -> bool) = 
+    (fun _ -> false)
+  method scroll_event_handler = scroll_event_handler
+  method set_scroll_event_handler f = scroll_event_handler <- f
+  method add_scroll_event_handler f = 
+    let f' = scroll_event_handler in
+    self#set_scroll_event_handler
+      (fun ev -> if f ev then true else f' ev)
+
   method get_render_params = 
     scroll_bar_offset,
     self#scroll_bar_size, 
@@ -230,8 +239,6 @@ class virtual scrollbar rc (adj : #scrollable_adjustment) = object(self)
   (* virtual methods needed to abstract over vert/horz scrollbars *)
 
   method virtual private mouse_offset : LTerm_mouse.t -> rect -> int
-  method virtual private key_scroll_incr : LTerm_key.code
-  method virtual private key_scroll_decr : LTerm_key.code
 
   (* event handling *)
 
@@ -247,17 +254,7 @@ class virtual scrollbar rc (adj : #scrollable_adjustment) = object(self)
       adj#set_offset @@ adj#mouse_scroll scroll;
       true
 
-    | LTerm_event.Key { control = false; meta = false; shift = true; code } 
-      when code=self#key_scroll_decr ->
-      adj#set_offset adj#decr;
-      true
-
-    | LTerm_event.Key { control = false; meta = false; shift = true; code } 
-      when code=self#key_scroll_incr ->
-      adj#set_offset adj#incr;
-      true
-
-    | _ -> false
+    | _ -> adj#scroll_event_handler ev
 
   (* drawing *)
   method private draw_bar ctx style rect =
@@ -290,8 +287,6 @@ class vscrollbar ?(rc="scrollbar") ?(width=2) adj = object(self)
   method size_request = { rows=0; cols=width }
 
   method private mouse_offset m alloc = m.LTerm_mouse.row - alloc.row1 
-  method private key_scroll_incr = LTerm_key.Down
-  method private key_scroll_decr = LTerm_key.Up
 
   method set_allocation r = 
     super#set_allocation r;
@@ -315,6 +310,18 @@ class vscrollbar ?(rc="scrollbar") ?(width=2) adj = object(self)
     (if show_track then draw_vline ctx 0 (cols/2) scroll_window_size ~style Light);
     self#draw_bar ctx style rect
 
+  initializer
+    adj#add_scroll_event_handler (fun ev ->
+      let open LTerm_key in
+      match ev with
+      | LTerm_event.Key { control = false; meta = false; shift = true; code=Up } ->
+        adj#set_offset adj#decr;
+        true
+      | LTerm_event.Key { control = false; meta = false; shift = true; code=Down } ->
+        adj#set_offset adj#incr;
+        true
+      | _ -> false)
+
 end
 
 class hscrollbar ?(rc="scrollbar") ?(height=2) adj = object(self)
@@ -323,8 +330,6 @@ class hscrollbar ?(rc="scrollbar") ?(height=2) adj = object(self)
   method size_request = { rows=height; cols=0 }
 
   method private mouse_offset m alloc = m.LTerm_mouse.col - alloc.col1 
-  method private key_scroll_incr = LTerm_key.Right
-  method private key_scroll_decr = LTerm_key.Left
 
   method set_allocation r = 
     super#set_allocation r;
@@ -348,6 +353,18 @@ class hscrollbar ?(rc="scrollbar") ?(height=2) adj = object(self)
     (if show_track then draw_hline ctx (rows/2) 0 scroll_window_size ~style Light);
     self#draw_bar ctx style rect
 
+  initializer
+    adj#add_scroll_event_handler (fun ev ->
+      let open LTerm_key in
+      match ev with
+      | LTerm_event.Key { control = false; meta = false; shift = true; code=Left } ->
+        adj#set_offset adj#decr;
+        true
+      | LTerm_event.Key { control = false; meta = false; shift = true; code=Right } ->
+        adj#set_offset adj#incr;
+        true
+      | _ -> false)
+
 end
 
 class vslider rng = 
@@ -357,7 +374,17 @@ class vslider rng =
     initializer
       adj#set_mouse_mode `middle;
       adj#set_scroll_bar_mode (`fixed 1);
-      adj#set_range (max 0 rng)
+      adj#set_range (max 0 rng);
+      adj#add_scroll_event_handler (fun ev ->
+        let open LTerm_key in
+        match ev with
+        | LTerm_event.Key { control = false; meta = false; shift = true; code=Up} ->
+        adj#set_offset (adj#offset-1);
+        true
+      | LTerm_event.Key { control = false; meta = false; shift = true; code=Down } ->
+        adj#set_offset (adj#offset+1);
+        true
+      | _ -> false)
     method size_request = { rows=rng; cols=1 }
     method offset = adj#offset
     method set_offset = adj#set_offset
@@ -373,7 +400,17 @@ class hslider rng =
     initializer
       adj#set_mouse_mode `middle;
       adj#set_scroll_bar_mode (`fixed 1);
-      adj#set_range (max 0 rng)
+      adj#set_range (max 0 rng);
+      adj#add_scroll_event_handler (fun ev ->
+        let open LTerm_key in
+        match ev with
+        | LTerm_event.Key { control = false; meta = false; shift = true; code=Left } ->
+        adj#set_offset (adj#offset-1);
+        true
+      | LTerm_event.Key { control = false; meta = false; shift = true; code=Right } ->
+        adj#set_offset (adj#offset+1);
+        true
+      | _ -> false)
     method size_request = { rows=1; cols=rng }
     method offset = adj#offset
     method set_offset = adj#set_offset
