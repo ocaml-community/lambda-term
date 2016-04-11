@@ -102,7 +102,7 @@ class label : string -> object
   inherit t
 
   method text : string
-    (** The text of  the label. *)
+    (** The text of the label. *)
 
   method set_text : string -> unit
 end
@@ -258,54 +258,42 @@ end
 
 (** {6 Scrollbars} *)
 
-(** {8 Interfaces} *)
-
 (** Adjustable integer value from (0..range-1) *)
-class type adjustment = object
+class adjustment : object
 
   method range : int
     (** range of adjustment *)
 
-  method set_range : int -> unit
-    (** set range of adjustment.
-    
-     The range can be changed dynamically, set statically in an
-     [initializer] if known when the widget is created,
-     or set in the [set_allocation] method if the size of the 
-     widget needs to be known. *)
+  method set_range : ?trigger_callback:bool -> int -> unit
+    (** set range of adjustment. *)
 
   method offset : int
     (** offset from (0..range-1) *)
 
-  method set_offset : int -> unit
-    (** Set offset clipped to range.
+  method set_offset : ?trigger_callback:bool -> int -> unit
+    (** Set offset clipped to range. *)
     
-    The scrollbars will call [queue_draw] when [set_offset]
-    is called. *)
-
   method on_offset_change : ?switch:LTerm_widget_callbacks.switch -> 
      (int -> unit) -> unit
     (** [on_offset_change ?switch f] calls f when the offset changes. *)
 
 end
 
-(** Interface between an adjustment and scrollbar *)
+(** Interface between an adjustment and a scrollbar widget. *)
 class type scrollable_adjustment = object
-
-  (* public interface *)
 
   inherit adjustment
 
-  method incr : unit
-    (** Increment offset by one step 
+  method incr : int
+    (** Return offset incremented by one step 
     
     If range > number of scroll bar steps then step>=1. *)
 
-  method decr : unit
-    (** Decrement offset by one step *)
+  method decr : int
+    (** Return offset decremented by one step *)
 
-  method mouse_scroll : int -> unit
-    (** [adj#mouse_scroll offset] updates the scroll bar based on a click
+  method mouse_scroll : int -> int
+    (** [adj#mouse_scroll offset] computes the scroll bar based on a click
     [offset] units from the top/left *)
 
   method set_scroll_bar_mode : [ `fixed of int | `dynamic of int ] -> unit
@@ -316,9 +304,9 @@ class type scrollable_adjustment = object
      [`dynamic 0] sets the size to reflect the ratio between 
      the range and scroll window size.
 
-     [`dynamic x] (x>0) interprets [x] as the size of the view and
+     [`dynamic x] (x>0) interprets [x] as the viewable size and
      sets the size of the scroll bar to reflect the amount of
-     content displayed. *)
+     content displayed relative to range. *)
 
   method set_mouse_mode : [ `middle | `ratio | `auto ] -> unit
     (** Configure how a mouse coordinate is converted to a scroll bar offest.
@@ -342,82 +330,79 @@ class type scrollable_adjustment = object
     (** [on_scrollbar_change ?switch f] calls f when the scrollbar is changed and
      needs to be re-drawn. *)
 
-  (* private scrollbar interface *)
-
-  method set_scroll_window_size : int -> unit
-    (** {i implementation specific} The attached scroll bar needs to
-    set its window size during [set_allocation] *)
-
-  method get_render_params : int * int * int
-    (** {i implementation specific} Provide the scroll bar with rendering
-    parameters *)
-
 end
 
-(** Interface for documents which can be scrolled *)
+(* Automatic configuration of the scrollbar.
+
+  The [set_page_size] and [set_document_size] methods will configure
+  the scrollbar to reflect the currently viewed area of a document.
+
+  [calculate_range] can be overriden to configure how much extra space
+  is shown at the end of a document.  By default the last line of a document
+  will be shown at the bottom of the viewable area using
+
+  [range = document_size - page_size + 1] *)
 class type scrollable_document = object
 
-  method set_document_size : LTerm_geom.size -> unit
-    (** Size of the document *)
+  method page_size : int
+    (** Viewable size *)
 
-  method set_page_size : LTerm_geom.size -> unit
-    (** Size of a page *)
+  method set_page_size : int -> unit
+    (** Set viewable size *)
 
-  method page : (unit -> unit) LTerm_geom.directions 
-    (** Scroll by 1 page *)
+  method document_size : int
+    (** Document size *)
 
-  method vscroll : scrollable_adjustment
-    (** Vertical scroll *)
+  method set_document_size : int -> unit
+    (** Set document size *)
 
-  method hscroll : scrollable_adjustment
-    (** Horizontal scroll *)
+  method page_next : int
+    (** Offset of next page *)
+
+  method page_prev : int
+    (** Offset of previous page *)
+
+  method calculate_range : int -> int -> int
+    (** [calculate_range page_size document_size] returns the range
+     used by the scrollbar. *)
 
 end
 
-(** {8 Interface implementations} *)
+(** Interface used by the scrollbar widget to configure the 
+  scrollbar and get parameters needed for rendering *)
+class type scrollable_private = object
 
-(** Default implementation of the [scrollable_adjustment] interface *)
-class default_scrollable_adjustment : scrollable_adjustment
+  method set_scroll_window_size : int -> unit
+    (** The attached scroll bar needs to provide its window 
+    size during [set_allocation] *)
 
-(** Default implementation of the [scrollable_document] interface *)
-class default_scrollable_document : scrollable_document
+  method get_render_params : int * int * int
+    (** Provide the scroll bar with rendering parameters *)
 
-(** {8 Scrollbar widgets} *)
+end
 
-(** Vertically oriented scrollbar.  Passed a [scrollable_adjustment] interface. *)
-class vscrollbar_for_adjustment  : ?rc:string -> ?width:int -> #scrollable_adjustment -> t
-
-(** Horizontally oriented scrollbar.  Passed a [scrollable_adjustment] interface. *)
-class hscrollbar_for_adjustment  : ?rc:string -> ?height:int -> #scrollable_adjustment -> t
-
-(** Standalone vertical scrollbar *)
-class vscrollbar : ?rc:string -> ?width:int -> unit -> object
-  inherit t
+class scrollable : object
   inherit scrollable_adjustment
+  inherit scrollable_document
+  inherit scrollable_private
 end
 
-(** Standalone vertical scrollbar *)
-class hscrollbar : ?rc:string -> ?height:int -> unit -> object
-  inherit t
-  inherit scrollable_adjustment
-end
+(** Vertical scrollbar. *)
+class vscrollbar : ?rc:string -> ?width:int -> #scrollable -> t
 
-(** Vertical scrollbar for scrollable widgets *)
-class vscrollbar_for_document : ?width:int -> #scrollable_document -> t
-
-(** Horizontal scrollbar for scrollable widgets *)
-class hscrollbar_for_document : ?height:int -> #scrollable_document -> t
+(** Horizontal scrollbar. *)
+class hscrollbar : ?rc:string -> ?height:int -> #scrollable -> t
 
 (** Vertical slider *)
 class vslider : int -> object
   inherit t
-  inherit scrollable_adjustment
+  inherit adjustment
 end
 
 (** Horizontal slider *)
 class hslider : int -> object
   inherit t
-  inherit scrollable_adjustment
+  inherit adjustment
 end
 
 (** {6 Running in a terminal} *)

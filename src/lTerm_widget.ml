@@ -147,92 +147,46 @@ class ['a] radiobutton = ['a] LTerm_buttons_impl.radiobutton
    | Scrollbars                                                      |
    +-----------------------------------------------------------------+ *)
 
-class type adjustment = LTerm_scroll_impl.adjustment
+class adjustment = LTerm_scroll_impl.adjustment
 
-class type scrollable_adjustment = LTerm_scroll_impl.scrollable_adjustment
+(** Interface between an adjustment and a scrollbar widget. *)
+class type scrollable_adjustment = object
+  inherit adjustment
+  method incr : int
+  method decr : int
+  method mouse_scroll : int -> int
+  method set_scroll_bar_mode : [ `fixed of int | `dynamic of int ] -> unit
+  method set_mouse_mode : [ `middle | `ratio | `auto ] -> unit
+  method set_min_scroll_bar_size : int -> unit
+  method set_max_scroll_bar_size : int -> unit
+  method on_scrollbar_change : ?switch:LTerm_widget_callbacks.switch -> 
+    (unit -> unit) -> unit
+end
 
-class default_scrollable_adjustment = LTerm_scroll_impl.default_scrollable_adjustment
+class type scrollable_document = object
+  method page_size : int
+  method set_page_size : int -> unit
+  method document_size : int
+  method set_document_size : int -> unit
+  method page_next : int
+  method page_prev : int
+  method calculate_range : int -> int -> int
+end
 
-class vscrollbar_for_adjustment = LTerm_scroll_impl.vscrollbar_for_adjustment
+class type scrollable_private = object
+  method set_scroll_window_size : int -> unit
+  method get_render_params : int * int * int
+end
 
-class hscrollbar_for_adjustment = LTerm_scroll_impl.hscrollbar_for_adjustment
+class scrollable = LTerm_scroll_impl.scrollable_adjustment
 
 class vscrollbar = LTerm_scroll_impl.vscrollbar
 
 class hscrollbar = LTerm_scroll_impl.hscrollbar
 
-class type scrollable_document = object
-  method set_document_size : LTerm_geom.size -> unit
-  method set_page_size : LTerm_geom.size -> unit
-  method page : (unit -> unit) LTerm_geom.directions 
-  method vscroll : scrollable_adjustment
-  method hscroll : scrollable_adjustment
-end
+class vslider = LTerm_scroll_impl.vslider
 
-class default_scrollable_document = object(self)
- 
-  val mutable document_size = { rows=0; cols=0 }
-  val mutable page_size = { rows=0; cols=0 }
-
-  val vscroll = new default_scrollable_adjustment
-  val hscroll = new default_scrollable_adjustment
-
-  method private update = 
-    let range = max 0 (document_size.rows-page_size.rows+1) in
-    vscroll#set_range range;
-    vscroll#set_mouse_mode `auto;
-    vscroll#set_scroll_bar_mode (`dynamic page_size.rows);
-    let range = max 0 (document_size.cols-page_size.cols+1) in
-    hscroll#set_range range;
-    hscroll#set_mouse_mode `auto;
-    hscroll#set_scroll_bar_mode (`dynamic page_size.cols)
-
-  method set_document_size size = 
-    document_size <- size;
-    self#update
-
-  method set_page_size size = 
-    page_size <- size;
-    self#update
-
-  method page = 
-    {
-      left  = (fun () -> hscroll#set_offset (hscroll#offset - page_size.cols));
-      right = (fun () -> hscroll#set_offset (hscroll#offset + page_size.cols));
-      up    = (fun () -> vscroll#set_offset (vscroll#offset - page_size.rows));
-      down  = (fun () -> vscroll#set_offset (vscroll#offset + page_size.rows));
-    }
-
-  method vscroll = vscroll
-  method hscroll = hscroll
-
-end
-
-class vscrollbar_for_document ?width (doc : #scrollable_document) = object(self)
-  inherit vscrollbar_for_adjustment ?width doc#vscroll as super
-end
-
-class hscrollbar_for_document ?height (doc : #scrollable_document) = object(self)
-  inherit hscrollbar_for_adjustment ?height doc#hscroll as super
-end
-
-class vslider rng = object(self)
-  inherit vscrollbar ~rc:"slider" ~width:1 ()
-  initializer
-    self#set_mouse_mode `middle;
-    self#set_scroll_bar_mode (`fixed 1);
-    self#set_range (max 0 rng)
-  method size_request = { rows=rng; cols=1 }
-end
-
-class hslider rng = object(self)
-  inherit hscrollbar ~rc:"slider" ~height:1 ()
-  initializer
-    self#set_mouse_mode `middle;
-    self#set_scroll_bar_mode (`fixed 1);
-    self#set_range (max 0 rng)
-  method size_request = { rows=1; cols=rng }
-end
+class hslider = LTerm_scroll_impl.hslider
 
 (* +-----------------------------------------------------------------+
    | Running in a terminal                                           |

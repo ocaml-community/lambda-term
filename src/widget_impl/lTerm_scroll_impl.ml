@@ -6,40 +6,6 @@ class t = LTerm_widget_base_impl.t
 let hbar = 0x2550
 let vbar = 0x2551
 
-class type adjustment = object
-  method range : int
-  method set_range : int -> unit
-
-  method offset : int
-  method set_offset : int -> unit
-  method on_offset_change : ?switch:LTerm_widget_callbacks.switch -> 
-    (int -> unit) -> unit
-end
-
-class type scrollable_adjustment = object
-  inherit adjustment
-
-  (* public interface *)
-
-  method incr : unit
-  method decr : unit
-
-  method mouse_scroll : int -> unit
-  
-  method set_scroll_bar_mode : [ `fixed of int | `dynamic of int ] -> unit
-  method set_mouse_mode : [ `middle | `ratio | `auto ] -> unit
-  method set_min_scroll_bar_size : int -> unit
-  method set_max_scroll_bar_size : int -> unit
-
-  method on_scrollbar_change : ?switch:LTerm_widget_callbacks.switch -> 
-    (unit -> unit) -> unit
-
-  (* private scrollbar interface *)
-
-  method set_scroll_window_size : int -> unit
-  method get_render_params : int * int * int
-end
-
 let map_range range1 range2 offset1 = 
   if range1 = 0 then 0 
   else
@@ -52,32 +18,46 @@ let map_range range1 range2 offset1 =
       (float_of_int range2)
       (float_of_int offset1)
 
-class default_scrollable_adjustment = object(self)
+class adjustment = object(self)
 
   (* callbacks *)
   val offset_change_callbacks = Lwt_sequence.create ()
   method on_offset_change ?switch (f : int -> unit) = 
     LTerm_widget_callbacks.register switch offset_change_callbacks f
 
-  val scrollbar_change_callbacks = Lwt_sequence.create ()
-  method on_scrollbar_change ?switch (f : unit -> unit) = 
-    LTerm_widget_callbacks.register switch scrollbar_change_callbacks f
-
   val mutable range = 0
   val mutable offset = 0
 
   method range = range
-  method set_range r = 
+  method set_range ?(trigger_callback=true) r = 
     range <- max 0 r;
-    self#set_offset offset (* ensure offset is clipped to the new range *)
+    self#set_offset ~trigger_callback offset (* ensure offset is clipped to the new range *)
 
   method offset = offset
-  method set_offset o = 
+  method set_offset ?(trigger_callback=true) o = 
     let o' = max 0 (min (range-1) o) in
     if offset <> o' then begin
-      offset <- o';  
-      LTerm_widget_callbacks.exec_callbacks offset_change_callbacks o'
+      offset <- o'; 
+      if trigger_callback then
+        LTerm_widget_callbacks.exec_callbacks offset_change_callbacks o'
     end
+
+end
+
+class scrollable_adjustment = object(self)
+  inherit adjustment as adj
+
+  val scrollbar_change_callbacks = Lwt_sequence.create ()
+  method on_scrollbar_change ?switch (f : unit -> unit) = 
+    LTerm_widget_callbacks.register switch scrollbar_change_callbacks f
+
+  method set_offset ?(trigger_callback=true) o = 
+    adj#set_offset ~trigger_callback o;
+    self#set_scroll_bar_offset (self#scroll_of_window self#offset)
+
+  method set_range ?(trigger_callback=true) r = 
+    adj#set_range ~trigger_callback r;
+    self#set_scroll_bar_offset (self#scroll_of_window self#offset)
 
   val mutable scroll_window_size = 0
   method private scroll_window_size = scroll_window_size
@@ -139,25 +119,23 @@ class default_scrollable_adjustment = object(self)
     end)
 
   method private window_of_scroll offset = 
-    self#set_scroll_bar_offset offset;
-    map_range (self#scroll_bar_steps-1) (range-1) scroll_bar_offset
+    map_range (self#scroll_bar_steps-1) (range-1) offset
 
   method private scroll_of_window offset = 
     let offset = map_range (range-1) (self#scroll_bar_steps-1) offset in
-    self#set_scroll_bar_offset offset;
-    scroll_bar_offset
+    offset
 
   method incr = 
     if range >= self#scroll_bar_steps then
-      self#set_offset @@ self#window_of_scroll (scroll_bar_offset+1) 
+      self#window_of_scroll (scroll_bar_offset+1) 
     else
-      self#set_offset (offset+1);
+      (offset+1);
 
   method decr = 
     if range >= self#scroll_bar_steps then
-      self#set_offset @@ self#window_of_scroll (scroll_bar_offset-1) 
+      self#window_of_scroll (scroll_bar_offset-1) 
     else
-      self#set_offset (offset-1);
+      (offset-1);
 
   (* mouse click control *)
 
@@ -192,10 +170,34 @@ class default_scrollable_adjustment = object(self)
     | `auto -> self#mouse_scale_auto scroll
 
   method mouse_scroll scroll =
-    self#set_offset @@ self#window_of_scroll @@ self#scroll_of_mouse scroll
+    self#window_of_scroll @@ self#scroll_of_mouse scroll
+
+  val mutable page_size = -1 
+  val mutable document_size = -1
+
+  method calculate_range page_size document_size = document_size-page_size+1
+
+  method private update_page_and_document_sizes page doc = 
+    if page_size <> page || document_size <> doc then begin
+      page_size <- page;
+      document_size <- doc;
+      let range = max 0 (self#calculate_range page_size document_size) in
+      self#set_range range;
+      self#set_mouse_mode `auto;
+      self#set_scroll_bar_mode (`dynamic page_size);
+    end
+
+  method page_size = page_size
+  method set_page_size s = self#update_page_and_document_sizes s document_size
+
+  method document_size = document_size
+  method set_document_size s = self#update_page_and_document_sizes page_size s
+
+  method page_prev = self#offset - page_size
+  method page_next = self#offset + page_size
 
   method get_render_params = 
-    self#scroll_of_window @@ self#offset,
+    scroll_bar_offset,
     self#scroll_bar_size, 
     self#scroll_window_size
 
@@ -242,17 +244,17 @@ class virtual scrollbar rc (adj : #scrollable_adjustment) = object(self)
     match ev with
     | LTerm_event.Mouse m when m.button=Button1 && in_rect alloc (coord m) ->
       let scroll = self#mouse_offset m alloc in
-      adj#mouse_scroll scroll;
+      adj#set_offset @@ adj#mouse_scroll scroll;
       true
 
     | LTerm_event.Key { control = false; meta = false; shift = true; code } 
       when code=self#key_scroll_decr ->
-      adj#decr;
+      adj#set_offset adj#decr;
       true
 
     | LTerm_event.Key { control = false; meta = false; shift = true; code } 
       when code=self#key_scroll_incr ->
-      adj#incr;
+      adj#set_offset adj#incr;
       true
 
     | _ -> false
@@ -282,7 +284,7 @@ class virtual scrollbar rc (adj : #scrollable_adjustment) = object(self)
 
 end
 
-class vscrollbar_for_adjustment  ?(rc="scrollbar") ?(width=2) adj = object(self)
+class vscrollbar ?(rc="scrollbar") ?(width=2) adj = object(self)
   inherit scrollbar rc adj as super
 
   method size_request = { rows=0; cols=width }
@@ -315,7 +317,7 @@ class vscrollbar_for_adjustment  ?(rc="scrollbar") ?(width=2) adj = object(self)
 
 end
 
-class hscrollbar_for_adjustment  ?(rc="scrollbar") ?(height=2) adj = object(self)
+class hscrollbar ?(rc="scrollbar") ?(height=2) adj = object(self)
   inherit scrollbar rc adj as super
   
   method size_request = { rows=height; cols=0 }
@@ -328,7 +330,6 @@ class hscrollbar_for_adjustment  ?(rc="scrollbar") ?(height=2) adj = object(self
     super#set_allocation r;
     adj#set_scroll_window_size (r.col2 - r.col1)
 
-
   method draw ctx focused = 
     let open LTerm_draw in
     let focus = (self :> t) = focused in
@@ -337,7 +338,6 @@ class hscrollbar_for_adjustment  ?(rc="scrollbar") ?(height=2) adj = object(self
     let style = if focus then focused_style else unfocused_style in
     fill_style ctx style;
 
-    (*let offset = adj#scroll_of_window @@ adj#offset in*)
     let offset, scroll_bar_size, scroll_window_size = adj#get_render_params in
 
     let rect = 
@@ -350,47 +350,35 @@ class hscrollbar_for_adjustment  ?(rc="scrollbar") ?(height=2) adj = object(self
 
 end
 
-class vscrollbar ?(rc="scrollbar") ?(width=2) () = 
-  let adj = new default_scrollable_adjustment in
+class vslider rng = 
+  let adj = new scrollable_adjustment in
   object(self)
-    inherit vscrollbar_for_adjustment ~rc ~width adj 
-
-    method range  = adj#range
-    method set_range = adj#set_range
+    inherit vscrollbar ~rc:"slider" ~width:1 adj
+    initializer
+      adj#set_mouse_mode `middle;
+      adj#set_scroll_bar_mode (`fixed 1);
+      adj#set_range (max 0 rng)
+    method size_request = { rows=rng; cols=1 }
     method offset = adj#offset
     method set_offset = adj#set_offset
+    method range = adj#range
+    method set_range = adj#set_range
     method on_offset_change = adj#on_offset_change
-    method incr = adj#incr
-    method decr = adj#decr
-    method mouse_scroll = adj#mouse_scroll
-    method set_scroll_bar_mode = adj#set_scroll_bar_mode
-    method set_mouse_mode = adj#set_mouse_mode
-    method set_min_scroll_bar_size = adj#set_min_scroll_bar_size
-    method set_max_scroll_bar_size = adj#set_max_scroll_bar_size
-    method on_scrollbar_change = adj#on_scrollbar_change
-    method set_scroll_window_size = adj#set_scroll_window_size
-    method get_render_params = adj#get_render_params
   end
 
-class hscrollbar ?(rc="scrollbar") ?(height=2) () = 
-  let adj = new default_scrollable_adjustment in
+class hslider rng = 
+  let adj = new scrollable_adjustment in
   object(self)
-    inherit hscrollbar_for_adjustment ~rc ~height adj 
-
-    method range  = adj#range
-    method set_range = adj#set_range
+    inherit hscrollbar ~rc:"slider" ~height:1 adj
+    initializer
+      adj#set_mouse_mode `middle;
+      adj#set_scroll_bar_mode (`fixed 1);
+      adj#set_range (max 0 rng)
+    method size_request = { rows=1; cols=rng }
     method offset = adj#offset
     method set_offset = adj#set_offset
+    method range = adj#range
+    method set_range = adj#set_range
     method on_offset_change = adj#on_offset_change
-    method incr = adj#incr
-    method decr = adj#decr
-    method mouse_scroll = adj#mouse_scroll
-    method set_scroll_bar_mode = adj#set_scroll_bar_mode
-    method set_mouse_mode = adj#set_mouse_mode
-    method set_min_scroll_bar_size = adj#set_min_scroll_bar_size
-    method set_max_scroll_bar_size = adj#set_max_scroll_bar_size
-    method on_scrollbar_change = adj#on_scrollbar_change
-    method set_scroll_window_size = adj#set_scroll_window_size
-    method get_render_params = adj#get_render_params
   end
 

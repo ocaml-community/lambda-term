@@ -18,12 +18,9 @@ class scroll_label scroll = object(self)
   val style = LTerm_style.{none with foreground = Some red;
                                      background = Some green };
   method draw ctx focused = 
-    let alloc = size_of_rect scroll#allocation in
     LTerm_draw.fill_style ctx style;
     LTerm_draw.draw_string_aligned ctx 0 H_align_center ~style
-      (Printf.sprintf "%i/%i | %ix%i" 
-        scroll#offset scroll#range
-        alloc.rows alloc.cols)
+      (Printf.sprintf "%i/%i" scroll#offset scroll#range)
 
 end
 
@@ -35,16 +32,17 @@ let main () =
   let vbox = new vbox in
 
   let add_scroll (vbox : vbox) ~range ~size = 
-    let hscroll = new hscrollbar () in
-    let label = new scroll_label hscroll in
-    hscroll#set_range range;
-    hscroll#set_mouse_mode `middle;
-    hscroll#set_scroll_bar_mode (`fixed size);
+    let adj = new scrollable in
+    let hscroll = new hscrollbar adj in
+    let label = new scroll_label adj in
+    adj#set_range range;
+    adj#set_mouse_mode `middle;
+    adj#set_scroll_bar_mode (`fixed size);
     vbox#add ~expand:false (label :> t);
     vbox#add ~expand:false (new hline);
     vbox#add ~expand:false (hscroll :> t);
     vbox#add ~expand:false (new hline);
-    hscroll
+    adj
   in
 
   let scrolls = List.map 

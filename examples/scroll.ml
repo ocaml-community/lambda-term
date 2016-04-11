@@ -11,7 +11,7 @@ open LTerm_widget
 open LTerm_geom
 
 (* a simple widget with scrollbar support *)
-class scrollable_nums scroll = object(self)
+class scrollable_nums (scroll : scrollable) = object(self)
   inherit t "nums" as super
 
   initializer scroll#set_range 197
@@ -33,8 +33,9 @@ let main () =
   let exit = new button "exit" in
   exit#on_click (wakeup wakener);
 
-  let scroll = new vscrollbar () in
-  let nums = new scrollable_nums scroll in
+  let adj = new scrollable in
+  let scroll = new vscrollbar adj in
+  let nums = new scrollable_nums adj in
 
   let hbox = new hbox in
   hbox#add ~expand:true nums;
@@ -42,13 +43,13 @@ let main () =
 
   (* buttons to set scroll offset *)
   let prev = new button "prev" in
-  prev#on_click (fun () -> scroll#set_offset (scroll#offset-1));
+  prev#on_click (fun () -> adj#set_offset (adj#offset-1));
   let next = new button "next" in
-  next#on_click (fun () -> scroll#set_offset (scroll#offset+1));
+  next#on_click (fun () -> adj#set_offset (adj#offset+1));
   let decr = new button "decr" in
-  decr#on_click (fun () -> scroll#decr);
+  decr#on_click (fun () -> adj#set_offset adj#decr);
   let incr = new button "incr" in
-  incr#on_click (fun () -> scroll#incr);
+  incr#on_click (fun () -> adj#set_offset adj#incr);
 
   let vbox = new vbox in
   vbox#add hbox;
