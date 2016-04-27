@@ -102,7 +102,7 @@ class label : string -> object
   inherit t
 
   method text : string
-    (** The text of  the label. *)
+    (** The text of the label. *)
 
   method set_text : string -> unit
 end
@@ -151,6 +151,9 @@ end
 class modal_frame : object
   inherit frame
 end
+
+(** A widget used for layout control within boxes *)
+class spacing : ?rows:int -> ?cols:int -> unit -> t
 
 (** {6 Lines} *)
 
@@ -251,6 +254,200 @@ class ['a] radiobutton : 'a radiogroup -> string -> 'a -> object
   (** [on_click ?switch f] calls [f] when the button is clicked. You probably want
    to use {!radiogroup.on_state_change} instead. *)
 
+end
+
+(** {6 Scrollbars} *)
+
+(** Adjustable integer value from (0..range-1) *)
+class adjustment : object
+
+  method range : int
+    (** range of adjustment *)
+
+  method set_range : ?trigger_callback:bool -> int -> unit
+    (** set range of adjustment. *)
+
+  method offset : int
+    (** offset from (0..range-1) *)
+
+  method set_offset : ?trigger_callback:bool -> int -> unit
+    (** Set offset clipped to range. *)
+    
+  method on_offset_change : ?switch:LTerm_widget_callbacks.switch -> 
+     (int -> unit) -> unit
+    (** [on_offset_change ?switch f] calls f when the offset changes. *)
+
+end
+
+(** Interface between an adjustment and a scrollbar widget. *)
+class type scrollable_adjustment = object
+
+  inherit adjustment
+
+  method incr : int
+    (** Return offset incremented by one step 
+    
+    If range > number of scroll bar steps then step>=1. *)
+
+  method decr : int
+    (** Return offset decremented by one step *)
+
+  method mouse_scroll : int -> int
+    (** [adj#mouse_scroll offset] computes the scroll bar based on a click
+    [offset] units from the top/left *)
+
+  method set_scroll_bar_mode : [ `fixed of int | `dynamic of int ] -> unit
+    (** Configure how the size of the scrollbar is calculated.
+
+     [`fixed x] sets the size to x.
+
+     [`dynamic 0] sets the size to reflect the ratio between 
+     the range and scroll window size.
+
+     [`dynamic x] (x>0) interprets [x] as the viewable size and
+     sets the size of the scroll bar to reflect the amount of
+     content displayed relative to range. *)
+
+  method set_mouse_mode : [ `middle | `ratio | `auto ] -> unit
+    (** Configure how a mouse coordinate is converted to a scroll bar offest.
+     
+     [`middle] sets the middle of the scrollbar to the position clicked.
+
+     [`ratio] computes the offset relative to the scroll bar and scroll window sizes,
+     with a 10% deadzone at the extremities.
+
+     [`auto] chooses [`middle] mode if the scroll bar size is less than half the window
+     size and [`ratio] otherwise. *)
+
+  method set_min_scroll_bar_size : int -> unit
+    (** Set the minimum scroll bar size (default:1) *)
+
+  method set_max_scroll_bar_size : int -> unit
+    (** Set the maximum scroll bar size (default: scroll window size *)
+
+  method on_scrollbar_change : ?switch:LTerm_widget_callbacks.switch -> 
+    (unit -> unit) -> unit
+    (** [on_scrollbar_change ?switch f] calls f when the scrollbar is changed and
+     needs to be re-drawn. *)
+
+end
+
+(* Automatic configuration of the scrollbar.
+
+  The [set_page_size] and [set_document_size] methods will configure
+  the scrollbar to reflect the currently viewed area of a document.
+
+  [calculate_range] can be overriden to configure how much extra space
+  is shown at the end of a document.  By default the last line of a document
+  will be shown at the bottom of the viewable area using
+
+  [range = document_size - page_size + 1] *)
+class type scrollable_document = object
+
+  method page_size : int
+    (** Viewable size *)
+
+  method set_page_size : int -> unit
+    (** Set viewable size *)
+
+  method document_size : int
+    (** Document size *)
+
+  method set_document_size : int -> unit
+    (** Set document size *)
+
+  method page_next : int
+    (** Offset of next page *)
+
+  method page_prev : int
+    (** Offset of previous page *)
+
+  method calculate_range : int -> int -> int
+    (** [calculate_range page_size document_size] returns the range
+     used by the scrollbar. *)
+
+end
+
+(** Interface used by the scrollbar widget to configure the 
+  scrollbar and get parameters needed for rendering *)
+class type scrollable_private = object
+
+  method set_scroll_window_size : int -> unit
+    (** The attached scroll bar needs to provide its window 
+    size during [set_allocation] *)
+
+  method get_render_params : int * int * int
+    (** Provide the scroll bar with rendering parameters *)
+
+end
+
+(** Main object implementing scroll logic for coordination 
+ between a scrollable wigdet and a scrollbar widget.
+
+ [scrollable_adjustment] implements the main logic and provides a
+ lowlevel interface for controlling how mouse events are translated
+ to scroll offsets ([set_mouse_mode]) and the size of the scrollbar 
+ ([set_scroll_bar_mode]).
+
+ [scrollable_document] provides a higher level interface for 
+ configuring the operation of the scrollbar where the scrollbar
+ is used to reflect the area of a page within a potentially larger
+ document.
+
+ [scrollbar_private] is an internal interface between the [scrollable]
+ object and a [scrollbar] used to exchange parameters needed to
+ perform rendering. *)
+class scrollable : object
+  inherit scrollable_adjustment
+  inherit scrollable_document
+  inherit scrollable_private
+end
+
+(** Events exposed by scrollbar widgets.  These may be applied to
+ other widgets if required. *)
+class type default_scroll_events = object
+  method mouse_event : LTerm_event.t -> bool
+  method scroll_key_event : LTerm_event.t -> bool
+end
+
+(** Vertical scrollbar widget. 
+ 
+ [rc] is the resource class of the widget.  [".(un)focused"] sets the
+ (un)focused style of the widget.  [".barstyle"] can be [filled] or 
+ [outline].  [".track"] is a bool to display a central track line.
+
+ [default_event_handler] when true (the default) installs the 
+ [mouse_event] and [scroll_key_event] handlers.
+ 
+ [width] (resp. [height]) defines the prefered thickness of the
+ scrollbar. *)
+class vscrollbar : 
+  ?rc:string -> ?default_event_handler:bool -> ?width:int -> 
+  #scrollable -> object
+  inherit t
+  inherit default_scroll_events
+end
+
+(** Horizontal scrollbar widget. *)
+class hscrollbar : 
+  ?rc:string -> ?default_event_handler:bool -> ?height:int -> 
+  #scrollable -> object
+  inherit t
+  inherit default_scroll_events
+end
+
+(** Vertical slider widget. *)
+class vslider : int -> object
+  inherit t
+  inherit adjustment
+  inherit default_scroll_events
+end
+
+(** Horizontal slider widget. *)
+class hslider : int -> object
+  inherit t
+  inherit adjustment
+  inherit default_scroll_events
 end
 
 (** {6 Running in a terminal} *)

@@ -164,10 +164,18 @@ let dummy_cursor = Zed_edit.new_cursor dummy_engine
 let dummy_context = Zed_edit.context dummy_engine dummy_cursor
 let newline = UChar.of_char '\n'
 
+class scrollable = object(self)
+  inherit LTerm_widget.scrollable
+  method calculate_range page_size document_size = (document_size - page_size/2)
+end
+
 class edit ?(clipboard = clipboard) ?(macro = macro) () =
   let locale, set_locale = S.create None in
 object(self)
-  inherit LTerm_widget.t "edit"
+  inherit LTerm_widget.t "edit" as super
+
+  val vscroll = new scrollable
+  method vscroll = vscroll
 
   method clipboard = clipboard
   method macro = macro
@@ -205,6 +213,45 @@ object(self)
   val mutable local_bindings = Bindings.empty
   method bind keys actions = local_bindings <- Bindings.add keys actions local_bindings
 
+  val mutable shift = 0
+  val mutable start = 0
+  val mutable start_line = 0
+  val mutable size = { cols = 0; rows = 0 }
+
+  method private update_window_position = 
+    let line_set = Zed_edit.lines engine in
+    let line_count = Zed_lines.count line_set in
+    let cursor_offset = Zed_cursor.get_position cursor in
+    let cursor_line = Zed_lines.line_index line_set cursor_offset in
+    let cursor_column = cursor_offset - Zed_lines.line_start line_set cursor_line in
+
+    (*** check cursor position is in view *)
+
+    (* Horizontal check *)
+    if cursor_column < shift || cursor_column >= shift + size.cols then begin
+      shift <- max 0 (cursor_column - size.cols / 2);
+    end;
+
+    (* Vertical check *)
+    let start_line' = Zed_lines.line_index line_set start in
+    let start_line' =
+      if cursor_line < start_line' || cursor_line >= start_line' + size.rows then begin
+        (*let start_line' = max 0 (cursor_line - size.rows / 2) in*)
+        let line_count = Zed_lines.count line_set in
+        let start_line' = min line_count (max 0 (cursor_line - size.rows / 2)) in
+        start <- Zed_lines.line_start line_set start_line';
+        start_line'
+      end else
+        start_line'
+    in
+    (* document size *)
+    if start_line <> start_line' then begin
+      start_line <- start_line';
+      vscroll#set_offset ~trigger_callback:false start_line
+    end;
+    vscroll#set_document_size (line_count+1);
+    ()
+
   initializer
     engine <- (
       Zed_edit.create
@@ -217,7 +264,9 @@ object(self)
     cursor <- Zed_edit.new_cursor engine;
     context <- Zed_edit.context engine cursor;
     Zed_edit.set_data engine (self :> edit);
-    event <- E.map (fun _ -> self#queue_draw) (Zed_edit.update engine [cursor]);
+    event <- E.map (fun _ -> 
+      self#update_window_position;
+      self#queue_draw) (Zed_edit.update engine [cursor]);
     self#on_event
       (function
          | LTerm_event.Key key -> begin
@@ -282,35 +331,46 @@ object(self)
          | _ ->
              false)
 
-  val mutable shift = 0
-  val mutable start = 0
+
+  method! set_allocation rect =
+    size <- size_of_rect rect;
+    super#set_allocation rect;
+    vscroll#set_page_size size.rows;
+    start <- 0; shift <- 0; start_line <- 0;
+    self#update_window_position
+
+  initializer vscroll#on_offset_change (fun n -> 
+ 
+    (* find what line the cursor is currently on. *)
+    let line_set = Zed_edit.lines engine in
+    let cursor_offset = Zed_cursor.get_position cursor in
+    let cursor_line = Zed_lines.line_index line_set cursor_offset in
+
+    start_line <- n;
+    start <- Zed_lines.line_start line_set start_line;
+    
+    if cursor_line < start_line then begin
+      let d = start_line - cursor_line in
+      Zed_edit.move_line context d (* first row *)
+    end else if cursor_line >= start_line + size.rows then begin
+      let line_count = Zed_lines.count line_set in
+      let line = max 0 (min (line_count+1) (start_line + size.rows - 1)) in (* last row *)
+      let d = line - cursor_line in
+      Zed_edit.move_line context d
+    end;
+    self#queue_draw;
+  )
+
 
   method draw ctx focused =
     let open LTerm_draw in
 
     let size = LTerm_draw.size ctx in
 
-    (*** Check that the cursor is displayed ***)
-
     let line_set = Zed_edit.lines engine in
     let cursor_offset = Zed_cursor.get_position cursor in
     let cursor_line = Zed_lines.line_index line_set cursor_offset in
     let cursor_column = cursor_offset - Zed_lines.line_start line_set cursor_line in
-
-    (* Horizontal check *)
-    if cursor_column < shift || cursor_column >= shift + size.cols then
-      shift <- max 0 (cursor_column - size.cols / 2);
-
-    (* Vertical check *)
-    let start_line = Zed_lines.line_index line_set start in
-    let start_line =
-      if cursor_line < start_line || cursor_line >= start_line + size.rows then begin
-        let start_line = max 0 (cursor_line - size.rows / 2) in
-        start <- Zed_lines.line_start line_set start_line;
-        start_line
-      end else
-        start_line
-    in
 
     (*** Drawing ***)
 

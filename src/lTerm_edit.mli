@@ -102,4 +102,7 @@ class edit : ?clipboard : Zed_edit.clipboard -> ?macro : action Zed_macro.t -> u
   method set_locale : string option -> unit
 
   method bind : LTerm_key.t list -> action list -> unit
+
+  method vscroll : LTerm_widget.scrollable
+
 end

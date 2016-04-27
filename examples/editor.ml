@@ -13,10 +13,13 @@ open Lwt
 let main () =
   let waiter, wakener = wait () in
 
+  let hbox = new LTerm_widget.hbox in
   let frame = new LTerm_widget.frame in
   let editor = new LTerm_edit.edit () in
-
+  let vscroll = new LTerm_widget.vscrollbar ~width:1 editor#vscroll in
   frame#set editor;
+  hbox#add frame;
+  hbox#add ~expand:false vscroll;
 
   (* Exit when the user presses C-x C-c *)
   editor#bind
@@ -38,6 +41,10 @@ Type C-x C-c to exit.
 
   Lazy.force LTerm.stdout
   >>= fun term ->
-  LTerm_widget.run term frame waiter
+  LTerm.enable_mouse term
+  >>= fun () ->
+  Lwt.finalize
+    (fun () -> LTerm_widget.run term hbox waiter)
+    (fun () -> LTerm.disable_mouse term)
 
 let () = Lwt_main.run (main ())
