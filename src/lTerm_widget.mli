@@ -104,6 +104,9 @@ class label : string -> object
   method text : string
     (** The text of the label. *)
 
+  method set_alignment : LTerm_geom.horz_alignment -> unit
+    (** Set text alignment. *)
+
   method set_text : string -> unit
 end
 
@@ -142,6 +145,9 @@ class frame : object
 
   method empty : unit
     (** Remove the child of the frame. *)
+
+  method set_label : ?alignment:LTerm_geom.horz_alignment -> string -> unit
+    (** Set label rendered in the top row of the frame *)
 end
 
 (** A widget displaying a frame around child widget. Unlike {!frame}, the child
@@ -166,7 +172,7 @@ class vline : t
 (** {6 Buttons} *)
 
 (** Normal button. *)
-class button : string -> object
+class button : ?brackets:(string * string) -> string -> object
   inherit t
 
   method label : string

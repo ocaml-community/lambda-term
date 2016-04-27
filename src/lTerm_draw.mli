@@ -135,3 +135,8 @@ val draw_vline : context -> int -> int -> int -> ?style : LTerm_style.t -> conne
 
 val draw_frame : context -> rect -> ?style : LTerm_style.t -> connection -> unit
   (** Draws a rectangle. *)
+
+val draw_frame_labelled : context -> rect -> 
+  ?style : LTerm_style.t -> ?alignment : LTerm_geom.horz_alignment -> 
+  string -> connection -> unit
+  (** Draws a rectangle with a label on the top row. *)

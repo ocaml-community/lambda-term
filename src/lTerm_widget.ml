@@ -63,11 +63,14 @@ class label initial_text = object(self)
     size_request <- text_size t;
     self#queue_draw
 
+  val mutable alignment = H_align_center
+  method set_alignment a = alignment <- a
+
   method draw ctx focused =
     let { rows } = LTerm_draw.size ctx in
     let row = (rows - size_request.rows) / 2 in
     LTerm_draw.fill_style ctx style;
-    LTerm_draw.draw_string_aligned ctx row H_align_center text
+    LTerm_draw.draw_string_aligned ctx row alignment text
 end
 
 (* +-----------------------------------------------------------------+
