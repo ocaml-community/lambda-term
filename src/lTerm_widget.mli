@@ -330,15 +330,6 @@ class type scrollable_adjustment = object
     (** [on_scrollbar_change ?switch f] calls f when the scrollbar is changed and
      needs to be re-drawn. *)
 
-  method scroll_event_handler : LTerm_event.t -> bool
-    (** event handlers run by the scrollbar widget *)
-
-  method set_scroll_event_handler : (LTerm_event.t -> bool) -> unit
-    (** set event handler *)
-
-  method add_scroll_event_handler : (LTerm_event.t -> bool) -> unit
-    (** add event handlers *)
-
 end
 
 (* Automatic configuration of the scrollbar.
@@ -396,22 +387,39 @@ class scrollable : object
   inherit scrollable_private
 end
 
+class type default_scroll_events = object
+  method mouse_event : LTerm_event.t -> bool
+  method scroll_key_event : LTerm_event.t -> bool
+end
+
 (** Vertical scrollbar. *)
-class vscrollbar : ?rc:string -> ?width:int -> #scrollable -> t
+class vscrollbar : 
+  ?rc:string -> ?default_event_handler:bool -> ?width:int -> 
+  #scrollable -> object
+  inherit t
+  inherit default_scroll_events
+end
 
 (** Horizontal scrollbar. *)
-class hscrollbar : ?rc:string -> ?height:int -> #scrollable -> t
+class hscrollbar : 
+  ?rc:string -> ?default_event_handler:bool -> ?height:int -> 
+  #scrollable -> object
+  inherit t
+  inherit default_scroll_events
+end
 
 (** Vertical slider *)
 class vslider : int -> object
   inherit t
   inherit adjustment
+  inherit default_scroll_events
 end
 
 (** Horizontal slider *)
 class hslider : int -> object
   inherit t
   inherit adjustment
+  inherit default_scroll_events
 end
 
 (** {6 Running in a terminal} *)

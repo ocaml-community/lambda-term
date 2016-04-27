@@ -161,9 +161,6 @@ class type scrollable_adjustment = object
   method set_max_scroll_bar_size : int -> unit
   method on_scrollbar_change : ?switch:LTerm_widget_callbacks.switch -> 
     (unit -> unit) -> unit
-  method scroll_event_handler : LTerm_event.t -> bool
-  method set_scroll_event_handler : (LTerm_event.t -> bool) -> unit
-  method add_scroll_event_handler : (LTerm_event.t -> bool) -> unit
 end
 
 class type scrollable_document = object
@@ -179,6 +176,11 @@ end
 class type scrollable_private = object
   method set_scroll_window_size : int -> unit
   method get_render_params : int * int * int
+end
+
+class type default_scroll_events = object
+  method mouse_event : LTerm_event.t -> bool
+  method scroll_key_event : LTerm_event.t -> bool
 end
 
 class scrollable = LTerm_scroll_impl.scrollable_adjustment

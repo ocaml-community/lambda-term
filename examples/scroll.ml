@@ -51,6 +51,8 @@ let main () =
   let incr = new button "incr" in
   incr#on_click (fun () -> adj#set_offset adj#incr);
 
+  adj#on_offset_change (fun _ -> scroll#queue_draw);
+
   let vbox = new vbox in
   vbox#add hbox;
   vbox#add ~expand:false (new hline);

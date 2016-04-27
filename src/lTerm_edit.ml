@@ -339,10 +339,6 @@ object(self)
     start <- 0; shift <- 0; start_line <- 0;
     self#update_window_position
 
-  (* CR-someday jdimino for jdimino: add a way for a widget to tell
-     that it wants to expand as much as possible. *)
-  method size_request = { cols = 1_000_000; rows = 1_000_000 }
-
   initializer vscroll#on_offset_change (fun n -> 
  
     (* find what line the cursor is currently on. *)

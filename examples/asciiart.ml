@@ -66,12 +66,12 @@ class asciiart img = object(self)
 
   method can_focus = true
 
+  (* scrollable interfaces *)
   val vscroll = new scrollable
   val hscroll = new scrollable
   method vscroll = vscroll
   method hscroll = hscroll
 
-  (* scroll interface *)
   method document_size = { 
     rows = img#height / !avg_rows;
     cols = img#width / !avg_cols;
@@ -110,19 +110,22 @@ class asciiart img = object(self)
       done
     done
 
-  method private event_handler ev =
+  (* delta from center of screen *)
+  method private mouse_delta_event ev = 
     let open LTerm_mouse in
     match ev with
-    | LTerm_event.Mouse m when m.button=Button1 ->
+    | LTerm_event.Mouse m when m.button=Button1 && m.control=true ->
       let alloc = self#allocation in
       let size = size_of_rect alloc in
-      (* delta from center of screen *)
       vscroll#set_offset 
         (vscroll#offset + m.LTerm_mouse.row - alloc.row1 - size.rows/2);
       hscroll#set_offset 
         (hscroll#offset + m.LTerm_mouse.col - alloc.col1 - size.cols/2);
       true
-    (* adjust scale, which changes the document size *)
+    | _ -> false
+
+  (* adjust scale, which changes the document size *)
+  method private scale_event = function
     | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c} when c = UChar.of_char 'w' ->
       avg_rows := max 1 (!avg_rows - 1);
       vscroll#set_document_size self#document_size.rows;
@@ -141,8 +144,8 @@ class asciiart img = object(self)
       self#queue_draw; true
     | _ -> false
 
-  method private scroll_handler = function
-    (* page up/down *)
+  (* page up/down *)
+  method page_event = function
     | LTerm_event.Key{LTerm_key.code=LTerm_key.Next_page} ->
       vscroll#set_offset @@ vscroll#page_next; self#queue_draw; true
     | LTerm_event.Key{LTerm_key.code=LTerm_key.Prev_page} ->
@@ -150,9 +153,9 @@ class asciiart img = object(self)
     | _ -> false
 
   initializer 
-    vscroll#add_scroll_event_handler self#scroll_handler;
-    hscroll#add_scroll_event_handler self#scroll_handler;
-    self#on_event (fun ev -> self#event_handler ev || self#scroll_handler ev)
+    self#on_event (fun ev -> self#scale_event ev || 
+                             self#page_event ev || 
+                             self#mouse_delta_event ev)
 
 end
 
@@ -174,10 +177,14 @@ let with_scrollbar ?down widget =
   hbox#add ~expand:false (new vline);
   hbox#add ~expand:false spacing;
   vbox#add ~expand:false hbox;
+  (* moving focus *)
   widget#set_focus { widget#focus with right = Some(vscroll :> t); 
                                        down = Some(hscroll :> t) };
   vscroll#set_focus { vscroll#focus with down = Some(hscroll :> t) };
-  hscroll#set_focus { hscroll#focus with up = Some(vscroll :> t); down } ;
+  hscroll#set_focus { hscroll#focus with up = Some(vscroll :> t); down };
+  (* events *)
+  widget#on_event (fun ev -> vscroll#mouse_event ev && hscroll#mouse_event ev);
+  vscroll#on_event widget#page_event;
   vbox
 
 let main () = 
