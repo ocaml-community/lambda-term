@@ -381,18 +381,46 @@ class type scrollable_private = object
 
 end
 
+(** Main object implementing scroll logic for coordination 
+ between a scrollable wigdet and a scrollbar widget.
+
+ [scrollable_adjustment] implements the main logic and provides a
+ lowlevel interface for controlling how mouse events are translated
+ to scroll offsets ([set_mouse_mode]) and the size of the scrollbar 
+ ([set_scroll_bar_mode]).
+
+ [scrollable_document] provides a higher level interface for 
+ configuring the operation of the scrollbar where the scrollbar
+ is used to reflect the area of a page within a potentially larger
+ document.
+
+ [scrollbar_private] is an internal interface between the [scrollable]
+ object and a [scrollbar] used to exchange parameters needed to
+ perform rendering. *)
 class scrollable : object
   inherit scrollable_adjustment
   inherit scrollable_document
   inherit scrollable_private
 end
 
+(** Events exposed by scrollbar widgets.  These may be applied to
+ other widgets if required. *)
 class type default_scroll_events = object
   method mouse_event : LTerm_event.t -> bool
   method scroll_key_event : LTerm_event.t -> bool
 end
 
-(** Vertical scrollbar. *)
+(** Vertical scrollbar widget. 
+ 
+ [rc] is the resource class of the widget.  [".(un)focused"] sets the
+ (un)focused style of the widget.  [".barstyle"] can be [filled] or 
+ [outline].  [".track"] is a bool to display a central track line.
+
+ [default_event_handler] when true (the default) installs the 
+ [mouse_event] and [scroll_key_event] handlers.
+ 
+ [width] (resp. [height]) defines the prefered thickness of the
+ scrollbar. *)
 class vscrollbar : 
   ?rc:string -> ?default_event_handler:bool -> ?width:int -> 
   #scrollable -> object
@@ -400,7 +428,7 @@ class vscrollbar :
   inherit default_scroll_events
 end
 
-(** Horizontal scrollbar. *)
+(** Horizontal scrollbar widget. *)
 class hscrollbar : 
   ?rc:string -> ?default_event_handler:bool -> ?height:int -> 
   #scrollable -> object
@@ -408,14 +436,14 @@ class hscrollbar :
   inherit default_scroll_events
 end
 
-(** Vertical slider *)
+(** Vertical slider widget. *)
 class vslider : int -> object
   inherit t
   inherit adjustment
   inherit default_scroll_events
 end
 
-(** Horizontal slider *)
+(** Horizontal slider widget. *)
 class hslider : int -> object
   inherit t
   inherit adjustment
