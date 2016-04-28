@@ -231,6 +231,13 @@ Executable "editor"
   MainIs: editor.ml
   BuildDepends: lambda-term
 
+Executable "editint"
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: editint.ml
+  BuildDepends: lambda-term
+
 # +-------------------------------------------------------------------+
 # | Utils                                                             |
 # +-------------------------------------------------------------------+

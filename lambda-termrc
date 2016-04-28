@@ -12,6 +12,7 @@ slider.focused.foreground: lyellow
 slider.focused.background: blue
 slider.barstyle: filled
 slider.track: true
+edit_integer.underline: true
 !
 ! For monochrome experience comment out the resources above and uncomment two
 ! following lines:
