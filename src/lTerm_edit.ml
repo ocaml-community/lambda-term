@@ -571,7 +571,7 @@ object(self)
 end
 
 
-class edit_integer = 
+class edit_integer ?(positive=false) () = 
   let bindings = 
     List.fold_left
       (List.fold_left (fun bindings (seq,act) -> Bindings.add seq act bindings))
@@ -588,10 +588,10 @@ object(self)
 
   method is_valid_char c = 
     let c = UChar.char_of c in
-    (c >= '0' && c <= '9')
+    (c >= '0' && c <= '9') || (c == '-' && not positive)
 
   method value = 
-    try Some(int_of_string @@ Zed_rope.to_string @@ Zed_edit.text self#engine)
+    try Some(int_of_string @@ self#text)
     with _ -> None
   
   method set_value x = 

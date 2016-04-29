@@ -113,9 +113,18 @@ class edit :
 
 end
 
-class edit_integer : object
+(* Editor class for integer values.  
+ 
+ Responds to numeric characters, and ['-'] if [positive] is false. *)
+class edit_integer : ?positive:bool -> unit -> object
   inherit edit
+
   method value : int option
+    (* Get value from the editor.  Returns [None] if it cannot be converted
+       with [int_of_string] *)
+
   method set_value : int -> unit
+    (* Set the value in the editor *)
+  
 end
 

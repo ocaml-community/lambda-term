@@ -15,7 +15,7 @@ let main () =
 
   let vbox = new LTerm_widget.vbox in
   let frame = new LTerm_widget.frame in
-  let edit = new LTerm_edit.edit_integer in
+  let edit = new LTerm_edit.edit_integer (*~positive:true*) () in
   let exit = new LTerm_widget.button "exit" in
   let label = new LTerm_widget.label "" in
   let hbox = new LTerm_widget.hbox in
