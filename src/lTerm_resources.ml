@@ -8,8 +8,6 @@
  * This file is a part of Lambda-Term.
  *)
 
-let return, (>>=) = Lwt.return, Lwt.(>>=)
-
 let home =
   try
     Sys.getenv "HOME"
@@ -161,13 +159,6 @@ let get_bool key resources =
   | "" | "none" -> None
   | s           -> Printf.ksprintf error "invalid boolean value %S" s
 
-let hex_of_char ch = match ch with
-  | '0' .. '9' -> Char.code ch - Char.code '0'
-  | 'A' .. 'F' -> Char.code ch - Char.code 'A' + 10
-  | 'a' .. 'f' -> Char.code ch - Char.code 'a' + 10
-  | ch -> raise Exit
-
-
 let get_switch key resources : LTerm_style.Switch.t =
   match String.lowercase (get key resources) with
   | "on"  | "true"        -> On
@@ -209,35 +200,33 @@ let parse str =
   let lexbuf = Lexing.from_string str in
   let rec loop line acc =
     match LTerm_resource_lexer.line lexbuf with
-      | `EOF ->
-          acc
-      | `Empty ->
-          loop (line + 1) acc
-      | `Assoc(pattern, value) ->
-          loop (line + 1) (add pattern value acc)
-      | `Error msg ->
-          raise (Parse_error("<string>", line, msg))
+    | `EOF ->
+      acc
+    | `Empty ->
+      loop (line + 1) acc
+    | `Assoc(pattern, value) ->
+      loop (line + 1) (add pattern value acc)
+    | `Error msg ->
+      raise (Parse_error("<string>", line, msg))
   in
   loop 1 []
 
-let load file =
-  Lwt_io.open_file ~mode:Lwt_io.input file >>= fun ic ->
-  let rec loop lineno acc =
-    Lwt_io.read_line_opt ic >>= fun line ->
-    match line with
-      | None ->
-          Lwt.return acc
-      | Some str ->
-          match LTerm_resource_lexer.line (Lexing.from_string str) with
-            | `EOF ->
-                loop (lineno + 1) acc
-            | `Empty ->
-                loop (lineno + 1) acc
-            | `Assoc(pattern, value) ->
-                loop (lineno + 1) (add pattern value acc)
-            | `Error msg ->
-                Lwt.fail (Parse_error(file, lineno, msg))
+let load_sync file =
+  let rec loop ic lineno acc =
+    match input_line ic with
+    | exception End_of_file -> acc
+    | str ->
+      match LTerm_resource_lexer.line (Lexing.from_string str) with
+      | `EOF ->
+        loop ic (lineno + 1) acc
+      | `Empty ->
+        loop ic (lineno + 1) acc
+      | `Assoc(pattern, value) ->
+        loop ic (lineno + 1) (add pattern value acc)
+      | `Error msg ->
+        raise (Parse_error(file, lineno, msg))
   in
-  Lwt.finalize
-    (fun () -> loop 1 [])
-    (fun () -> Lwt_io.close ic)
+  let ic = open_in file in
+  match loop ic 1 [] with
+  | x -> close_in ic; x
+  | exception e -> close_in ic; raise e

@@ -56,8 +56,10 @@ val parse : string -> t
     ]}
 *)
 
-val load : string -> t
-(** Same as {!parse} but parses the contents of a file. *)
+val load_sync : string -> t
+(** Same as {!parse} but parses the contents of a file.
+
+    This functions does blocking system calls. *)
 
 val home : string
 (** The home directory. *)

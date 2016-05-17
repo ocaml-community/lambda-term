@@ -57,8 +57,8 @@ Library "lambda-term2"
 #    LTerm_widget,
 #    LTerm_edit,
 #    LTerm_read_line,
-    LTerm_text
-#    LTerm_resources,
+    LTerm_text,
+    LTerm_resources
 #    LTerm_inputrc,
 #    LTerm_history,
   InternalModules:
