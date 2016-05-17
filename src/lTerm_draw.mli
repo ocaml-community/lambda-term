@@ -9,7 +9,6 @@
 
 (** Drawing *)
 
-open Zed
 open LTerm_geom
 
 type context

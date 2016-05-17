@@ -8,7 +8,6 @@
  *)
 
 open StdLabels
-open Bigarray
 
 external get_sigwinch : unit -> int option = "lt_unix_get_sigwinch"
 external get_system_encoding : unit -> string = "lt_unix_get_system_encoding"
@@ -425,9 +424,6 @@ module Event_parser = struct
 
   exception Need_more
   let need_more () = raise_notrace Need_more
-
-  exception Discard_event
-  let discard_event () = raise_notrace Discard_event
 
   (* +---------------------------------------------------------------+
      | Parsing of encoded characters                                 |
@@ -969,23 +965,6 @@ module Event_parser = struct
     loop 0 (Array.length sequences)
   ;;
 
-  let rec scan_text t ofs =
-    if ofs >= t.max then
-      ofs
-    else begin
-      match t.buffer.{ofs} with
-      | '\x00' .. '\x1f' | '\x7f' -> ofs
-      | _ -> scan_text t (ofs + 1)
-    end
-  ;;
-
-  let make_char m c : LTerm_event.t =
-    if Char.code c <= 127 then
-      Char (m, c)
-    else
-      Uchar (m, Uchar.of_char c)
-  ;;
-
   let make_uchar m c : LTerm_event.t =
     if Uchar.to_int c <= 127 then
       Char (m, Uchar.to_char c)
@@ -1122,7 +1101,6 @@ module Event_parser = struct
         parse_event t ~can_refill:true
       with
       | event -> Some event
-      | exception Discard_event -> read t
       | exception Need_more ->
         match refill_with_timeout t ~timeout:t.escape_time with
         | `Disabled -> None
@@ -1132,7 +1110,7 @@ module Event_parser = struct
             parse_event t ~can_refill:false
           with
           | event -> Some event
-          | exception (Need_more | Discard_event) ->
+          | exception Need_more ->
             (* If we still want more, assume we are trying with a new sequence *)
             read t
     end else
@@ -1148,7 +1126,6 @@ module Event_parser = struct
     else
       match parse_event t ~can_refill:true with
       | event -> immediately_available_events t (event :: acc)
-      | exception Discard_event -> immediately_available_events t acc
       | exception Need_more -> List.rev acc
   ;;
 

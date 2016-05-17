@@ -7,7 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
-open Lambda_term
+open! Lambda_term
 (*
 let () =
   for

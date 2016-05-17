@@ -15,9 +15,10 @@ module Screen = struct
 
   let state_change_sequence a b =
     match a, b with
+    | Alternative, Alternative
+    | Main, Main -> ""
     | Alternative, Main -> "\027[?1049l"
     | Main, Alternative -> "\027[?1049h"
-    | _ -> ""
 end
 
 module Mouse_events = struct
@@ -85,17 +86,6 @@ module Mode = struct
     ; mouse   = choose t.mouse   mouse
     ; screen  = choose t.screen  screen
     }
-
-  let termios_fields_equal a b =
-    a.echo    = b.echo    &&
-    a.raw     = b.raw     &&
-    a.signals = b.signals
-  ;;
-
-  let non_termios_fields_equal a b =
-    a.mouse  = b.mouse &&
-    a.screen = b.screen
-  ;;
 
   let copy_non_termios_fields t ~from =
     { t with mouse = from.mouse; screen = from.screen }
@@ -172,7 +162,6 @@ module Notifier = struct
       }
 
   module Request = struct
-    type 'a notifier = 'a t
     type t = T : ('a, _) methods * 'a -> t
 
     let notify (T (notifier, request)) =
@@ -471,7 +460,7 @@ end = struct
   let notify_all_locked t =
     let waiters = t.waiters in
     t.waiters <- [];
-    List.iter Notifier.Request.notify waiters
+    List.iter waiters ~f:Notifier.Request.notify
   ;;
 
   let send t ev =
@@ -711,19 +700,6 @@ module Signals = struct
     | Susp
     | Winch
 
-  let char_of_signal = function
-    | Intr  -> 'i'
-    | Quit  -> 'q'
-    | Susp  -> 's'
-    | Winch -> 'w'
-
-  let signal_of_char = function
-    | 'i' -> Intr
-    | 'q' -> Quit
-    | 's' -> Susp
-    | 'w' -> Winch
-    | _   -> assert false
-
   let signal_of_signo signo =
     if signo = Sys.sigint then
       Intr
@@ -764,7 +740,7 @@ module Signals = struct
      | None -> ());
     let cmd =
       let mode = t.real_mode in
-      String.concat ""
+      String.concat ~sep:""
         [ Mouse_events.state_change_sequence mode.mouse  Disabled
         ; Screen.      state_change_sequence mode.screen Main
         ; if t.real_cursor = Hidden then "\027[?25h" else ""
@@ -781,14 +757,12 @@ module Signals = struct
   let abort () =
     let l = !Global.terminals in
     Global.terminals := [];
-    List.iter
-      (fun t ->
-         match t.state with
-         | Closed | Inactive -> ()
-         | Active ->
-           t.state <- Inactive;
-           (try reset t with _ -> ()))
-      l;
+    List.iter l ~f:(fun t ->
+      match t.state with
+      | Closed | Inactive -> ()
+      | Active ->
+        t.state <- Inactive;
+        (try reset t with _ -> ()));
   ;;
 
   let () = at_exit abort
@@ -829,7 +803,7 @@ module Signals = struct
         let sync = Sync.refresh ~mode:t.mode_when_synced ~cursor:t.cursor_when_synced in
         Thread_safe_queue.send t.syncs sync;
       );
-      List.iter (fun t -> add_event t Resume) !Global.terminals;
+      List.iter !Global.terminals ~f:(fun t -> add_event t Resume);
       Global.state := Normal;
       Condition.broadcast Global.resume)
   ;;

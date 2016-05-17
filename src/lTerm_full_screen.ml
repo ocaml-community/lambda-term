@@ -1,4 +1,4 @@
-open StdLabels
+open! StdLabels
 
 module Term = LTerm
 module Draw = LTerm_draw

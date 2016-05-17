@@ -13,11 +13,15 @@ external set_console_cp : int -> unit = "lt_windows_set_console_cp"
 external get_console_output_cp : unit -> int = "lt_windows_get_console_output_cp"
 external set_console_output_cp : int -> unit = "lt_windows_set_console_output_cp"
 
-type input =
-  | Resize
-  | Uchar       of LTerm_event.Modifiers.t * Uchar.t
-  | Key         of LTerm_event.Modifiers.t * LTerm_event.Key.t
-  | Button_down of LTerm_event.Modifiers.t * int * LTerm_geom.coord
+include struct
+  (* Disable warning 37 for unused constructors, as these are only created from C *)
+  [@@@warning "-37"]
+  type input =
+    | Resize
+    | Uchar       of LTerm_event.Modifiers.t * Uchar.t
+    | Key         of LTerm_event.Modifiers.t * LTerm_event.Key.t
+    | Button_down of LTerm_event.Modifiers.t * int * LTerm_geom.coord
+end
 
 external read_console_input : Unix.file_descr -> input = "lt_windows_read_console_input"
 

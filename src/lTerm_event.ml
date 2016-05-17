@@ -7,7 +7,6 @@
  * This file is a part of Lambda-Term.
  *)
 
-open Zed
 open StdLabels
 
 module Modifiers = struct
@@ -85,9 +84,10 @@ module Modifiers = struct
   ;;
 
   let extract_from_string s =
-    let pos, control = test_prefix s 0 'C' in
-    let pos, meta    = test_prefix s 0 'M' in
-    let pos, shift   = test_prefix s 0 'S' in
+    let pos = 0 in
+    let pos, control = test_prefix s pos 'C' in
+    let pos, meta    = test_prefix s pos 'M' in
+    let pos, shift   = test_prefix s pos 'S' in
     if pos = 0 then
       (N, s)
     else
@@ -212,8 +212,6 @@ type t =
   | Resume
   | Resize        of LTerm_geom.size
   | Closed
-
-let hash = Hashtbl.hash
 
 let string_of_coord (c : LTerm_geom.coord) =
   match c with

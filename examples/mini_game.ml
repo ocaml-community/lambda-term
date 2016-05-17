@@ -19,7 +19,7 @@ type state =
 
 let render ctx state =
   Draw.clear ctx;
-  let { Geom. cols; rows } = Draw.size ctx in
+  let rows = (Draw.size ctx).rows in
   Array.iteri state.bricks ~f:(fun i present ->
     Draw.set ctx ~row:0 ~col:i
       (if present then

@@ -8,7 +8,6 @@
  *)
 
 open StdLabels
-open Zed
 
 type point =
   { mutable char  : Uchar.t
@@ -287,7 +286,6 @@ let fold_coma_separated_words =
     else
       match s.[j] with
       | ',' ->
-        let len = j - i in
         let word = String.sub s ~pos:i ~len:(j - i) in
         loop s (j + 1) (j + 1) f (f word acc)
       | _ ->

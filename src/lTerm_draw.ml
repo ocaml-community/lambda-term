@@ -84,7 +84,7 @@ let set_style ctx ~row ~col style =
   let abs_row = ctx.row1 + row and abs_col = ctx.col1 + col in
   if row >= 0 && col >= 0 && abs_row < ctx.row2 && abs_col < ctx.col2 then begin
     let pt = ctx.matrix.(row).(col) in
-    set_point_style pt style
+    set_point_style pt ~style
   end
 ;;
 
@@ -115,16 +115,6 @@ let fill_style ctx ~style =
       set_point_style point ~style
     done
   done
-;;
-
-let draw_char ctx ~row ~col ?(style=default_style) ch =
-  if row >= 0 && col >= 0 then begin
-    let row = ctx.row1 + row and col = ctx.col1 + col in
-    if row < ctx.row2 && col < ctx.col2 then
-      let point = ctx.matrix.(row).(col) in
-      point.char <- ch;
-      set_point_style point ~style
-  end
 ;;
 
 module type Text_drawing = sig
