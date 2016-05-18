@@ -8,7 +8,7 @@
  *)
 
 open StdLabels
-module G = LTerm_geom
+module Geom = LTerm_geom
 
 type point =
   { mutable char       : Uchar.t
@@ -19,7 +19,7 @@ type point =
 
 type t =
   { data                              : point array array
-  ; size                              : G.size
+  ; size                              : Geom.size
   ; main_context                      : context
   ; main_context_with_hidden_newlines : context
   }
@@ -37,7 +37,7 @@ let size t = t.size
 let context t = t.main_context
 let context_with_hidden_newlines t = t.main_context_with_hidden_newlines
 
-let create (size : G.size) =
+let create (size : Geom.size) =
   let data =
     Array.init
       size.rows
@@ -71,7 +71,7 @@ let create (size : G.size) =
   }
 ;;
 
-let resize t (size : G.size) =
+let resize t (size : Geom.size) =
   if size = t.size then
     t
   else begin
