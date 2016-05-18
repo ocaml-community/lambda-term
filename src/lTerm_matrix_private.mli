@@ -8,8 +8,10 @@
  *)
 
 type point =
-  { mutable char  : Uchar.t
-  ; mutable style : LTerm_style.t
+  { mutable char       : Uchar.t
+  ; mutable switches   : LTerm_style.Switches.t
+  ; mutable foreground : LTerm_style.Color.t
+  ; mutable background : LTerm_style.Color.t
   }
 
 type t =

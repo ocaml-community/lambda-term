@@ -33,6 +33,9 @@ module Color : sig
       will be the same as what was there before the text was drawn. *)
   val transparent : t
 
+  (** [merge a b] is [b] if [a] is [transparent] and [a] otherwise *)
+  val merge : t -> t -> t
+
   module Kind : sig
     type t =
       | Transparent
@@ -130,3 +133,63 @@ val merge : t -> t -> t
 val on_default : t -> t
 
 val equal : t -> t -> bool
+
+module Switches : sig
+  type t = private int
+
+  val bold       : t -> Switch.t
+  val underline  : t -> Switch.t
+  val blink      : t -> Switch.t
+  val reverse    : t -> Switch.t
+
+  val merge : t -> t -> t
+
+  val default : t
+  val none    : t
+end
+
+val switches     : t -> Switches.t
+val set_switches : t -> Switches.t -> t
+
+val make' : switches:Switches.t -> foreground:Color.t -> background:Color.t -> t
+
+module Mutable : sig
+  type t
+
+  val create
+    :  ?bold       : Switch.t (* default Unset *)
+    -> ?underline  : Switch.t (* default Unset *)
+    -> ?blink      : Switch.t (* default Unset *)
+    -> ?reverse    : Switch.t (* default Unset *)
+    -> ?foreground : Color.t  (* default transparent *)
+    -> ?background : Color.t  (* default transparent *)
+    -> unit
+    -> t
+
+  val bold       : t -> Switch.t
+  val underline  : t -> Switch.t
+  val blink      : t -> Switch.t
+  val reverse    : t -> Switch.t
+  val foreground : t -> Color.t
+  val background : t -> Color.t
+
+  val set
+    :  ?bold       : Switch.t (* default Unset *)
+    -> ?underline  : Switch.t (* default Unset *)
+    -> ?blink      : Switch.t (* default Unset *)
+    -> ?reverse    : Switch.t (* default Unset *)
+    -> ?foreground : Color.t  (* default transparent *)
+    -> ?background : Color.t  (* default transparent *)
+    -> t
+    -> unit
+
+  val set_bold       : t -> Switch.t -> unit
+  val set_underline  : t -> Switch.t -> unit
+  val set_blink      : t -> Switch.t -> unit
+  val set_reverse    : t -> Switch.t -> unit
+  val set_foreground : t -> Color.t -> unit
+  val set_background : t -> Color.t -> unit
+
+  val switches     : t -> Switches.t
+  val set_switches : t -> Switches.t -> unit
+end

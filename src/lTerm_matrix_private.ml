@@ -11,8 +11,10 @@ open StdLabels
 module G = LTerm_geom
 
 type point =
-  { mutable char  : Uchar.t
-  ; mutable style : LTerm_style.t
+  { mutable char       : Uchar.t
+  ; mutable switches   : LTerm_style.Switches.t
+  ; mutable foreground : LTerm_style.Color.t
+  ; mutable background : LTerm_style.Color.t
   }
 
 type t =
@@ -42,8 +44,10 @@ let create (size : G.size) =
       ~f:(fun _ ->
         Array.init
           (size.cols + 1)
-          ~f:(fun _ -> { char  = Uchar.of_char ' '
-                       ; style = LTerm_style.default
+          ~f:(fun _ -> { char       = Uchar.of_char ' '
+                       ; switches   = LTerm_style.Switches.default
+                       ; foreground = LTerm_style.Color.default
+                       ; background = LTerm_style.Color.default
                        }))
   in
   { size
@@ -76,8 +80,10 @@ let resize t (size : G.size) =
       for col = 0 to min t.size.cols size.cols do
         let old_pt = t.  data.(row).(col) in
         let new_pt = res.data.(row).(col) in
-        new_pt.char  <- old_pt.char;
-        new_pt.style <- old_pt.style;
+        new_pt.char       <- old_pt.char;
+        new_pt.switches   <- old_pt.switches;
+        new_pt.foreground <- old_pt.foreground;
+        old_pt.background <- old_pt.background;
       done
     done;
     res

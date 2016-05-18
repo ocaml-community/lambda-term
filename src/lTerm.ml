@@ -8,7 +8,9 @@
  *)
 
 open StdLabels
+
 module Bigstring = LTerm_bigstring
+module Style     = LTerm_style
 
 module Screen = struct
   type t = Main | Alternative
@@ -1165,28 +1167,33 @@ let add_index t base n =
 ;;
 
 let add_color t base col =
-  match LTerm_style.Color.kind col with
+  match Style.Color.kind col with
   | Transparent | Default -> ()
-  | Index | RGB -> add_index t base (LTerm_style.Color.get_index col t.color_map)
+  | Index | RGB -> add_index t base (Style.Color.get_index col t.color_map)
 ;;
 
-let is_on : LTerm_style.Switch.t -> bool = function
+let is_on : Style.Switch.t -> bool = function
   | On -> true
   | Off | Unset -> false
 ;;
 
-let add_style t ~style =
+let add_style t ~switches ~foreground ~background =
   add_3chars t '\027' '[' Codes.reset;
-  if is_on (LTerm_style.bold      style) then add_2chars t ';' Codes.bold;
-  if is_on (LTerm_style.underline style) then add_2chars t ';' Codes.underline;
-  if is_on (LTerm_style.blink     style) then add_2chars t ';' Codes.blink;
-  if is_on (LTerm_style.reverse   style) then add_2chars t ';' Codes.reverse;
-  add_color t Codes.foreground (LTerm_style.foreground style);
-  add_color t Codes.background (LTerm_style.background style);
+  if is_on (Style.Switches.bold      switches) then add_2chars t ';' Codes.bold;
+  if is_on (Style.Switches.underline switches) then add_2chars t ';' Codes.underline;
+  if is_on (Style.Switches.blink     switches) then add_2chars t ';' Codes.blink;
+  if is_on (Style.Switches.reverse   switches) then add_2chars t ';' Codes.reverse;
+  add_color t Codes.foreground foreground;
+  add_color t Codes.background background;
   add_char t 'm'
 ;;
 
-let set_style t style = add_style t ~style
+let set_style t style =
+  add_style t
+    ~switches:  (Style.switches   style)
+    ~foreground:(Style.foreground style)
+    ~background:(Style.background style)
+;;
 
 let add_uchar t c =
   let code = Uchar.to_int c in
@@ -1232,9 +1239,14 @@ let empty_matrix = LTerm_draw.Matrix.create { cols = 0; rows = 0 }
 
 type raw_data = LTerm_matrix_private.point array array
 
+let int_of_switches x = (x : Style.Switches.t :> int)
+let int_of_color    x = (x : Style.Color.t    :> int)
+
 let render_loop t (old_data:raw_data) (new_data:raw_data) =
   (* The last displayed style. *)
-  let curr_style = ref LTerm_style.default in
+  let curr_switches   = ref Style.Switches.default in
+  let curr_foreground = ref Style.Color.default    in
+  let curr_background = ref Style.Color.default    in
   for y = 0 to Array.length new_data - 1 do
     let line = new_data.(y)          in
     let cols = Array.length line - 1 in
@@ -1244,10 +1256,16 @@ let render_loop t (old_data:raw_data) (new_data:raw_data) =
     let continue = ref true in
     while !x < cols && !continue do
       let point = line.(!x) in
-      let style = LTerm_style.on_default point.style in
-      if not (LTerm_style.equal !curr_style style) then begin
-        curr_style := style;
-        add_style t ~style;
+      let switches   = Style.Switches.(merge default) point.switches   in
+      let foreground = Style.Color.   (merge default) point.foreground in
+      let background = Style.Color.   (merge default) point.background in
+      if (int_of_switches switches   lxor int_of_switches !curr_switches  ) lor
+         (int_of_color    foreground lxor int_of_color    !curr_foreground) lor
+         (int_of_color    background lxor int_of_color    !curr_background) <> 0 then begin
+        curr_switches   := switches;
+        curr_foreground := foreground;
+        curr_background := background;
+        add_style t ~switches ~foreground ~background;
       end;
       let code = Uchar.to_int point.char in
       if code = 10 then begin

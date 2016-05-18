@@ -37,11 +37,13 @@ module Color = struct
     [@@deriving sexp]
   end
 
-  let transparent   = 0 (* must be zero, this is used for style merging *)
+  let transparent   = 0
   let default       = transparent + 1
   let first_rgb     = default + 1
   let last_rgb      = first_rgb + 0xff_ff_ff
   let first_indexed = last_rgb + 1
+
+  let merge a b = if a = transparent then b else a
 
   let index n =
     if n < 0 || n > 255 then invalid_arg "LTerm_style.Color.index";
@@ -976,81 +978,76 @@ module Switch = struct
     | _ -> assert false
 end
 
-module type Int = sig
-  type t
-  val zero : t
-  val one : t
-  val to_int : t -> int
-  val of_int : int -> t
-  val shift_left : t -> int -> t
-  val shift_right_logical : t -> int -> t
-  val ( - ) : t -> t -> t
-  val equal : t -> t -> bool
-  val logand : t -> t -> t
-  val logor  : t -> t -> t
-  val logxor : t -> t -> t
-  val lognot : t -> t
-end
-
-module Int : Int = struct
+module Switches = struct
   type t = int
-  let zero = 0
-  let one = 1
-  let to_int n = n
-  let of_int n = n
-  let shift_left = ( lsl )
-  let shift_right_logical = ( lsr )
-  let ( - ) a b = a - b
-  let equal (a : t) b = a = b
-  let logand = ( land )
-  let logor = ( lor )
-  let logxor = ( lxor )
-  let lognot = lnot
+
+  module Bits = struct
+    let bold       = 0b00_00_00_11
+    let underline  = 0b00_00_11_00
+    let blink      = 0b00_11_00_00
+    let reverse    = 0b11_00_00_00
+
+    let unset_switches = 0b10_10_10_10
+  end
+
+  let ( & ) = ( land )
+  let ( + ) = ( lor )
+  let ( - ) t m = t & lnot m
+
+  let bold       t = Switch.of_int ( t        & 3)
+  let underline  t = Switch.of_int ((t lsr 2) & 3)
+  let blink      t = Switch.of_int ((t lsr 4) & 3)
+  let reverse    t = Switch.of_int ((t lsr 6) & 3)
+
+  let of_bold       x =  Switch.to_int x
+  let of_underline  x = (Switch.to_int x) lsl 2
+  let of_blink      x = (Switch.to_int x) lsl 4
+  let of_reverse    x = (Switch.to_int x) lsl 6
+
+  let set_bold       t x = t - Bits.bold       + of_bold       x
+  let set_underline  t x = t - Bits.underline  + of_underline  x
+  let set_blink      t x = t - Bits.blink      + of_blink      x
+  let set_reverse    t x = t - Bits.reverse    + of_reverse    x
+
+  let make ~bold ~underline ~blink ~reverse =
+    of_bold       bold       +
+    of_underline  underline  +
+    of_blink      blink      +
+    of_reverse    reverse
+  ;;
+
+  let merge a b =
+    let m = b & Bits.unset_switches in
+    let b_unset_switches_mask = m + (m lsr 1) in
+    (a & b_unset_switches_mask) + (b lxor m)
+  ;;
+
+  let set t ~bold ~underline ~blink ~reverse =
+    let t' = make ~bold ~underline ~blink ~reverse in
+    merge t t'
+  ;;
+
+  let default = make ~bold:Off   ~underline:Off   ~blink:Off   ~reverse:Off
+  let none    = make ~bold:Unset ~underline:Unset ~blink:Unset ~reverse:Unset
 end
 
-module Int64 : Int = struct
-  include Int64
-  let (-) = sub
-  let equal (a : t) b = a = b
-end
+type t =
+  { switches   : int
+  ; foreground : Color.t
+  ; background : Color.t
+  }
 
-module Int63 = (val if Sys.word_size = 64 then (module Int) else (module Int64) : Int)
-type t = Int63.t
-(* bits:
+let equal a b =
+  (a.switches   lxor b.switches  ) lor
+  (a.foreground lxor b.foreground) lor
+  (a.background lxor b.background) = 0
 
-   -  #0..#24: foreground
-   - #25..#49: background
-   - #50..#51: bold
-   - #52..#53: underline
-   - #54..#55: blink
-   - #56..#57: reverse
-*)
-
-module Bits = struct
-  let foreground = Int63.(shift_left one 25 - one)
-  let background = Int63.(shift_left one 50 - one - foreground)
-  let bold       = Int63.(shift_left (of_int 3) 50)
-  let underline  = Int63.(shift_left (of_int 3) 52)
-  let blink      = Int63.(shift_left (of_int 3) 54)
-  let reverse    = Int63.(shift_left (of_int 3) 56)
-
-  let unset_switches = Int63.(shift_left (of_int 0b10_10_10_10) 50)
-end
-
-let equal = Int63.equal
-
-let ( & ) = Int63.logand
-let ( + ) = Int63.logor
-let ( - ) t m = t & Int63.lognot m
-let ( lsl ) = Int63.shift_left
-let ( lsr ) = Int63.shift_right_logical
-
-let style_of_bold       x = Int63.of_int (Switch.to_int x) lsl 50
-let style_of_underline  x = Int63.of_int (Switch.to_int x) lsl 52
-let style_of_blink      x = Int63.of_int (Switch.to_int x) lsl 54
-let style_of_reverse    x = Int63.of_int (Switch.to_int x) lsl 56
-let style_of_foreground x = Int63.of_int x
-let style_of_background x = Int63.of_int x lsl 25
+let make' ~switches ~foreground ~background =
+  { switches
+  ; foreground
+  ; background
+  }
+;;
 
 let make
       ?(bold      =Switch.Unset)
@@ -1061,27 +1058,25 @@ let make
       ?(background=Color.transparent)
       ()
   =
-  style_of_foreground foreground +
-  style_of_background background +
-  style_of_bold       bold       +
-  style_of_underline  underline  +
-  style_of_blink      blink      +
-  style_of_reverse    reverse
+  make' ~foreground ~background
+    ~switches:(Switches.make ~bold ~underline ~blink ~reverse)
 ;;
 
-let bold       t = Switch.of_int (Int63.to_int ((t lsr 50) & Int63.of_int 3))
-let underline  t = Switch.of_int (Int63.to_int ((t lsr 52) & Int63.of_int 3))
-let blink      t = Switch.of_int (Int63.to_int ((t lsr 54) & Int63.of_int 3))
-let reverse    t = Switch.of_int (Int63.to_int ((t lsr 56) & Int63.of_int 3))
-let foreground t = Int63.to_int  (t & Bits.foreground)
-let background t = Int63.to_int ((t & Bits.background) lsr 25)
+let bold       t = Switches.bold      t.switches
+let underline  t = Switches.underline t.switches
+let blink      t = Switches.blink     t.switches
+let reverse    t = Switches.reverse   t.switches
+let switches   t = t.switches
+let foreground t = t.foreground
+let background t = t.background
 
-let set_bold       t x = t - Bits.bold       + style_of_bold       x
-let set_underline  t x = t - Bits.underline  + style_of_underline  x
-let set_blink      t x = t - Bits.blink      + style_of_blink      x
-let set_reverse    t x = t - Bits.reverse    + style_of_reverse    x
-let set_foreground t x = t - Bits.foreground + style_of_foreground x
-let set_background t x = t - Bits.background + style_of_background x
+let set_bold       t x = { t with switches = Switches.set_bold      t.switches x }
+let set_underline  t x = { t with switches = Switches.set_underline t.switches x }
+let set_blink      t x = { t with switches = Switches.set_blink     t.switches x }
+let set_reverse    t x = { t with switches = Switches.set_reverse   t.switches x }
+let set_switches   t x = { t with switches   = x }
+let set_foreground t x = { t with foreground = x }
+let set_background t x = { t with background = x }
 
 let default =
   make
@@ -1097,16 +1092,10 @@ let default =
 let none = make ()
 
 let merge a b =
-  let m = b & Bits.unset_switches in
-  let b_unset_switches_mask = m + (m lsr 1) in
-  let t = (a & b_unset_switches_mask) + (Int63.logxor b m) in
-  let a_fg = a & Bits.foreground in
-  let b_fg = b & Bits.foreground in
-  let t = t + (if b_fg = Int63.zero then a_fg else b_fg) in
-  let a_bg = a & Bits.background in
-  let b_bg = b & Bits.background in
-  let t = t + (if b_bg = Int63.zero then a_bg else b_bg) in
-  t;
+  { switches   = Switches.merge a.switches b.switches
+  ; foreground = Color.merge a.foreground b.foreground
+  ; background = Color.merge a.background b.background
+  }
 ;;
 
 let on_default t = merge default t
@@ -1120,15 +1109,61 @@ let set
       ?(background=Color.transparent)
       t
   =
-  let t' =
-    make
-      ~bold
-      ~underline
-      ~blink
-      ~reverse
-      ~foreground
-      ~background
-      ()
-  in
-  merge t t'
+  { switches   = Switches.set t.switches ~bold ~underline ~blink ~reverse
+  ; foreground = Color.merge t.foreground foreground
+  ; background = Color.merge t.background background
+  }
 ;;
+
+module Mutable = struct
+  type t =
+    { mutable switches   : int
+    ; mutable foreground : Color.t
+    ; mutable background : Color.t
+    }
+
+  let create
+        ?(bold      =Switch.Unset)
+        ?(underline =Switch.Unset)
+        ?(blink     =Switch.Unset)
+        ?(reverse   =Switch.Unset)
+        ?(foreground=Color.transparent)
+        ?(background=Color.transparent)
+        ()
+    =
+    { foreground
+    ; background
+    ; switches = Switches.make ~bold ~underline ~blink ~reverse
+    }
+  ;;
+
+  let set
+        ?(bold      =Switch.Unset)
+        ?(underline =Switch.Unset)
+        ?(blink     =Switch.Unset)
+        ?(reverse   =Switch.Unset)
+        ?(foreground=Color.transparent)
+        ?(background=Color.transparent)
+        t
+    =
+    t.switches   <- Switches.set t.switches ~bold ~underline ~blink ~reverse;
+    t.foreground <- Color.merge t.foreground foreground;
+    t.background <- Color.merge t.background background;
+  ;;
+
+  let bold       t = Switches.bold      t.switches
+  let underline  t = Switches.underline t.switches
+  let blink      t = Switches.blink     t.switches
+  let reverse    t = Switches.reverse   t.switches
+  let switches   t = t.switches
+  let foreground t = t.foreground
+  let background t = t.background
+
+  let set_bold       t x = t.switches <- Switches.set_bold      t.switches x
+  let set_underline  t x = t.switches <- Switches.set_underline t.switches x
+  let set_blink      t x = t.switches <- Switches.set_blink     t.switches x
+  let set_reverse    t x = t.switches <- Switches.set_reverse   t.switches x
+  let set_switches   t x = t.switches <- x
+  let set_foreground t x = t.foreground <- x
+  let set_background t x = t.background <- x
+end

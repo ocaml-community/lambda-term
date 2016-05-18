@@ -9,14 +9,17 @@
 
 open StdLabels
 
-module G = LTerm_geom
+module Geom  = LTerm_geom
+module Style = LTerm_style
 
 let space   = Uchar.of_char ' '
 let newline = Uchar.of_char '\n'
 
 type point = LTerm_matrix_private.point =
-  { mutable char  : Uchar.t
-  ; mutable style : LTerm_style.t
+  { mutable char       : Uchar.t
+  ; mutable switches   : Style.Switches.t
+  ; mutable foreground : Style.Color.t
+  ; mutable background : Style.Color.t
   }
 
 type context = LTerm_matrix_private.context =
@@ -30,14 +33,14 @@ type context = LTerm_matrix_private.context =
 
 module Matrix = LTerm_matrix_private
 
-let size ctx : G.size =
+let size ctx : Geom.size =
   { rows = ctx.row2 - ctx.row1
   ; cols = ctx.col2 - ctx.col1
   }
 
 exception Out_of_bounds
 
-let sub ctx (rect:G.rect) =
+let sub ctx (rect:Geom.rect) =
   if rect.row1 < 0 || rect.col1 < 0 || rect.row1 > rect.row2 || rect.col1 > rect.col2 then
     raise Out_of_bounds;
   let row1 = ctx.row1 + rect.row1
@@ -51,8 +54,10 @@ let clear ctx =
   for row = ctx.row1 to ctx.row2 - 1 do
     for col = ctx.col1 to ctx.col2 - (if ctx.hidden_newlines then 0 else 1) do
       let point = ctx.matrix.(row).(col) in
-      point.char  <- space;
-      point.style <- LTerm_style.default;
+      point.char       <- space;
+      point.switches   <- Style.Switches.default;
+      point.foreground <- Style.Color.default;
+      point.background <- Style.Color.default;
     done
   done
 
@@ -62,22 +67,27 @@ let point ctx ~row ~col =
   if row >= ctx.row2 || col >= ctx.col2 then raise Out_of_bounds;
   ctx.matrix.(row).(col)
 
-let get       ctx ~row ~col = (point ctx ~row ~col).char
-let get_style ctx ~row ~col = (point ctx ~row ~col).style
+let get ctx ~row ~col = (point ctx ~row ~col).char
 
-let default_style = LTerm_style.none
+let get_style ctx ~row ~col =
+  let p = point ctx ~row ~col in
+  Style.make' ~switches:p.switches ~foreground:p.foreground ~background:p.background
+
+let default_style = Style.none
+
+let set_point_style pt ~style =
+  pt.switches   <- Style.Switches.merge pt.switches (Style.switches   style);
+  pt.foreground <- Style.Color.merge pt.foreground  (Style.foreground style);
+  pt.background <- Style.Color.merge pt.background  (Style.background style);
+;;
 
 let set ctx ~row ~col ?(style=default_style) char =
   let abs_row = ctx.row1 + row and abs_col = ctx.col1 + col in
   if row >= 0 && col >= 0 && abs_row < ctx.row2 && abs_col < ctx.col2 then begin
     let pt = ctx.matrix.(row).(col) in
     pt.char <- char;
-    pt.style <- LTerm_style.merge pt.style style
+    set_point_style pt ~style
   end
-;;
-
-let set_point_style pt ~style =
-  pt.style <- LTerm_style.merge pt.style style
 ;;
 
 let set_style ctx ~row ~col style =
@@ -124,15 +134,15 @@ module type Text_drawing = sig
     :  context
     -> row:int
     -> col:int
-    -> ?style:LTerm_style.t
+    -> ?style:Style.t
     -> t
     -> unit
 
   val draw_aligned
     :  context
     -> row:int
-    -> align:G.Horz_alignment.t
-    -> ?style:LTerm_style.t
+    -> align:Geom.Horz_alignment.t
+    -> ?style:Style.t
     -> t
     -> unit
 end
@@ -141,7 +151,7 @@ module Make_text_drawing(Text : sig
                            type t
                            val limit : t -> int
                            val char  : t -> int -> Uchar.t
-                           val style : t -> int -> LTerm_style.t
+                           val style : t -> int -> Style.t
                            val next  : t -> int -> int
                          end) : Text_drawing with type t = Text.t = struct
   type t = Text.t
@@ -171,7 +181,7 @@ module Make_text_drawing(Text : sig
     loop (ctx.row1 + row) (ctx.col1 + col) 0
   ;;
 
-  let draw_aligned ctx ~row ~(align:G.Horz_alignment.t)
+  let draw_aligned ctx ~row ~(align:Geom.Horz_alignment.t)
         ?(style=default_style) txt =
     let rec line_length ofs len =
       if ofs = Text.limit txt then
@@ -227,7 +237,7 @@ module UTF8 = Make_text_drawing(struct
   type t = Zed_utf8.t
   let limit = String.length
   let char = Zed_utf8.extract
-  let style _ _ = LTerm_style.none
+  let style _ _ = Style.none
   let next = Zed_utf8.next
 end)
 
@@ -235,7 +245,7 @@ module Latin1 = Make_text_drawing(struct
   type t = string
   let limit = String.length
   let char  s i = Uchar.of_char s.[i]
-  let style _ _ = LTerm_style.none
+  let style _ _ = Style.none
   let next  _ i = i + 1
 end)
 
@@ -502,7 +512,7 @@ let draw_vline ctx ~row ~col ~len ?(style=default_style) connection =
 
 let draw_frame ctx rect ?(style=default_style)
       connection =
-  let { G. col1; col2; row1; row2 } = rect in
+  let { Geom. col1; col2; row1; row2 } = rect in
   let hline = Piece.hline connection in
   let vline = Piece.vline connection in
   for col = col1 + 1 to col2 - 2 do
