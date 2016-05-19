@@ -17,6 +17,7 @@ let newline = Uchar.of_char '\n'
 
 type point = LTerm_matrix_private.point =
   { mutable char       : Uchar.t
+  ; mutable char_trail : Uchar.t list
   ; mutable switches   : Style.Switches.t
   ; mutable foreground : Style.Color.t
   ; mutable background : Style.Color.t
@@ -50,16 +51,36 @@ let sub ctx (rect:Geom.rect) =
   if row2 > ctx.row2 || col2 > ctx.col2 then raise Out_of_bounds;
   { ctx with row1; col1; row2; col2; hidden_newlines = false }
 
+let set_point_char point ~char ~char_trail =
+  point.char <- char;
+  if point.char_trail != char_trail then point.char_trail <- char_trail;
+;;
+
+let set_point point ~char ~char_trail ~style =
+  set_point_char point ~char ~char_trail;
+  point.switches   <- Style.switches   style;
+  point.foreground <- Style.foreground style;
+  point.background <- Style.background style;
+;;
+
+let merge_point_style pt style =
+  pt.switches   <- Style.Switches.merge pt.switches (Style.switches   style);
+  pt.foreground <- Style.Color.merge pt.foreground  (Style.foreground style);
+  pt.background <- Style.Color.merge pt.background  (Style.background style);
+;;
+
+let merge_point pt ~char ~char_trail ~style =
+  set_point_char pt ~char ~char_trail;
+  merge_point_style pt style;
+;;
+
 let clear ctx =
   for row = ctx.row1 to ctx.row2 - 1 do
     for col = ctx.col1 to ctx.col2 - (if ctx.hidden_newlines then 0 else 1) do
-      let point = ctx.matrix.(row).(col) in
-      point.char       <- space;
-      point.switches   <- Style.Switches.default;
-      point.foreground <- Style.Color.default;
-      point.background <- Style.Color.default;
+      set_point ctx.matrix.(row).(col) ~char:space ~char_trail:[] ~style:Style.default
     done
   done
+;;
 
 let point ctx ~row ~col =
   if row < 0 || col < 0 then raise Out_of_bounds;
@@ -75,27 +96,16 @@ let get_style ctx ~row ~col =
 
 let default_style = Style.none
 
-let set_point_style pt ~style =
-  pt.switches   <- Style.Switches.merge pt.switches (Style.switches   style);
-  pt.foreground <- Style.Color.merge pt.foreground  (Style.foreground style);
-  pt.background <- Style.Color.merge pt.background  (Style.background style);
-;;
-
 let set ctx ~row ~col ?(style=default_style) char =
   let abs_row = ctx.row1 + row and abs_col = ctx.col1 + col in
-  if row >= 0 && col >= 0 && abs_row < ctx.row2 && abs_col < ctx.col2 then begin
-    let pt = ctx.matrix.(row).(col) in
-    pt.char <- char;
-    set_point_style pt ~style
-  end
+  if row >= 0 && col >= 0 && abs_row < ctx.row2 && abs_col < ctx.col2 then
+    merge_point ctx.matrix.(row).(col) ~char ~char_trail:[] ~style
 ;;
 
 let set_style ctx ~row ~col style =
   let abs_row = ctx.row1 + row and abs_col = ctx.col1 + col in
-  if row >= 0 && col >= 0 && abs_row < ctx.row2 && abs_col < ctx.col2 then begin
-    let pt = ctx.matrix.(row).(col) in
-    set_point_style pt ~style
-  end
+  if row >= 0 && col >= 0 && abs_row < ctx.row2 && abs_col < ctx.col2 then
+    merge_point_style ctx.matrix.(row).(col) style
 ;;
 
 let set_hidden_newline ctx ~row state =
@@ -108,12 +118,10 @@ let set_hidden_newline ctx ~row state =
   pt.char <- if state then newline else space
 ;;
 
-let fill ctx ?(style=default_style) ch =
+let fill ctx ?(style=default_style) char =
   for row = ctx.row1 to ctx.row2 - 1 do
     for col = ctx.col1 to ctx.col2 - 1 do
-      let point = ctx.matrix.(row).(col) in
-      point.char <- ch;
-      set_point_style point ~style
+      merge_point ctx.matrix.(row).(col) ~char ~char_trail:[] ~style
     done
   done
 ;;
@@ -121,8 +129,7 @@ let fill ctx ?(style=default_style) ch =
 let fill_style ctx ~style =
   for row = ctx.row1 to ctx.row2 - 1 do
     for col = ctx.col1 to ctx.col2 - 1 do
-      let point = ctx.matrix.(row).(col) in
-      set_point_style point ~style
+      merge_point_style ctx.matrix.(row).(col) style
     done
   done
 ;;
@@ -147,6 +154,128 @@ module type Text_drawing = sig
     -> unit
 end
 
+module Text_drawer = struct
+  type t =
+    { context     : context
+    ; style       : Style.t
+    ; mutable row : int
+    ; mutable col : int
+    }
+
+  let create context ~row ~col ~style =
+    { context
+    ; style
+    ; row = context.row1 + row
+    ; col = context.col1 + col
+    }
+  ;;
+
+  let feed_newline t =
+    if t.context.hidden_newlines && t.col = t.context.row2 then
+      t.context.matrix.(t.row).(t.col).char <- newline;
+    t.row <- t.row + 1;
+    t.col <- t.context.col1;
+  ;;
+
+  let feed_aux t ~char ~char_trail ~style =
+    if char = newline then
+      feed_newline t
+    else begin
+      let { context; row; col; style = t_style } = t in
+      let width = Uucp.Break.tty_width_hint (Uchar.to_int char) in
+      if row >= context.row1 &&
+         row <  context.row2 &&
+         col >= context.col1 &&
+         col + width <= context.col2 then begin
+        let point = context.matrix.(row).(col) in
+        set_point_char point ~char ~char_trail;
+        merge_point_style point t_style;
+        merge_point_style point style;
+      end;
+      t.col <- t.col + width
+    end
+  ;;
+
+  let feed      t ~char                    ~style = feed_aux t ~char ~char_trail:[] ~style
+  let _feed_long t ~char:(char, char_trail) ~style = feed_aux t ~char ~char_trail    ~style
+end
+
+module Text_drawer_aligned = struct
+  type stack =
+    | Empty
+    | Char of Uchar.t * Uchar.t list * Style.t * int * stack
+
+  type t =
+    { context       : context
+    ; style         : Style.t
+    ; align         : Geom.Horz_alignment.t
+    ; mutable stack : stack
+    ; mutable width : int
+    ; mutable row   : int
+    }
+
+  let create context ~row ~style ~align =
+    { context
+    ; style
+    ; align
+    ; stack = Empty
+    ; width = 0
+    ; row = context.row1 + row
+    }
+  ;;
+
+  let rec draw_stack t ~col stack =
+    match stack with
+    | Empty -> ()
+    | Char (char, char_trail, style, width, stack) ->
+      let col = col - width in
+      if col >= t.context.col1 then begin
+        if col + width <= t.context.col2 then begin
+          let point = t.context.matrix.(t.row).(col) in
+          set_point_char point ~char ~char_trail;
+          merge_point_style point t.style;
+          merge_point_style point style
+        end;
+        draw_stack t ~col stack
+      end
+  ;;
+
+  let feed_newline t =
+    let context = t.context in
+    if t.row >= context.row1 && t.row < context.row2 then begin
+      let col =
+        match t.align with
+        | Left ->
+          context.col1 + t.width
+        | Center ->
+          context.col1 + (context.col2 - context.col1 - t.width) / 2 + t.width
+        | Right ->
+          context.col2
+      in
+      draw_stack t ~col t.stack
+    end;
+    t.stack <- Empty;
+    t.width <- 0;
+    t.row <- t.row + 1;
+  ;;
+
+  let feed t ~char ~style =
+    if char = newline then
+      feed_newline t
+    else begin
+      let width = Uucp.Break.tty_width_hint (Uchar.to_int char) in
+      t.stack <- Char (char, [], style, width, t.stack);
+      t.width <- t.width + width
+    end
+  ;;
+
+  let _feed_long t ~char:(char, char_trail) ~style =
+    let width = Uucp.Break.tty_width_hint (Uchar.to_int char) in
+    t.stack <- Char (char, char_trail, style, width, t.stack);
+    t.width <- t.width + width
+  ;;
+end
+
 module Make_text_drawing(Text : sig
                            type t
                            val limit : t -> int
@@ -157,79 +286,29 @@ module Make_text_drawing(Text : sig
   type t = Text.t
 
   let draw ctx ~row ~col ?(style=default_style) txt =
-    let rec loop row col ofs =
-      if ofs < Text.limit txt then begin
-        let ch = Text.char txt ofs in
-        if ch = newline then begin
-          if ctx.hidden_newlines && col = ctx.row2 then
-            ctx.matrix.(row).(col).char <- newline;
-          loop (row + 1) ctx.col1 (Text.next txt ofs)
-        end else begin
-          if row >= ctx.row1
-          && row <  ctx.row2
-          && col >= ctx.col1
-          && col <  ctx.col2 then begin
-            let point = ctx.matrix.(row).(col) in
-            point.char <- ch;
-            set_point_style point ~style;
-            set_point_style point ~style:(Text.style txt ofs)
-          end;
-          loop row (col + 1) (Text.next txt ofs)
-        end
-      end
-    in
-    loop (ctx.row1 + row) (ctx.col1 + col) 0
+    let drawer = Text_drawer.create ctx ~row ~col ~style in
+    let ofs = ref 0 in
+    let limit = Text.limit txt in
+    while !ofs < limit do
+      let char  = Text.char  txt !ofs in
+      let style = Text.style txt !ofs in
+      Text_drawer.feed drawer ~char ~style;
+      ofs := Text.next txt !ofs
+    done
   ;;
 
   let draw_aligned ctx ~row ~(align:Geom.Horz_alignment.t)
         ?(style=default_style) txt =
-    let rec line_length ofs len =
-      if ofs = Text.limit txt then
-        len
-      else
-        let ch = Text.char txt ofs in
-        if ch = newline then
-          len
-        else
-          line_length (Text.next txt ofs) (len + 1)
-    in
-    let rec loop row col ofs =
-      if ofs < Text.limit txt then begin
-        let ch = Text.char txt ofs in
-        if ch = newline then begin
-          Text.next txt ofs
-        end else begin
-          if row >= ctx.row1
-          && row <  ctx.row2
-          && col >= ctx.col1
-          && col <  ctx.col2 then begin
-            let point = ctx.matrix.(row).(col) in
-            point.char <- ch;
-            set_point_style point ~style;
-            set_point_style point ~style:(Text.style txt ofs)
-          end;
-          loop row (col + 1) (Text.next txt ofs)
-        end
-      end else
-        ofs
-    in
-    let rec loop_lines row ofs =
-      if ofs < Text.limit txt then begin
-        let ofs =
-          loop row
-            (match align with
-             | Left ->
-               ctx.col1
-             | Center ->
-               ctx.col1 + (ctx.col2 - ctx.col1 - line_length ofs 0) / 2
-             | Right ->
-               ctx.col2 - line_length ofs 0)
-            ofs
-        in
-        loop_lines (row + 1) ofs
-      end
-    in
-    loop_lines (ctx.row1 + row) 0
+    let drawer = Text_drawer_aligned.create ctx ~row ~style ~align in
+    let ofs = ref 0 in
+    let limit = Text.limit txt in
+    while !ofs < limit do
+      let char  = Text.char  txt !ofs in
+      let style = Text.style txt !ofs in
+      Text_drawer_aligned.feed drawer ~char ~style;
+      ofs := Text.next txt !ofs
+    done;
+    Text_drawer_aligned.feed_newline drawer
   ;;
 end
 
@@ -241,13 +320,27 @@ module UTF8 = Make_text_drawing(struct
   let next = Zed_utf8.next
 end)
 
-module Latin1 = Make_text_drawing(struct
+module Latin1 = struct
   type t = string
-  let limit = String.length
-  let char  s i = Uchar.of_char s.[i]
-  let style _ _ = Style.none
-  let next  _ i = i + 1
-end)
+
+  let draw ctx ~row ~col ?(style=default_style) s =
+    let drawer = Text_drawer.create ctx ~row ~col ~style in
+    for i = 0 to String.length s - 1 do
+      let char = Uchar.of_char s.[i] in
+      Text_drawer.feed drawer ~char ~style
+    done
+  ;;
+
+  let draw_aligned ctx ~row ~(align:Geom.Horz_alignment.t)
+        ?(style=default_style) s =
+    let drawer = Text_drawer_aligned.create ctx ~row ~style ~align in
+    for i = 0 to String.length s - 1 do
+      let char = Uchar.of_char s.[i] in
+      Text_drawer_aligned.feed drawer ~char ~style
+    done;
+    Text_drawer_aligned.feed_newline drawer
+  ;;
+end
 
 module Text = Make_text_drawing(struct
   type t = LTerm_text.t
@@ -491,8 +584,7 @@ let draw_piece ctx ~row ~col ?(style=default_style) piece =
         piece
     in
     let point = ctx.matrix.(row).(col) in
-    point.char <- Piece.to_char piece;
-    set_point_style point ~style
+    merge_point point ~char:(Piece.to_char piece) ~char_trail:[] ~style
   end;
 ;;
 

@@ -9,6 +9,7 @@
 
 type point =
   { mutable char       : Uchar.t
+  ; mutable char_trail : Uchar.t list
   ; mutable switches   : LTerm_style.Switches.t
   ; mutable foreground : LTerm_style.Color.t
   ; mutable background : LTerm_style.Color.t

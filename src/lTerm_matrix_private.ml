@@ -12,6 +12,7 @@ module Geom = LTerm_geom
 
 type point =
   { mutable char       : Uchar.t
+  ; mutable char_trail : Uchar.t list
   ; mutable switches   : LTerm_style.Switches.t
   ; mutable foreground : LTerm_style.Color.t
   ; mutable background : LTerm_style.Color.t
@@ -38,17 +39,17 @@ let context t = t.main_context
 let context_with_hidden_newlines t = t.main_context_with_hidden_newlines
 
 let create (size : Geom.size) =
+  let create_point _ =
+    { char       = Uchar.of_char ' '
+    ; char_trail = []
+    ; switches   = LTerm_style.Switches.default
+    ; foreground = LTerm_style.Color.default
+    ; background = LTerm_style.Color.default
+    }
+  in
   let data =
-    Array.init
-      size.rows
-      ~f:(fun _ ->
-        Array.init
-          (size.cols + 1)
-          ~f:(fun _ -> { char       = Uchar.of_char ' '
-                       ; switches   = LTerm_style.Switches.default
-                       ; foreground = LTerm_style.Color.default
-                       ; background = LTerm_style.Color.default
-                       }))
+    Array.init size.rows ~f:(fun _ ->
+      Array.init (size.cols + 1) ~f:create_point)
   in
   { size
   ; data
