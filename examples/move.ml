@@ -7,54 +7,31 @@
  * This file is a part of Lambda-Term.
  *)
 
-open Lwt
-open Lwt_react
-open LTerm_geom
-open LTerm_text
-open LTerm_key
+open Lambda_term
 
-let rec loop ui coord =
-  LTerm_ui.wait ui >>= function
-    | LTerm_event.Key{ code = Up } ->
-        coord := { !coord with row = !coord.row - 1 };
-        LTerm_ui.draw ui;
-        loop ui coord
-    | LTerm_event.Key{ code = Down } ->
-        coord := { !coord with row = !coord.row + 1 };
-        LTerm_ui.draw ui;
-        loop ui coord
-    | LTerm_event.Key{ code = Left } ->
-        coord := { !coord with col = !coord.col - 1 };
-        LTerm_ui.draw ui;
-        loop ui coord
-    | LTerm_event.Key{ code = Right } ->
-        coord := { !coord with col = !coord.col + 1 };
-        LTerm_ui.draw ui;
-        loop ui coord
-    | LTerm_event.Key{ code = Escape } ->
-        return ()
-    | ev ->
-        loop ui coord
-
-let draw ui matrix coord =
-  let size = LTerm_ui.size ui in
-  let ctx = LTerm_draw.context matrix size in
-  LTerm_draw.clear ctx;
-  LTerm_draw.draw_frame ctx { row1 = 0; col1 = 0; row2 = size.rows; col2 = size.cols } LTerm_draw.Light;
+let draw ctx (pos : Geom.coord) =
+  let size = Draw.size ctx in
+  Draw.clear ctx;
+  Draw.draw_frame ctx { row1 = 0; col1 = 0; row2 = size.rows; col2 = size.cols } Light;
   if size.rows > 2 && size.cols > 2 then begin
-    let ctx = LTerm_draw.sub ctx { row1 = 1; col1 = 1; row2 = size.rows - 1; col2 = size.cols - 1 } in
-    LTerm_draw.draw_styled ctx coord.row coord.col (eval [B_fg LTerm_style.lblue; S"Move me"; E_fg])
-  end
+    let ctx = Draw.sub ctx { row1 = 1; col1 = 1; row2 = size.rows - 1; col2 = size.cols - 1 } in
+    Draw.Text.draw ctx ~row:pos.row ~col:pos.col
+      (Text.tprintf "@{<lblue>Move me@}")
+  end;
+  None
 
-let main () =
-  Lazy.force LTerm.stdout
-  >>= fun term ->
-
-  (* Coordinates of the message. *)
-  let coord = ref { row = 0; col = 0 } in
-
-  LTerm_ui.create term (fun matrix size -> draw matrix size !coord)
-  >>= fun ui ->
-  Lwt.finalize (fun () -> loop ui coord) (fun () -> LTerm_ui.quit ui)
-
-let () = Lwt_main.run (main ())
+let () =
+  let app = LTerm_full_screen.create draw in
+  let refresh () = LTerm_full_screen.refresh app in
+  let _ : Geom.coord =
+    LTerm_full_screen.run_sync app ~init:{ Geom. row = 0; col = 0 } ~f:(fun pos ev ->
+      match ev with
+      | Key (N, Up   ) -> refresh (); { pos with row = pos.row - 1 }
+      | Key (N, Down ) -> refresh (); { pos with row = pos.row + 1 }
+      | Key (N, Left ) -> refresh (); { pos with col = pos.col - 1 }
+      | Key (N, Right) -> refresh (); { pos with col = pos.col + 1 }
+      | Key (N, Escape) -> LTerm_full_screen.quit app; pos
+      | _ -> pos
+    )
+  in
+  ()
