@@ -7,41 +7,35 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDyn.Camomile
-
-let return, (>>=) = Lwt.return, Lwt.(>>=)
-
-let section = Lwt_log.Section.make "lambda-term(history)"
-
 (* A node contains an entry of the history. *)
-type node = {
-  mutable data : Zed_utf8.t;
-  mutable size : int;
-  mutable prev : node;
-}
+type node =
+  { mutable data : Zed_utf8.t
+  ; mutable size : int
+  ; mutable prev : node
+  }
 
-type t = {
-  mutable entries : node;
-  (* Points to the first entry (the most recent). Its [prev] is a fake
-     node used as marker, is after the oldest entry. *)
-  mutable full_size : int;
-  mutable length : int;
-  mutable max_size : int;
-  mutable max_entries : int;
-  mutable old_count : int;
-  mutable cache : Zed_utf8.t list option;
-  (* When set, the cache is equal to the list of entries, from the
-     most recent to the oldest. *)
-}
+type t =
+  { (* Points to the first entry (the most recent). Its [prev] is a fake
+       node used as marker, is after the oldest entry. *)
+    mutable entries     : node
+  ; mutable full_size   : int
+  ; mutable length      : int
+  ; mutable max_size    : int
+  ; mutable max_entries : int
+  ; mutable old_count   : int
+  ; (* When set, the cache is equal to the list of entries, from the
+       most recent to the oldest. *)
+    mutable cache       : Zed_utf8.t list option
+  }
 
 let entry_size str =
   let size = ref 0 in
   for i = 0 to String.length str - 1 do
     match String.unsafe_get str i with
-      | '\n' | '\\' ->
-          size := !size + 2
-      | _ ->
-          size := !size + 1
+    | '\n' | '\\' ->
+      size := !size + 2
+    | _ ->
+      size := !size + 1
   done;
   !size + 1
 
@@ -57,34 +51,31 @@ let create ?(max_size=max_int) ?(max_entries=max_int) init =
     invalid_arg "LTerm_history.create: negative maximum number of entries";
   let rec aux size count node entries =
     match entries with
-      | [] ->
-          (size, count, node)
-      | entry :: entries ->
-          let entry_size = entry_size entry in
-          if size_ok size entry_size max_size && count + 1 < max_entries then begin
-            let next = { data = ""; prev = node; size = 0 } in
-            node.data <- entry;
-            node.size <- entry_size;
-            aux (size + entry_size) (count + 1) next entries
-          end else
-            (size, count, node)
+    | [] ->
+      (size, count, node)
+    | entry :: entries ->
+      let entry_size = entry_size entry in
+      if size_ok size entry_size max_size && count + 1 < max_entries then begin
+        let next = { data = ""; prev = node; size = 0 } in
+        node.data <- entry;
+        node.size <- entry_size;
+        aux (size + entry_size) (count + 1) next entries
+      end else
+        (size, count, node)
   in
   let rec node = { data = ""; size = 0; prev = node } in
   let size, count, marker = aux 0 0 node init in
   node.prev <- marker;
-  {
-    entries = node;
-    full_size = size;
-    length = count;
-    max_size = max_size;
-    max_entries = max_entries;
-    old_count = count;
-    cache = None;
+  { entries     = node
+  ; full_size   = size
+  ; length      = count
+  ; max_size    = max_size
+  ; max_entries = max_entries
+  ; old_count   = count
+  ; cache       = None
   }
 
-let spaces = UcharInfo.load_property_tbl `White_Space
-
-let is_space ch = UcharTbl.Bool.get spaces ch
+let is_space ch  = Uucp.White.is_white_space (Uchar.to_int ch)
 let is_empty str = Zed_utf8.for_all is_space str
 
 let is_dup history entry =
@@ -132,14 +123,17 @@ let add_aux history data size =
     history.length <- history.length + 1;
     history.full_size <- history.full_size + size;
     match history.cache with
-      | None ->
-          ()
-      | Some l ->
-          history.cache <- Some (data :: l)
+    | None ->
+      ()
+    | Some l ->
+      history.cache <- Some (data :: l)
   end
 
 let add history ?(skip_empty=true) ?(skip_dup=true) entry =
-  if history.max_entries > 0 && history.max_size > 0 && not (skip_empty && is_empty entry) && not (skip_dup && is_dup history entry) then
+  if history.max_entries > 0                  &&
+     history.max_size    > 0                  &&
+     not (skip_empty && is_empty entry      ) &&
+     not (skip_dup   && is_dup history entry) then
     add_aux history entry (entry_size entry)
 
 let rec list_of_nodes marker acc node =
@@ -150,13 +144,13 @@ let rec list_of_nodes marker acc node =
 
 let contents history =
   match history.cache with
-    | Some l ->
-        l
-    | None ->
-        let marker = history.entries.prev in
-        let l = list_of_nodes marker [] marker.prev in
-        history.cache <- Some l;
-        l
+  | Some l ->
+    l
+  | None ->
+    let marker = history.entries.prev in
+    let l = list_of_nodes marker [] marker.prev in
+    history.cache <- Some l;
+    l
 
 let size history = history.full_size
 let length history = history.length
@@ -207,19 +201,19 @@ let escape entry =
       Buffer.contents buf
     else
       match String.unsafe_get entry ofs with
-        | '\n' ->
-            Buffer.add_string buf "\\n";
-            loop (ofs + 1)
-        | '\\' ->
-            Buffer.add_string buf "\\\\";
-            loop (ofs + 1)
-        | ch when Char.code ch <= 127 ->
-            Buffer.add_char buf ch;
-            loop (ofs + 1)
-        | _ ->
-            let ofs' = Zed_utf8.unsafe_next entry ofs in
-            Buffer.add_substring buf entry ofs (ofs' - ofs);
-            loop ofs'
+      | '\n' ->
+        Buffer.add_string buf "\\n";
+        loop (ofs + 1)
+      | '\\' ->
+        Buffer.add_string buf "\\\\";
+        loop (ofs + 1)
+      | ch when Char.code ch <= 127 ->
+        Buffer.add_char buf ch;
+        loop (ofs + 1)
+      | _ ->
+        let ofs' = Zed_utf8.unsafe_next entry ofs in
+        Buffer.add_substring buf entry ofs (ofs' - ofs);
+        loop ofs'
   in
   loop 0
 
@@ -231,112 +225,101 @@ let unescape line =
       (Buffer.contents buf, size + 1)
     else
       match String.unsafe_get line ofs with
-        | '\\' ->
-            if ofs = len then begin
-              Buffer.add_char buf '\\';
-              (Buffer.contents buf, size + 3)
-            end else begin
-              match String.unsafe_get line (ofs + 1) with
-                | 'n' ->
-                    Buffer.add_char buf '\n';
-                    loop (ofs + 2) (size + 2)
-                | '\\' ->
-                    Buffer.add_char buf '\\';
-                    loop (ofs + 2) (size + 2)
-                | _ ->
-                    Buffer.add_char buf '\\';
-                    loop (ofs + 1) (size + 2)
-            end
-        | ch when Char.code ch <= 127 ->
-            Buffer.add_char buf ch;
-            loop (ofs + 1) (size + 1)
-        | _ ->
-            let ofs' = Zed_utf8.unsafe_next line ofs in
-            Buffer.add_substring buf line ofs (ofs' - ofs);
-            loop ofs' (size + ofs' - ofs)
+      | '\\' ->
+        if ofs = len then begin
+          Buffer.add_char buf '\\';
+          (Buffer.contents buf, size + 3)
+        end else begin
+          match String.unsafe_get line (ofs + 1) with
+          | 'n' ->
+            Buffer.add_char buf '\n';
+            loop (ofs + 2) (size + 2)
+          | '\\' ->
+            Buffer.add_char buf '\\';
+            loop (ofs + 2) (size + 2)
+          | _ ->
+            Buffer.add_char buf '\\';
+            loop (ofs + 1) (size + 2)
+        end
+      | ch when Char.code ch <= 127 ->
+        Buffer.add_char buf ch;
+        loop (ofs + 1) (size + 1)
+      | _ ->
+        let ofs' = Zed_utf8.next line ofs in
+        Buffer.add_substring buf line ofs (ofs' - ofs);
+        loop ofs' (size + ofs' - ofs)
   in
   loop 0 0
 
-let section = Lwt_log.Section.make "lambda-term(history)"
+let default_log msg =
+  Printf.eprintf "%s: %s\n%!"
+    (Filename.basename Sys.executable_name)
+    msg
 
-let rec safe_lockf fn fd cmd ofs =
-  Lwt.catch (fun () ->
-      Lwt_unix.lockf fd cmd ofs >>= fun () ->
-      return true)
-    (function
-    | Unix.Unix_error (Unix.EINTR, _, _) ->
-        safe_lockf fn fd cmd ofs
-    | Unix.Unix_error (error, _, _) ->
-        Lwt_log.ign_warning_f ~section "failed to lock file '%s': %s" fn (Unix.error_message error);
-        return false
-    | exn -> Lwt.fail exn)
+let rec safe_lockf ~log fn fd cmd ofs =
+  try
+    Unix.lockf fd cmd ofs;
+    true
+  with
+  | Unix.Unix_error (EINTR, _, _) ->
+    safe_lockf ~log fn fd cmd ofs
+  | Unix.Unix_error (error, _, _) ->
+    Printf.ksprintf log "failed to lock file '%s': %s" fn (Unix.error_message error);
+    false
 
-let open_history fn =
-  Lwt.catch (fun () ->
-      Lwt_unix.openfile fn [Unix.O_RDWR] 0 >>= fun fd ->
-      safe_lockf fn fd Lwt_unix.F_LOCK 0 >>= fun locked ->
-      return (Some (fd, locked)))
-    (function
-    | Unix.Unix_error (Unix.ENOENT, _, _) ->
-        return None
-    | Unix.Unix_error (Unix.EACCES, _, _) ->
-        Lwt_log.ign_info_f "cannot open file '%s' in read and write mode: %s" fn (Unix.error_message Unix.EACCES);
-        (* If the file cannot be openned in read & write mode,
-           open it in read only mode but do not lock it. *)
-        Lwt.catch (fun () ->
-            Lwt_unix.openfile fn [Unix.O_RDONLY] 0 >>= fun fd ->
-            return (Some (fd, false)))
-          (function
-          | Unix.Unix_error (Unix.ENOENT, _, _) ->
-              return None
-          | exn -> Lwt.fail exn)
-    | exn -> Lwt.fail exn)
+let open_history ~log fn =
+  match Unix.openfile fn [O_RDWR] 0 with
+  | fd ->
+    Some (fd, safe_lockf ~log fn fd F_LOCK 0)
+  | exception Unix.Unix_error (ENOENT, _, _) ->
+    None
+  | exception Unix.Unix_error (EACCES, _, _) ->
+    Printf.ksprintf log "cannot open file '%s' in read and write mode: %s" fn (Unix.error_message Unix.EACCES);
+    (* If the file cannot be openned in read & write mode, open it in
+       read only mode but do not lock it. *)
+    match Unix.openfile fn [O_RDONLY] 0 with
+    | fd -> Some (fd, false)
+    | exception Unix.Unix_error (ENOENT, _, _) -> None
 
-let load history ?log ?(skip_empty=true) ?(skip_dup=true) fn =
+let protectx x ~finally ~f =
+  match f x with
+  | y           -> finally (); y
+  | exception e -> finally (); raise e
+
+let load history ?(log=default_log) ?(skip_empty=true) ?(skip_dup=true) fn =
   (* In case we do not load anything. *)
   history.old_count <- history.length;
   if history.max_entries = 0 || history.max_size = 0 then
     (* Do not bother loading the file for nothing... *)
-    return ()
+    ()
   else begin
-    let log =
-      match log with
-        | Some func ->
-            func
-        | None ->
-            fun line msg ->
-              Lwt_log.ign_error_f ~section "File %S, at line %d: %s" fn line msg
-    in
     (* File opening. *)
-    open_history fn >>= fun history_file ->
-    match history_file with
-      | None ->
-          return ()
-      | Some (fd, locked) ->
-          (* File loading. *)
-          let ic = Lwt_io.of_fd ~mode:Lwt_io.input fd in
-          Lwt.finalize (fun () ->
-            let rec aux num =
-              Lwt_io.read_line_opt ic >>= fun line ->
-              match line with
-                | None ->
-                    return ()
-                | Some line ->
-                    (try
-                       let entry, size = unescape line in
-                       if not (skip_empty && is_empty entry) && not (skip_dup && is_dup history entry) then begin
-                         add_aux history entry size;
-                         history.old_count <- history.length
-                       end
-                     with Zed_utf8.Invalid (msg, _) ->
-                       log num msg);
-                    aux (num + 1)
+    match open_history ~log fn with
+    | None -> ()
+    | Some (fd, locked) ->
+      (* File loading. *)
+      let ic = Unix.in_channel_of_descr fd in
+      protectx () ~finally:(fun () ->
+          (* Cleanup. *)
+          if locked then ignore (safe_lockf ~log fn fd F_ULOCK 0 : bool);
+          close_in ic)
+        ~f:(fun () ->
+            let rec aux line_number =
+              match input_line ic with
+              | exception End_of_file -> ()
+              | line ->
+                match unescape line with
+                | exception Zed_utf8.Invalid (msg, _) ->
+                  Printf.ksprintf log "file %S, line %d: %s" fn line_number msg;
+                  aux (line_number + 1)
+                | entry, size ->
+                  if not (skip_empty && is_empty entry) && not (skip_dup && is_dup history entry) then begin
+                    add_aux history entry size;
+                    history.old_count <- history.length
+                  end;
+                  aux (line_number + 1)
             in
             aux 1)
-            (fun () ->
-              (* Cleanup. *)
-              (if locked then safe_lockf fn fd Lwt_unix.F_ULOCK 0 else return true) >>= fun _ ->
-              Lwt_unix.close fd)
   end
 
 let rec skip_nodes node count =
@@ -355,87 +338,87 @@ let rec copy history marker node skip_empty skip_dup =
 
 let rec dump_entries oc marker node =
   if node == marker then
-    return ()
+    ()
   else begin
-    Lwt_io.write_line oc node.data >>= fun () ->
+    output_string oc node.data;
+    output_char oc '\n';
     dump_entries oc marker node.prev
   end
 
-let save history ?max_size ?max_entries ?(skip_empty=true) ?(skip_dup=true) ?(append=true) ?(perm=0o666) fn =
+let save history ?(log=default_log) ?max_size ?max_entries ?(skip_empty=true)
+    ?(skip_dup=true) ?(append=true) ?(perm=0o666) fn =
   let max_size =
     match max_size with
-      | Some m -> m
-      | None -> history.max_size
+    | Some m -> m
+    | None -> history.max_size
   and max_entries =
     match max_entries with
-      | Some m -> m
-      | None -> history.max_entries
+    | Some m -> m
+    | None -> history.max_entries
   in
   let history_save = create ~max_size ~max_entries [] in
   if history_save.max_size = 0 || history_save.max_entries = 0 || (not append && history.old_count = history.length) then
     (* Just empty the history. *)
-    Lwt_unix.openfile fn [Unix.O_CREAT; Unix.O_TRUNC] perm >>= Lwt_unix.close
+    Unix.close (Unix.openfile fn [O_CREAT; O_TRUNC] perm)
   else if append && history.old_count = history.length then
     (* Do not touch the file. *)
-    return ()
+    ()
   else begin
-    Lwt_unix.openfile fn [Unix.O_CREAT; Unix.O_RDWR] perm >>= fun fd ->
+    let fd = Unix.openfile fn [O_CREAT; O_RDWR] perm in
     (* Lock the entire file. *)
-    safe_lockf fn fd Unix.F_LOCK 0 >>= fun locked ->
-    Lwt.finalize (fun () ->
-      begin
-        if append then begin
-          (* Load existing entries into [history_save].
+    let locked = safe_lockf ~log fn fd F_LOCK 0 in
+    protectx () ~finally:(fun () ->
+        if locked then ignore (safe_lockf ~log fn fd F_ULOCK 0 : bool);
+        Unix.close fd)
+      ~f:(fun () ->
+          let count =
+            if append then begin
+              (* Load existing entries into [history_save].
 
-             We return the number of entries read. This may be greater
-             than the number of entries stored in [history_save]:
-             - because of limits
-             - because the history files contains duplicated lines
-               and/or empty lines and [skip_dup] and/or [skip_empty]
-               have been specified. *)
-          let ic = Lwt_io.of_fd ~mode:Lwt_io.input ~close:return fd in
-          let rec aux count =
-            Lwt_io.read_line_opt ic >>= fun line ->
-            match line with
-              | None ->
+                 We return the number of entries read. This may be greater
+                 than the number of entries stored in [history_save]:
+                 - because of limits
+                 - because the history files contains duplicated lines
+                   and/or empty lines and [skip_dup] and/or [skip_empty]
+                   have been specified. *)
+              let ic = Unix.in_channel_of_descr fd in
+              let rec aux count =
+                match input_line ic with
+                | exception End_of_file ->
                   history_save.old_count <- history_save.length;
-                  Lwt_io.close ic >>= fun () ->
-                  return count
-              | Some line ->
+                  count
+                | line ->
                   (* Do not bother unescaping. Tests remain the same
                      on the unescaped version. *)
                   if not (skip_empty && is_empty line) && not (skip_dup && is_dup history_save line) then
                     add_aux history_save line (String.length line + 1);
                   aux (count + 1)
+              in
+              aux 0
+            end else
+              0
           in
-          aux 0
-        end else
-          return 0
-      end >>= fun count ->
-      let marker = history.entries.prev in
-      (* Copy new entries into the saving history. *)
-      copy history_save marker (skip_nodes marker.prev history.old_count) skip_empty skip_dup;
-      begin
-        if append && history_save.old_count = count then
-          (* We are in append mode and no old entries were removed: do
-             not modify the file and append new entries at the end of
-             the file. *)
-          return count
-        else
-          (* Otherwise truncate the file and save everything. *)
-          Lwt_unix.lseek fd 0 Unix.SEEK_SET >>= fun _ ->
-          Lwt_unix.ftruncate fd 0 >>= fun () ->
-          return 0
-      end >>= fun to_skip ->
-      (* Save entries to the temporary file. *)
-      let oc = Lwt_io.of_fd ~mode:Lwt_io.output ~close:return fd in
-      let marker = history_save.entries.prev in
-      dump_entries oc marker (skip_nodes marker.prev to_skip) >>= fun () ->
-      Lwt_io.close oc >>= fun () ->
-      (* Done! *)
-      history.old_count <- history.length;
-      return ())
-      (fun () ->
-        (if locked then safe_lockf fn fd Lwt_unix.F_ULOCK 0 else return true) >>= fun _ ->
-        Lwt_unix.close fd)
+          let marker = history.entries.prev in
+          (* Copy new entries into the saving history. *)
+          copy history_save marker (skip_nodes marker.prev history.old_count) skip_empty skip_dup;
+          let to_skip =
+            if append && history_save.old_count = count then
+              (* We are in append mode and no old entries were removed: do
+                 not modify the file and append new entries at the end of
+                 the file. *)
+              count
+            else begin
+              (* Otherwise truncate the file and save everything. *)
+              ignore (Unix.lseek fd 0 Unix.SEEK_SET : int);
+              Unix.ftruncate fd 0;
+              0
+            end
+          in
+          (* Save entries to the temporary file. *)
+          let oc = Unix.out_channel_of_descr fd in
+          let marker = history_save.entries.prev in
+          dump_entries oc marker (skip_nodes marker.prev to_skip);
+          flush oc;
+          (* Done! *)
+          history.old_count <- history.length)
   end

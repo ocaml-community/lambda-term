@@ -71,32 +71,36 @@ val set_max_entries : t -> int -> unit
   (** Sets the maximum number of entries of the history. It may drop
       oldest entries to honor the new limit. *)
 
-val load : t ->
-  ?log : (int -> string -> unit) ->
-  ?skip_empty : bool ->
-  ?skip_dup : bool ->
-  string -> unit Lwt.t
+val load
+  :  t
+  -> ?log : (string -> unit)
+  -> ?skip_empty : bool
+  -> ?skip_dup : bool
+  -> string
+  -> unit
   (** [load history ?log ?skip_empty ?skip_dup filename] loads entries
       from [filename] to [history]. If [filename] does not exists
       [history] is not modified.
 
-      [log] is the function used to log errors contained in the
-      history file (errors are because of non-UTF8 data). Arguments
-      are a line number and an error message. The default is to use
-      the default logger (of [Lwt_log]). Entries containing errors are
-      skipped.
+      [log] is the function used to log non fatal errors. For instance
+      when the history file cannot be locked or when the history file
+      contains invalid UTF-8 data. The default is to print an error
+      message on stderr.
 
       Note: all entries are marked as old, i.e. [old_count history =
       length history]. *)
 
-val save : t ->
-  ?max_size : int ->
-  ?max_entries : int ->
-  ?skip_empty : bool ->
-  ?skip_dup : bool ->
-  ?append : bool ->
-  ?perm : int ->
-  string -> unit Lwt.t
+val save
+  : t
+  -> ?log : (string -> unit)
+  -> ?max_size : int
+  -> ?max_entries : int
+  -> ?skip_empty : bool
+  -> ?skip_dup : bool
+  -> ?append : bool
+  -> ?perm : int
+  -> string
+  -> unit
   (** [save history ?max_size ?max_entries ?skip_empty ?sjip_dup ?perm
       filename] saves [history] to [filename].
 

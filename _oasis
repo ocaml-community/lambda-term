@@ -58,15 +58,15 @@ Library "lambda-term2"
 #    LTerm_edit,
 #    LTerm_read_line,
     LTerm_text,
-    LTerm_resources
+    LTerm_resources,
 #    LTerm_inputrc,
-#    LTerm_history,
+    LTerm_history
   InternalModules:
     LTerm_bigstring,
     LTerm_color_mappings,
     LTerm_ansi_parser,
-    LTerm_matrix_private
-#    LTerm_resource_lexer,
+    LTerm_matrix_private,
+    LTerm_resource_lexer
 #    widget_impl/LTerm_widget_base_impl,
 #    widget_impl/LTerm_buttons_impl,
 #    widget_impl/LTerm_containers_impl,
@@ -134,6 +134,7 @@ Executable hello
   CompiledObject: best
   MainIs: hello.ml
   BuildDepends: lambda-term2
+  Build: false
 
 Executable clock
   Path: examples
@@ -141,6 +142,7 @@ Executable clock
   CompiledObject: best
   MainIs: clock.ml
   BuildDepends: lambda-term2
+  Build: false
 
 Executable buttons
   Path: examples
@@ -148,6 +150,7 @@ Executable buttons
   CompiledObject: best
   MainIs: buttons.ml
   BuildDepends: lambda-term2
+  Build: false
 
 Executable focus
   Path: examples
@@ -155,6 +158,7 @@ Executable focus
   CompiledObject: best
   MainIs: focus.ml
   BuildDepends: lambda-term2
+  Build: false
 
 Executable checkbuttons
   Path: examples
@@ -162,6 +166,7 @@ Executable checkbuttons
   CompiledObject: best
   MainIs: checkbuttons.ml
   BuildDepends: lambda-term2
+  Build: false
 
 Executable radiobuttons
   Path: examples
@@ -169,6 +174,7 @@ Executable radiobuttons
   CompiledObject: best
   MainIs: radiobuttons.ml
   BuildDepends: lambda-term2
+  Build: false
 
 Executable shell
   Path: examples
@@ -176,6 +182,7 @@ Executable shell
   CompiledObject: best
   MainIs: shell.ml
   BuildDepends: lambda-term2, str
+  Build: false
 
 Executable repl
   Path: examples
@@ -183,6 +190,7 @@ Executable repl
   CompiledObject: best
   MainIs: repl.ml
   BuildDepends: lambda-term2
+  Build: false
 
 Executable modal
   Path: examples
@@ -190,6 +198,7 @@ Executable modal
   CompiledObject: best
   MainIs: modal.ml
   BuildDepends: lambda-term2
+  Build: false
 
 Executable "read-password"
   Path: examples
@@ -197,6 +206,7 @@ Executable "read-password"
   CompiledObject: best
   MainIs: read_password.ml
   BuildDepends: lambda-term2
+  Build: false
 
 Executable "read-yes-no"
   Path: examples
@@ -204,6 +214,7 @@ Executable "read-yes-no"
   CompiledObject: best
   MainIs: read_yes_no.ml
   BuildDepends: lambda-term2
+  Build: false
 
 Executable "editor"
   Path: examples
@@ -211,6 +222,7 @@ Executable "editor"
   CompiledObject: best
   MainIs: editor.ml
   BuildDepends: lambda-term2
+  Build: false
 
 # +-------------------------------------------------------------------+
 # | Utils                                                             |
@@ -222,6 +234,7 @@ Executable "lambda-term-actions"
   CompiledObject: best
   MainIs: lambda_term_actions.ml
   BuildDepends: lambda-term2
+  Build: false
 
 # +-------------------------------------------------------------------+
 # | Tests                                                             |
