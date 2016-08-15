@@ -787,7 +787,9 @@ object(self)
     (* The height of the displayed material. *)
 
   val mutable resolver = None
-    (* The current resolver for resolving input sequences. *)
+  (* The current resolver for resolving input sequences. *)
+
+  val mutable running = true
 
   initializer
     completion_start <- (
@@ -826,7 +828,11 @@ object(self)
       draw_queued <- true;
       Lwt.pause () >>= fun () ->
       draw_queued <- false;
-      Lwt_mutex.with_lock draw_mutex (fun () -> self#draw_update)
+      Lwt_mutex.with_lock draw_mutex (fun () ->
+        if running then
+          self#draw_update
+        else
+          return ())
     end
 
   method draw_update =
@@ -1221,12 +1227,12 @@ object(self)
     (* Update the size with the current size. *)
     set_size (LTerm.size term);
 
-    let running = ref true in
+    running <- true;
 
     (* Redraw everything when needed. *)
     let event =
       E.map_p
-        (fun () -> if !running then self#queue_draw_update else return ())
+        (fun () -> if running then self#queue_draw_update else return ())
         (E.select [
            E.stamp (S.changes size) ();
            Zed_edit.update self#edit [Zed_edit.cursor self#context];
@@ -1257,7 +1263,7 @@ object(self)
               self#queue_draw_update >>= fun () ->
               self#loop)
             (fun exn ->
-              running := false;
+              running <- false;
               E.stop event;
               Lwt_mutex.with_lock draw_mutex (fun () -> self#draw_failure) >>= fun () ->
               Lwt.fail exn))
@@ -1268,7 +1274,7 @@ object(self)
             | None ->
                 return ())
     end >>= fun result ->
-    running := false;
+    running <- false;
     E.stop event;
     Lwt_mutex.with_lock draw_mutex (fun () -> self#draw_success) >>= fun () ->
     return result
