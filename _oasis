@@ -5,7 +5,7 @@
 OASISFormat: 0.4
 OCamlVersion: >= 3.12
 Name: lambda-term
-Version: 1.10
+Version: 1.10.1
 LicenseFile: LICENSE
 License: BSD-3-CLAUSE
 Authors: Jeremie Dimino

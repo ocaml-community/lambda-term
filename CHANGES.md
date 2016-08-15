@@ -1,3 +1,9 @@
+1.10.1 (2016-08-15)
+-------------------
+
+* fix a race condition in `LTerm_read_line`. The race would often
+  appear when copy&pasting
+
 1.10 (2016-04-07)
 -----------------
 
