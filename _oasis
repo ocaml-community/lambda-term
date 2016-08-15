@@ -30,6 +30,10 @@ Description:
 
 FilesAB: src/lTerm_config.h.ab
 
+Flag examples
+  Description: build examples
+  Default: true
+
 # +-------------------------------------------------------------------+
 # | The library                                                       |
 # +-------------------------------------------------------------------+
@@ -91,6 +95,7 @@ Executable events
   CompiledObject: best
   MainIs: events.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 Executable colors
   Path: examples
@@ -98,6 +103,7 @@ Executable colors
   CompiledObject: best
   MainIs: colors.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 Executable colors_256
   Path: examples
@@ -105,6 +111,7 @@ Executable colors_256
   CompiledObject: best
   MainIs: colors_256.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 Executable rgb
   Path: examples
@@ -112,6 +119,7 @@ Executable rgb
   CompiledObject: best
   MainIs: rgb.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 Executable move
   Path: examples
@@ -119,6 +127,7 @@ Executable move
   CompiledObject: best
   MainIs: move.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 Executable hello
   Path: examples
@@ -126,6 +135,7 @@ Executable hello
   CompiledObject: best
   MainIs: hello.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 Executable clock
   Path: examples
@@ -133,6 +143,7 @@ Executable clock
   CompiledObject: best
   MainIs: clock.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 Executable buttons
   Path: examples
@@ -140,6 +151,7 @@ Executable buttons
   CompiledObject: best
   MainIs: buttons.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 Executable focus
   Path: examples
@@ -147,6 +159,7 @@ Executable focus
   CompiledObject: best
   MainIs: focus.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 Executable checkbuttons
   Path: examples
@@ -154,6 +167,7 @@ Executable checkbuttons
   CompiledObject: best
   MainIs: checkbuttons.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 Executable radiobuttons
   Path: examples
@@ -161,6 +175,7 @@ Executable radiobuttons
   CompiledObject: best
   MainIs: radiobuttons.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 Executable shell
   Path: examples
@@ -168,6 +183,7 @@ Executable shell
   CompiledObject: best
   MainIs: shell.ml
   BuildDepends: lambda-term, str
+  Build$: flag(examples)
 
 Executable repl
   Path: examples
@@ -175,6 +191,7 @@ Executable repl
   CompiledObject: best
   MainIs: repl.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 Executable modal
   Path: examples
@@ -182,6 +199,7 @@ Executable modal
   CompiledObject: best
   MainIs: modal.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 Executable "read-password"
   Path: examples
@@ -189,6 +207,7 @@ Executable "read-password"
   CompiledObject: best
   MainIs: read_password.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 Executable "read-yes-no"
   Path: examples
@@ -196,6 +215,7 @@ Executable "read-yes-no"
   CompiledObject: best
   MainIs: read_yes_no.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 Executable "editor"
   Path: examples
@@ -203,6 +223,7 @@ Executable "editor"
   CompiledObject: best
   MainIs: editor.ml
   BuildDepends: lambda-term
+  Build$: flag(examples)
 
 # +-------------------------------------------------------------------+
 # | Utils                                                             |
@@ -225,6 +246,7 @@ Executable "history-stress-test"
   CompiledObject: best
   MainIs: history_stress_test.ml
   BuildDepends: lambda-term
+  Build$: flag(tests)
 
 # +-------------------------------------------------------------------+
 # | Doc                                                               |
