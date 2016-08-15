@@ -1,6 +1,6 @@
 # OASIS_START
-# DO NOT EDIT (digest: 429f8dca3746dd89ef69ccc4e019bb30)
-version = "1.10"
+# DO NOT EDIT (digest: e377397d05c6a35b858fec2efbec65e4)
+version = "1.10.1"
 description = "Cross-platform library for terminal manipulation"
 requires = "lwt lwt.unix lwt.react zed"
 archive(byte) = "lambda-term.cma"
