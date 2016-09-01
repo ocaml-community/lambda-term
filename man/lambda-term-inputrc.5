@@ -36,8 +36,16 @@ the command
 .BR lambda-term-actions (1)
 in a terminal.
 
+The file is divided in two section, the
+.B [edit]
+section and the
+.B [read-line]
+section. The first one is for key bindings that apply everyhere and
+the second for key bindings that apply only in read-line.
+
 Here is an example of bindings:
 
+        [read-line]
         C-w: kill-prev-word
         M-!: play-macro
 
@@ -77,13 +85,6 @@ notation
 where
 .I <code>
 is the code of the character in hexadecimal.
-
-The file is divided in two section, the
-.B [edit]
-section and the
-.B [read-line]
-section. The first one is for key bindings that apply everyhere and
-the second for key bindings that apply only in read-line.
 
 .SH FILES
 .I ~/.lambda-term-inputrc
