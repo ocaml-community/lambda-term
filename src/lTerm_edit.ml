@@ -169,7 +169,7 @@ class scrollable = object(self)
   method calculate_range page_size document_size = (document_size - page_size/2)
 end
 
-class edit ?(clipboard = clipboard) ?(macro = macro) () =
+class edit ?(clipboard = clipboard) ?(macro = macro) ?(size = { cols = 1; rows = 1 }) () =
   let locale, set_locale = S.create None in
 object(self)
   inherit LTerm_widget.t "edit" as super
@@ -216,7 +216,7 @@ object(self)
   val mutable shift = 0
   val mutable start = 0
   val mutable start_line = 0
-  val mutable size = { cols = 0; rows = 0 }
+  val mutable size = size
 
   method private update_window_position = 
     let line_set = Zed_edit.lines engine in
