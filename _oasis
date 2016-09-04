@@ -90,6 +90,14 @@ Library "lambda-term"
 # | Examples                                                          |
 # +-------------------------------------------------------------------+
 
+Executable double_editor
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: double_editor.ml
+  BuildDepends: lambda-term
+  Build$: flag(examples)
+
 Executable events
   Path: examples
   Install: false
