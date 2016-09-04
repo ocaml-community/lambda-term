@@ -27,6 +27,7 @@ type action =
   | Set_macro_counter
   | Add_macro_counter
   | Custom of (unit -> unit)
+  | Custom_skip of (unit -> bool)
 
 let doc_of_action = function
   | Zed action -> Zed_edit.doc_of_action action
@@ -38,6 +39,7 @@ let doc_of_action = function
   | Set_macro_counter -> "sets the value of the macro counter."
   | Add_macro_counter -> "adds a value to the macro counter."
   | Custom _ -> "programmer defined action."
+  | Custom_skip _ -> "programmer defined action."
 
 let actions = [
   Start_macro, "start-macro";
@@ -96,56 +98,115 @@ let bindings = ref Bindings.empty
 let bind seq actions = bindings := Bindings.add seq actions !bindings
 let unbind seq = bindings := Bindings.remove seq !bindings
 
-let () =
-  bind [{ control = false; meta = false; shift = false; code = Left }] [Zed Prev_char];
-  bind [{ control = false; meta = false; shift = false; code = Right }] [Zed Next_char];
-  bind [{ control = false; meta = false; shift = false; code = Up }] [Zed Prev_line];
-  bind [{ control = false; meta = false; shift = false; code = Down }] [Zed Next_line];
-  bind [{ control = false; meta = false; shift = false; code = Home }] [Zed Goto_bol];
-  bind [{ control = false; meta = false; shift = false; code = End }] [Zed Goto_eol];
-  bind [{ control = false; meta = false; shift = false; code = Insert }] [Zed Switch_erase_mode];
-  bind [{ control = false; meta = false; shift = false; code = Delete }] [Zed Delete_next_char];
-  bind [{ control = false; meta = false; shift = false; code = Enter }] [Zed Newline];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char ' ') }] [Zed Set_mark];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'a') }] [Zed Goto_bol];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'e') }] [Zed Goto_eol];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'd') }] [Zed Delete_next_char];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'h') }] [Zed Delete_prev_char];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') }] [Zed Kill_next_line];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'u') }] [Zed Kill_prev_line];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'n') }] [Zed Next_line];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'p') }] [Zed Prev_line];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'w') }] [Zed Kill];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'y') }] [Zed Yank];
-  bind [{ control = false; meta = false; shift = false; code = Backspace }] [Zed Delete_prev_char];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'w') }] [Zed Copy];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'c') }] [Zed Capitalize_word];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'l') }] [Zed Lowercase_word];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'u') }] [Zed Uppercase_word];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'b') }] [Zed Prev_word];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'f') }] [Zed Next_word];
-  bind [{ control = false; meta = true; shift = false; code = Right }] [Zed Next_word];
-  bind [{ control = false; meta = true; shift = false; code = Left }] [Zed Prev_word];
-  bind [{ control = true; meta = false; shift = false; code = Right }] [Zed Next_word];
-  bind [{ control = true; meta = false; shift = false; code = Left }] [Zed Prev_word];
-  bind [{ control = false; meta = true; shift = false; code = Backspace }] [Zed Kill_prev_word];
-  bind [{ control = false; meta = true; shift = false; code = Delete }] [Zed Kill_prev_word];
-  bind [{ control = true; meta = false; shift = false; code = Delete }] [Zed Kill_next_word];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'd') }] [Zed Kill_next_word];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char '_') }] [Zed Undo];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(UChar.of_char '(') }] [Start_macro];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(UChar.of_char ')') }] [Stop_macro];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(UChar.of_char 'e') }] [Play_macro];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'g') }] [Cancel_macro];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') };
-        { control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') };
-        { control = false; meta = false; shift = false; code = Tab }] [Insert_macro_counter];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') };
-        { control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') };
-        { control = true; meta = false; shift = false; code = Char(UChar.of_char 'a') }] [Add_macro_counter];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') };
-        { control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') };
-        { control = true; meta = false; shift = false; code = Char(UChar.of_char 'c') }] [Set_macro_counter]
+type key_bindings = 
+  {
+    move_char : (LTerm_key.t list * action list) list; 
+    move_line : (LTerm_key.t list * action list) list; 
+    goto : (LTerm_key.t list * action list) list; 
+    erase_mode : (LTerm_key.t list * action list) list; 
+    newline : (LTerm_key.t list * action list) list; 
+    mark : (LTerm_key.t list * action list) list; 
+    delete_char : (LTerm_key.t list * action list) list;
+    kill_line : (LTerm_key.t list * action list) list; 
+    edit : (LTerm_key.t list * action list) list; 
+    case : (LTerm_key.t list * action list) list; 
+    move_word : (LTerm_key.t list * action list) list; 
+    kill_word : (LTerm_key.t list * action list) list; 
+    macro : (LTerm_key.t list * action list) list; 
+  }
+
+let key_bindings =
+  let control = true and meta = true in
+  let code ?(control=false) ?(meta=false) code = { control; meta; shift=false; code } in 
+  let char ?(control=false) ?(meta=false) char = { control; meta; shift=false; code=Char (UChar.of_char char) } in 
+  let move_char = [
+    [code          Left],      [Zed Prev_char];
+    [code          Right],     [Zed Next_char];
+  ] in
+  let move_line = [
+    [code          Up],        [Zed Prev_line];
+    [code          Down],      [Zed Next_line];
+    [char ~control 'n'],       [Zed Next_line];
+    [char ~control 'p'],       [Zed Prev_line];
+  ] in
+  let goto = [
+    [code          Home],      [Zed Goto_bol];
+    [code          End],       [Zed Goto_eol];
+    [char ~control 'a'],       [Zed Goto_bol];
+    [char ~control 'e'],       [Zed Goto_eol];
+  ] in
+  let erase_mode = [
+    [code          Insert],    [Zed Switch_erase_mode];
+  ] in
+  let newline = [
+    [code          Enter],     [Zed Newline];
+  ] in
+  let mark = [
+    [char ~control ' '],       [Zed Set_mark];
+  ] in
+  let delete_char = [
+    [char ~control 'd'],       [Zed Delete_next_char];
+    [char ~control 'h'],       [Zed Delete_prev_char];
+    [code          Backspace], [Zed Delete_prev_char];
+    [code          Delete],    [Zed Delete_next_char];
+  ] in
+  let kill_line = [
+    [char ~control 'k'],       [Zed Kill_next_line];
+    [char ~control 'u'],       [Zed Kill_prev_line];
+  ] in
+  let edit = [
+    [char ~control 'w'],       [Zed Kill];
+    [char ~control 'y'],       [Zed Yank];
+    [char ~meta    'w'],       [Zed Copy];
+    [char ~control '_'],       [Zed Undo];
+  ] in
+  let case = [
+    [char ~meta    'c'],       [Zed Capitalize_word];
+    [char ~meta    'l'],       [Zed Lowercase_word];
+    [char ~meta    'u'],       [Zed Uppercase_word];
+  ] in
+  let move_word = [
+    [char ~meta    'b'],       [Zed Prev_word];
+    [char ~meta    'f'],       [Zed Next_word];
+    [code ~meta    Right],     [Zed Next_word];
+    [code ~meta    Left],      [Zed Prev_word];
+    [code ~control Right],     [Zed Next_word];
+    [code ~control Left],      [Zed Prev_word];
+  ] in
+  let kill_word = [
+    [code ~meta    Backspace], [Zed Kill_prev_word];
+    [code ~meta    Delete],    [Zed Kill_prev_word];
+    [code ~control Delete],    [Zed Kill_next_word];
+    [char ~meta    'd'],       [Zed Kill_next_word];
+  ] in
+  let macro = [
+    [char ~control 'x'; 
+     char          '('],       [Start_macro];
+    [char ~control 'x'; 
+     char          ')'],       [Stop_macro];
+    [char ~control 'x'; 
+     char          'e'],       [Play_macro];
+    [char ~control 'g'],       [Cancel_macro];
+    [char ~control 'x';
+     char ~control 'k';
+     code          Tab],       [Insert_macro_counter];
+    [char ~control 'x';
+     char ~control 'k';
+     char ~control 'a'],       [Add_macro_counter];
+    [char ~control 'x';
+     char ~control 'k';
+     char ~control 'c'],       [Set_macro_counter];
+  ] in
+  { move_char; move_line; goto; erase_mode; newline; mark; delete_char;
+    kill_line; edit; case; move_word; kill_word; macro }
+
+let () = 
+  List.iter (List.iter (fun (seq,act) -> bind seq act))
+    [ key_bindings.move_char; key_bindings.move_line; key_bindings.goto; 
+      key_bindings.erase_mode; key_bindings.newline; key_bindings.mark; 
+      key_bindings.delete_char; key_bindings.kill_line; key_bindings.edit; 
+      key_bindings.case; key_bindings.move_word; key_bindings.kill_word; 
+      key_bindings.macro ]
 
 (* +-----------------------------------------------------------------+
    | Widgets                                                         |
@@ -169,10 +230,15 @@ class scrollable = object(self)
   method calculate_range page_size document_size = (document_size - page_size/2)
 end
 
-class edit ?(clipboard = clipboard) ?(macro = macro) () =
+class edit ?(rc="edit") ?(clipboard = clipboard) ?(macro = macro) ?global_bindings () =
   let locale, set_locale = S.create None in
+  let bindings () = 
+    match global_bindings with
+    | None -> !bindings
+    | Some(b) -> b
+  in
 object(self)
-  inherit LTerm_widget.t "edit" as super
+  inherit LTerm_widget.t rc as super
 
   val vscroll = new scrollable
   method vscroll = vscroll
@@ -252,6 +318,8 @@ object(self)
     vscroll#set_document_size (line_count+1);
     ()
 
+  method is_valid_char c = true
+
   initializer
     engine <- (
       Zed_edit.create
@@ -274,7 +342,7 @@ object(self)
                match resolver with
                | Some res -> res
                | None -> Bindings.resolver [ Bindings.pack (fun x -> x) local_bindings
-                                           ; Bindings.pack (fun x -> x) !bindings
+                                           ; Bindings.pack (fun x -> x) (bindings())
                                            ]
              in
              match Bindings.resolve key res with
@@ -285,6 +353,10 @@ object(self)
                          Zed_macro.add macro (Custom f);
                          f ();
                          exec actions
+                     | Custom_skip f :: actions ->
+                         Zed_macro.add macro (Custom_skip f); (* XXX not sure about recording this *)
+                         if not (f ()) then false 
+                         else exec actions
                      | Zed action :: actions ->
                          Zed_macro.add macro (Zed action);
                          Zed_edit.get_action action context;
@@ -319,8 +391,9 @@ object(self)
                    if resolver = None then
                      match key with
                        | { control = false; meta = false; shift = false; code = Char ch } ->
-                           Zed_edit.insert context (Zed_rope.singleton ch);
-                           true
+                           let b = self#is_valid_char ch in
+                           if b then Zed_edit.insert context (Zed_rope.singleton ch);
+                           b
                        | _ ->
                            false
                    else begin
@@ -496,3 +569,54 @@ object(self)
     let start_line = Zed_lines.line_index line_set start in
     Some { row = cursor_line - start_line; col = cursor_column - shift }
 end
+
+
+class edit_integer ?(positive=false) () = 
+  let bindings = 
+    List.fold_left
+      (List.fold_left (fun bindings (seq,act) -> Bindings.add seq act bindings))
+      Bindings.empty 
+      [ key_bindings.goto; 
+        key_bindings.erase_mode; key_bindings.mark; 
+        key_bindings.delete_char; key_bindings.edit; 
+        key_bindings.move_word; key_bindings.kill_word ]
+  in
+object(self)
+  inherit edit ~rc:"edit_integer" ~global_bindings:bindings() 
+
+  method size_request = { rows=1; cols=0 }
+
+  method is_valid_char c = 
+    let c = UChar.char_of c in
+    (c >= '0' && c <= '9') || (c == '-' && not positive)
+
+  method value = 
+    try Some(int_of_string @@ self#text)
+    with _ -> None
+  
+  method set_value x = 
+    let ctx = self#context in
+    Zed_edit.goto_bot ctx; (* undo is a bit funny.  use remove instead? *)
+    Zed_edit.set_mark ctx;
+    Zed_edit.goto_eot ctx;
+    Zed_edit.kill ctx;
+    Zed_edit.insert self#context @@ Zed_rope.of_string @@ string_of_int x
+
+  (* customise Left/Right handling.  At the beginning/end of the buffer
+     skip the action so we can move focus *)
+  initializer
+    self#bind
+      [{ control=false; meta=false; shift=false; code=Left }]
+      [ Custom_skip (fun () ->
+        let ctx = self#context in
+        if Zed_edit.at_bot ctx then false
+        else (Zed_edit.get_action (Prev_char) ctx; true)) ];
+    self#bind
+      [{ control=false; meta=false; shift=false; code=Right}]
+      [ Custom_skip (fun () ->
+        let ctx = self#context in
+        if Zed_edit.at_eot ctx then false
+        else (Zed_edit.get_action (Next_char) ctx; true)) ]
+
+end
+

@@ -254,6 +254,13 @@ Executable "editor"
   BuildDepends: lambda-term
   Build$: flag(examples)
 
+Executable "editint"
+  Path: examples
+  Install: false
+  CompiledObject: best
+  MainIs: editint.ml
+  BuildDepends: lambda-term
+
 # +-------------------------------------------------------------------+
 # | Utils                                                             |
 # +-------------------------------------------------------------------+

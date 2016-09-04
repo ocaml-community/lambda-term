@@ -29,6 +29,7 @@ type action =
   | Add_macro_counter
       (** Adds a value to the macro counter. *)
   | Custom of (unit -> unit)
+  | Custom_skip of (unit -> bool)
 
 val bindings : action list Zed_input.Make(LTerm_key).t ref
   (** Bindings. These bindings are used by {!LTerm_read_line} and by
@@ -67,8 +68,10 @@ val macro : action Zed_macro.t
   (** The global macro recorder. *)
 
 (** Class of edition widgets. If no clipboard is provided, then the
-    global one is used. *)
-class edit : ?clipboard : Zed_edit.clipboard -> ?macro : action Zed_macro.t -> unit -> object
+    global one is used.  [global_bindings] overrides the default bindings. *)
+class edit : 
+  ?rc : string -> ?clipboard : Zed_edit.clipboard -> ?macro : action Zed_macro.t -> 
+  ?global_bindings : action list Zed_input.Make(LTerm_key).t -> unit -> object
   inherit LTerm_widget.t
 
   method engine : edit Zed_edit.t
@@ -85,6 +88,9 @@ class edit : ?clipboard : Zed_edit.clipboard -> ?macro : action Zed_macro.t -> u
 
   method macro : action Zed_macro.t
     (** The macro recorder. *)
+
+  method is_valid_char : CamomileLibrary.UChar.t -> bool
+    (** Can character can be put into the editor. *)
 
   method text : string
     (** Shorthand for [Zed_rope.to_string (Zed_edit.text
@@ -106,3 +112,19 @@ class edit : ?clipboard : Zed_edit.clipboard -> ?macro : action Zed_macro.t -> u
   method vscroll : LTerm_widget.scrollable
 
 end
+
+(* Editor class for integer values.  
+ 
+ Responds to numeric characters, and ['-'] if [positive] is false. *)
+class edit_integer : ?positive:bool -> unit -> object
+  inherit edit
+
+  method value : int option
+    (* Get value from the editor.  Returns [None] if it cannot be converted
+       with [int_of_string] *)
+
+  method set_value : int -> unit
+    (* Set the value in the editor *)
+  
+end
+
