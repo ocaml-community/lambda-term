@@ -217,6 +217,8 @@ object(self)
   val mutable start = 0
   val mutable start_line = 0
   val mutable size = size
+  
+  method! size_request = size
 
   method private update_window_position = 
     let line_set = Zed_edit.lines engine in
