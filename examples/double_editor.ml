@@ -6,6 +6,7 @@
  *
  * This file is a part of Lambda-Term.
  *)
+open LTerm_geom
 
 let ( >>= ) = Lwt.( >>= )
 
@@ -35,7 +36,10 @@ let main () =
   let top_frame = frame top_editor in
 
   (* make bottom editor a fixed 10 rows in size *)
-  let bottom_editor = new LTerm_edit.edit ~size:{ LTerm_geom.rows = 10; cols = 1 } () in
+  let bottom_editor = new LTerm_edit.edit ~size:{ rows = 10; cols = 1 } () in
+  (* changed my mind: make it 5 rows smaller *)
+  bottom_editor#set_allocation
+    { bottom_editor#allocation with row1 = bottom_editor#allocation.row1 - 5 };
   let bottom_frame = frame bottom_editor in
 
   vbox#add top_frame;
