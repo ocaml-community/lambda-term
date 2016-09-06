@@ -43,7 +43,7 @@ let main () =
   let bottom_frame = frame bottom_editor in
 
   vbox#add top_frame;
-  (* in versions before my fix this would either crash or make the bottom editor unusable *)
+  (* in versions before PR#42 this would either crash or make the bottom editor unusable *)
   vbox#add ~expand:false bottom_frame;
 
   (* exit on C-c *)
