@@ -68,7 +68,10 @@ val macro : action Zed_macro.t
 
 (** Class of edition widgets. If no clipboard is provided, then the
     global one is used. *)
-class edit : ?clipboard : Zed_edit.clipboard -> ?macro : action Zed_macro.t -> unit -> object
+class edit :
+  ?clipboard : Zed_edit.clipboard ->
+  ?macro : action Zed_macro.t ->
+  ?size : LTerm_geom.size -> unit -> object
   inherit LTerm_widget.t
 
   method engine : edit Zed_edit.t
