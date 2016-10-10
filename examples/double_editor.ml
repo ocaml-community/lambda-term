@@ -93,6 +93,8 @@ let main () =
     LTerm_edit.Custom (fun () -> vbox#send_event @@ LTerm_event.Key (make_key key)) in
 
   (* switch editors on Tab *)
+  top_editor#set_focus { top_editor#focus with down = Some (bottom_editor :> LTerm_widget.t) };
+  bottom_editor#set_focus { bottom_editor#focus with up = Some (top_editor :> LTerm_widget.t) };
   top_editor#bind tab [send_key @@ `Other LTerm_key.Down];
   bottom_editor#bind tab [send_key @@ `Other LTerm_key.Up];
 
