@@ -283,7 +283,7 @@ and sequence key seq = parse
         else
           sequence dummy_key seq lexbuf
       }
-  | [ 'a'-'z' 'A'-'Z' '0'-'9' '_' '(' ')' '[' ']' '{' '}' '~' '&' '$' '*' '%' '!' '?' ',' ';' '/' '\\' '.' '@' '=' '+' '-' ] as ch (blank+ | ':' as sep)
+  | [ 'a'-'z' 'A'-'Z' '0'-'9' '_' '(' ')' '[' ']' '{' '}' '~' '&' '$' '*' '%' '!' '?' ',' ';' '/' '\\' '.' '@' '=' '+' '-' '^' ] as ch (blank+ | ':' as sep)
       {
         let seq = { key with code = Char(UChar.of_char ch) } :: seq in
         if sep = ":" then
