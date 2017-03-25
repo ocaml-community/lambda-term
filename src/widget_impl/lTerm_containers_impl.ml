@@ -26,6 +26,7 @@ class type box = object
   inherit t
   method add : ?position : int -> ?expand : bool -> #t -> unit
   method remove : #t -> unit
+  method clear : unit
 end
 
 class virtual abox rc = object(self)
@@ -65,6 +66,13 @@ class virtual abox rc = object(self)
 
   method remove : 'a. (#t as 'a) -> unit = fun widget ->
     children <- List.filter (fun child -> if child.widget = (widget :> t) then (child.widget#set_parent None; false) else true) children;
+    self#compute_size_request;
+    self#compute_allocations;
+    self#queue_draw
+
+  method clear =
+    List.iter (fun child -> child.widget#set_parent None) children;
+    children <- [];
     self#compute_size_request;
     self#compute_allocations;
     self#queue_draw

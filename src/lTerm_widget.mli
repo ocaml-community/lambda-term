@@ -128,6 +128,9 @@ class type box = object
 
   method remove : #t -> unit
     (** [remove widget] remove a widget from the box. *)
+
+  method clear : unit
+    (** [clear] removes all widgets from the box. *)
 end
 
 (** A widget displaying a list of widgets, listed horizontally. *)
