@@ -9,6 +9,8 @@
   editor" example (#42, Fabian Bonk)
 * Add `^` to the list of characters recognized in inputrc files (#46,
   github user zhenya1007)
+* Fix a race condition when copy&pasting text containing newlines in
+  the line editor
 * Switch the build to jbuilder
 * Drop compatibility with 4.01
 
