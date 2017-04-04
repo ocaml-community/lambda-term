@@ -1,12 +1,3 @@
 _build/
-/lambda-term-*.tar.gz
-/setup.data
-/setup.log
-/setup.exe
-/setup-dev.exe
-/man/*.gz
-/src/lTerm_config.h
-*.swp
-*.native
-/lambda-term-api.docdir
-*~
+*.merlin
+*.install

@@ -31,11 +31,12 @@ Installation
 
 To build and install Lambda-Term:
 
-    $ ./configure
     $ make
     $ make install
 
 ### Documentation and manual pages _(optional)_
+
+_This part hasn't been ported to jbuilder yet_
 
 To build the documentation:
 
@@ -47,8 +48,21 @@ It will then be installed by `make install`.
 
 To build and execute tests:
 
-    $ ./configure --enable-tests
     $ make test
+
+### Examples _(optional)_
+
+To build examples:
+
+    $ make examples
+
+Binaries for the examples will be in `_build/default/examples`.
+
+To build the `asciiart` example:
+
+    $ make asciiart
+
+Note that it requires the `camlimages` library.
 
 Terminal emulators compatibility
 --------------------------------

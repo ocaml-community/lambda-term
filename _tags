@@ -1,4 +1,0 @@
-true: bin_annot
-<**/*.ml{,i}>: warn(-40)
-# OASIS_START
-# OASIS_STOP

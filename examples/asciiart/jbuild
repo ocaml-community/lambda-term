@@ -1,0 +1,7 @@
+(jbuild_version 1)
+
+(executable
+ ((name asciiart)
+  (libraries (lambda-term
+              camlimages.png
+              camlimages.jpeg))))

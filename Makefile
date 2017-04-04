@@ -1,61 +1,39 @@
-# Makefile
-# --------
-# Copyright : (c) 2012, Jeremie Dimino <jeremie@dimino.org>
-# Licence   : BSD3
-#
-# Generic Makefile for oasis project
+INSTALL_ARGS := $(if $(PREFIX),--prefix $(PREFIX),)
 
-# Set to setup.exe for the release
-SETUP := setup-dev.exe
+.PHONY: all
+all:
+	jbuilder build @install
 
-# Default rule
-default: build
+.PHONY: examples
+examples:
+	jbuilder build @examples/all
 
-# Setup for the development version
-setup-dev.exe: _oasis setup.ml
-	sed '/^#/D' setup.ml > setup_dev.ml
-	ocamlfind ocamlopt -o $@ -linkpkg -package ocamlbuild,oasis.dynrun setup_dev.ml || \
-	  ocamlfind ocamlc -o $@ -linkpkg -package ocamlbuild,oasis.dynrun setup_dev.ml || true
-	rm -f setup_dev.*
+.PHONY: asciiart
+asciiart:
+	jbuilder build examples/asciiart/asciiart.exe
 
-# Setup for the release
-setup.exe: setup.ml
-	ocamlopt.opt -o $@ $< || ocamlopt -o $@ $< || ocamlc -o $@ $<
-	rm -f setup.cmx setup.cmi setup.o setup.obj setup.cmo
+.PHONY: install
+install:
+	jbuilder install $(INSTALL_ARGS)
 
-build: $(SETUP) setup.data
-	./$(SETUP) -build $(BUILDFLAGS)
+.PHONY: uninstall
+uninstall:
+	jbuilder uninstall $(INSTALL_ARGS)
 
-doc: $(SETUP) setup.data build
-	./$(SETUP) -doc $(DOCFLAGS)
+.PHONY: reinstall
+reinstall:
+	$(MAKE) uninstall
+	$(MAKE) install
 
-test: $(SETUP) setup.data build
-	./$(SETUP) -test $(TESTFLAGS)
+.PHONY: test
+test:
+	jbuilder runtest
 
-all: $(SETUP)
-	./$(SETUP) -all $(ALLFLAGS)
+.PHONY: all-supported-ocaml-versions
+all-supported-ocaml-versions:
+	jbuilder runtest --workspace jbuild-workspace.dev
 
-install: $(SETUP) setup.data
-	ocamlfind remove lambda-term 2>/dev/null || true
-	./$(SETUP) -install $(INSTALLFLAGS)
-
-uninstall: $(SETUP) setup.data
-	./$(SETUP) -uninstall $(UNINSTALLFLAGS)
-
-reinstall: $(SETUP) setup.data
-	ocamlfind remove lambda-term 2>/dev/null || true
-	./$(SETUP) -reinstall $(REINSTALLFLAGS)
-
-clean: $(SETUP)
-	./$(SETUP) -clean $(CLEANFLAGS)
-
-distclean: $(SETUP)
-	./$(SETUP) -distclean $(DISTCLEANFLAGS)
-
-configure: $(SETUP)
-	./$(SETUP) -configure $(CONFIGUREFLAGS)
-
-setup.data: $(SETUP)
-	./$(SETUP) -configure $(CONFIGUREFLAGS)
-
-.PHONY: default build doc test all install uninstall reinstall clean distclean configure
+.PHONY: clean
+clean:
+	rm -rf _build *.install
+	find . -name .merlin -delete

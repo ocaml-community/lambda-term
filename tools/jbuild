@@ -1,0 +1,6 @@
+(jbuild_version 1)
+
+(executable
+ ((name lambda_term_actions)
+  (public_name lambda-term-actions)
+  (libraries (lambda-term))))

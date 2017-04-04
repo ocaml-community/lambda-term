@@ -1,0 +1,44 @@
+(* -*- tuareg -*- *)
+
+module J = Jbuild_plugin.V1
+
+let openbsd_flags = "\
+  (c_flags (:standard -I/usr/local/include))
+  (c_library_flags (:standard -L/usr/local/lib -lcharset))
+"
+
+let () =
+  let system = List.assoc "system" J.ocamlc_config in
+  let lterm_config =
+    Printf.sprintf {|
+#ifndef __LTERM_CONFIG_H
+#define __LTERM_CONFIG_H
+
+#define SYS_%s
+
+#endif /* __LTERM_CONFIG_H */
+|} system
+  in
+  Printf.ksprintf J.send {|
+(jbuild_version 1)
+
+(library
+ ((name lambda_term)
+  (public_name lambda-term)
+  (wrapped false)
+  (libraries (lwt lwt.unix lwt.react zed))
+  (synopsis "Cross-platform library for terminal manipulation")
+  (c_names (lTerm_term_stubs lTerm_unix_stubs lTerm_windows_stubs))
+  %s))
+
+(ocamllex (lTerm_inputrc lTerm_resource_lexer))
+
+(rule
+ ((targets (lTerm_config.h))
+  (action  (with-stdout-to ${@} (echo %S)))))
+|}
+    (if system = "openbsd" then
+       openbsd_flags
+     else
+       "")
+    lterm_config

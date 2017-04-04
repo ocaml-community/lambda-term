@@ -1,0 +1,5 @@
+(jbuild_version 1)
+
+(executable
+ ((name history_stress_test)
+  (libraries (lambda-term))))
