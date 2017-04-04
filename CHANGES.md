@@ -9,10 +9,14 @@
   editor" example (#42, Fabian Bonk)
 * Add `^` to the list of characters recognized in inputrc files (#46,
   github user zhenya1007)
-* Fix a race condition when copy&pasting text containing newlines in
-  the line editor
 * Switch the build to jbuilder
 * Drop compatibility with 4.01
+
+1.10.1 (2016-08-15)
+-------------------
+
+* fix a race condition in `LTerm_read_line`. The race would often
+  appear when copy&pasting
 
 1.10 (2016-04-07)
 -----------------
