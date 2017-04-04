@@ -1,5 +1,5 @@
-1.11
-----
+1.11 (2017-04-04)
+-----------------
 
 * Allow frame widgets to be labeled (#36, Andrew Ray)
 * Add an alignment setting to label widgets (#36, Andrew Ray)
