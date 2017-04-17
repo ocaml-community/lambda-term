@@ -287,9 +287,8 @@ class virtual ['a] engine ?(history = []) ?(clipboard = LTerm_edit.clipboard) ?(
   let history_prefix, set_history_prefix =
     let ev, send = E.create () in
     let edit_changes = Zed_edit.changes edit in
-    let edit_changes = E.map (fun _ -> Zed_rope.to_string @@ Zed_edit.text edit) edit_changes in
-    let prefix = S.hold "" (E.select [ev; edit_changes])
-    in
+    let edit_changes = E.map (fun _ -> Zed_edit.text edit) edit_changes in
+    let prefix = S.hold Zed_rope.empty (E.select [ev; edit_changes]) in
     prefix, send
   in
 object(self)
@@ -526,7 +525,7 @@ object(self)
           let prev, next = S.value history in
           let text = Zed_rope.to_string @@ Zed_edit.text edit in
           let prefix = S.value history_prefix in
-          match history_find (is_prefix ~prefix) prev with
+          match history_find (is_prefix ~prefix:(Zed_rope.to_string prefix)) prev with
           | None ->
             ()
           | Some (not_matched, line, rest) ->
@@ -540,7 +539,7 @@ object(self)
       | History_search_next when S.value mode = Edition -> begin
           let prev, next = S.value history in
           let prefix = S.value history_prefix in
-          match history_find (is_prefix ~prefix) next with
+          match history_find (is_prefix ~prefix:(Zed_rope.to_string prefix)) next with
           | None ->
             ()
           | Some (not_matched, line, rest) ->
