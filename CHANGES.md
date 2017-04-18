@@ -1,6 +1,7 @@
 1.11 (2017-04-04)
 -----------------
 
+* Add history-search-prev and history-search-next (Fabian Hemmer)
 * Allow frame widgets to be labeled (#36, Andrew Ray)
 * Add an alignment setting to label widgets (#36, Andrew Ray)
 * Add scrollbar widgets (#33, Andrew Ray)
