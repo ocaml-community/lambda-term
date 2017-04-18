@@ -95,6 +95,19 @@ You can then send the result to jeremie@dimino.org, including:
 * the contents of the `TERM` environment variable inside the terminal (`echo $TERM`),
 * the output of `print_sequences.ml` with, for each line, the keystroke.
 
+Key bindings
+------------
+
+Key bindings can be set in `~/.lambda-term-inputrc`. See
+[lambda-term-inputrc](lambda-term-inputrc). Useful mappings:
+
+```
+# This allows zsh-like searching the history by pressing up/down
+[read-line]
+up: history-search-prev
+down: history-search-next
+```
+
 Main modules
 ------------
 
