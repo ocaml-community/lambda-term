@@ -65,6 +65,10 @@ type action =
       (** Go to the previous entry of the history. *)
   | History_next
       (** Go to the next entry of the history. *)
+  | History_search_prev
+      (** Search the previous entry of the history. *)
+  | History_search_next
+      (** Search the next entry of the history. *)
   | Accept
       (** Accept the current input. *)
   | Clear_screen

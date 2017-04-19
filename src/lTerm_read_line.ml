@@ -60,6 +60,8 @@ type action =
   | Complete_bar
   | History_prev
   | History_next
+  | History_search_prev
+  | History_search_next
   | Accept
   | Clear_screen
   | Prev_search
@@ -80,6 +82,8 @@ let doc_of_action = function
   | Complete_bar -> "complete current input using the completion bar."
   | History_prev -> "go to the previous entry of the history."
   | History_next -> "go to the next entry of the history."
+  | History_search_prev -> "go to the previous entry of the history that matches the start of the current line."
+  | History_search_next -> "go to the next entry of the history that matches the start of the current line."
   | Accept -> "accept the current input."
   | Clear_screen -> "clear the screen."
   | Prev_search -> "search backward in the history."
@@ -99,6 +103,8 @@ let actions = [
   Complete_bar, "complete-bar";
   History_prev, "history-prev";
   History_next, "history-next";
+  History_search_prev, "history-search-prev";
+  History_search_next, "history-search-next";
   Accept, "accept";
   Clear_screen, "clear-screen";
   Prev_search, "prev-search";
@@ -190,6 +196,29 @@ let () =
    | The read-line engine                                            |
    +-----------------------------------------------------------------+ *)
 
+let rec last_exn = function
+  | [] -> raise (Invalid_argument "last_exn")
+  | [x] -> x
+  | _ :: rest -> last_exn rest
+
+let is_prefix ~prefix s =
+  String.length prefix <= String.length s &&
+  (let i = ref 0 in
+   while !i < String.length prefix && s.[!i] = prefix.[!i] do incr i done;
+   !i = String.length prefix
+  )
+
+let history_find predicate history =
+  let rec history_find_ skipped = function
+    | [] -> None
+    | x :: xs ->
+      if predicate x then
+        Some (skipped, x, xs)
+      else
+        history_find_ (x :: skipped) xs
+  in
+  history_find_ [] history
+
 let search_string str sub =
   let rec equal_at a b =
     (b = String.length sub) || (String.unsafe_get str a = String.unsafe_get sub b) && equal_at (a + 1) (b + 1)
@@ -255,6 +284,13 @@ class virtual ['a] engine ?(history = []) ?(clipboard = LTerm_edit.clipboard) ?(
   let completion_index = S.map          (fun c -> c.index) completion_state in
   let history, set_history = S.create (history, []) in
   let message, set_message = S.create None in
+  let history_prefix, set_history_prefix =
+    let ev, send = E.create () in
+    let edit_changes = Zed_edit.changes edit in
+    let edit_changes = E.map (fun _ -> Zed_edit.text edit) edit_changes in
+    let prefix = S.hold Zed_rope.empty (E.select [ev; edit_changes]) in
+    prefix, send
+  in
 object(self)
   method virtual eval : 'a
   method edit = edit
@@ -483,6 +519,36 @@ object(self)
                 Zed_edit.goto context 0;
                 Zed_edit.remove context (Zed_rope.length text);
                 Zed_edit.insert context (Zed_rope.of_string line)
+        end
+
+      | History_search_prev when S.value mode = Edition -> begin
+          let prev, next = S.value history in
+          let text = Zed_rope.to_string @@ Zed_edit.text edit in
+          let prefix = S.value history_prefix in
+          match history_find (is_prefix ~prefix:(Zed_rope.to_string prefix)) prev with
+          | None ->
+            ()
+          | Some (not_matched, line, rest) ->
+            set_history (rest, not_matched @ text :: next);
+            Zed_edit.goto context 0;
+            Zed_edit.delete_next_line context;
+            Zed_edit.insert context (Zed_rope.of_string line);
+            set_history_prefix prefix
+        end
+
+      | History_search_next when S.value mode = Edition -> begin
+          let prev, next = S.value history in
+          let prefix = S.value history_prefix in
+          match history_find (is_prefix ~prefix:(Zed_rope.to_string prefix)) next with
+          | None ->
+            ()
+          | Some (not_matched, line, rest) ->
+            let text = Zed_rope.to_string @@ Zed_edit.text edit in
+            set_history (not_matched @ text :: prev, rest);
+            Zed_edit.goto context 0;
+            Zed_edit.delete_next_line context;
+            Zed_edit.insert context (Zed_rope.of_string line);
+            set_history_prefix prefix
         end
 
       | Prev_search -> self#search Backward
