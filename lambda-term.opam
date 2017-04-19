@@ -10,8 +10,8 @@ build: [
   ["jbuilder" "build" "@install" "--root" "." "--only" "lambda-term" "-j" jobs]
 ]
 depends: [
-  "lwt"   {>= "2.4.0"}
+  "lwt"   {>= "3.0.0"}
   "zed"   {>= "1.2"}
-  "react" {>= "1.0.0"}
+  "lwt_react" {>= "1.0.0"}
 ]
 available: [ ocaml-version >= "4.02.3" ]
