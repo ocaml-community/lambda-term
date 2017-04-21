@@ -13,19 +13,6 @@ a C library.
 Lambda-Term integrates with zed to provide text edition facilities in
 console applications.
 
-Dependencies
-------------
-
-* [OCaml](http://caml.inria.fr/ocaml/) (>= 3.12)
-* [findlib](http://projects.camlcity.org/projects/findlib.html)
-* [react](http://erratique.ch/software/react)
-* [lwt](http://ocsigen.org/lwt/) (>= 2.4.0) built with react support
-* [Camomile](http://github.com/yoriyuki/Camomile) (>= 0.8)
-* [zed](http://github.com/diml/zed) (>= 1.2)
-
-For building the development version, you also need to install
-[oasis](http://oasis.forge.ocamlcore.org/) (>= 0.3.0).
-
 Installation
 ------------
 
