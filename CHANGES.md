@@ -1,4 +1,4 @@
-1.11 (2017-04-04)
+1.11 (2017-04-26)
 -----------------
 
 * Add history-search-prev and history-search-next (#47, Fabian Hemmer)
