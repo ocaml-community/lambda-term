@@ -1079,7 +1079,10 @@ object(self)
       let pos_after_styled = compute_position size.cols pos_after_before styled position (Array.length styled) in
       let total_height = pos_after_styled.row + 1 in
       let matrix_size = { cols = size.cols + 1; rows = if displayed then max total_height height else total_height } in
-      let matrix = LTerm_draw.make_matrix matrix_size in
+      (* Note that the LTerm.print_box_with_newlines call below erases all the
+         positions after the first newline character in a row of matrix with
+         the "Erase in Line" escape code (on Unix) or spaces (on Windows). *)
+      let matrix = LTerm_draw.make_matrix ~init:newline matrix_size in
       draw_styled_with_newlines matrix size.cols 0 0 prompt;
       draw_styled_with_newlines matrix size.cols pos_after_prompt.row pos_after_prompt.col styled;
       draw_styled_with_newlines matrix size.cols pos_after_styled.row pos_after_styled.col styled_newline;
