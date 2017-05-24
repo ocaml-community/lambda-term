@@ -35,9 +35,9 @@ type matrix = point array array
         then columns, i.e. to access the point at line [l] and column
         [c] in matrix [m] you should use [m.(l).(c)]. *)
 
-val make_matrix : LTerm_geom.size -> matrix
-  (** [matrix size] creates a matrix of the given size containing only
-      blank characters. *)
+val make_matrix : ?init : UChar.t -> LTerm_geom.size -> matrix
+  (** [matrix ~init size] creates a matrix of the given size containing only
+      [init] (default: UChar.of_char ' ') characters. *)
 
 val set_style : point -> LTerm_style.t -> unit
   (** [set_style point style] sets fields of [point] according to
