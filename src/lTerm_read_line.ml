@@ -1072,23 +1072,15 @@ object(self)
   method draw_success =
     let size = S.value size in
     if size.rows > 0 && size.cols > 0 then begin
-      let styled, position = self#stylise true in
+      let styled, _position = self#stylise true in
       let prompt = S.value prompt in
-      let pos_after_prompt = compute_position size.cols { row = 0; col = 0 } prompt 0 (Array.length prompt) in
-      let pos_after_before = compute_position size.cols pos_after_prompt styled 0 position in
-      let pos_after_styled = compute_position size.cols pos_after_before styled position (Array.length styled) in
-      let total_height = pos_after_styled.row + 1 in
-      let matrix_size = { cols = size.cols + 1; rows = if displayed then max total_height height else total_height } in
-      let matrix = LTerm_draw.make_matrix matrix_size in
-      draw_styled_with_newlines matrix size.cols 0 0 prompt;
-      draw_styled_with_newlines matrix size.cols pos_after_prompt.row pos_after_prompt.col styled;
-      draw_styled_with_newlines matrix size.cols pos_after_styled.row pos_after_styled.col styled_newline;
-      (if displayed then LTerm.move term (-cursor.row) (-cursor.col) else return ()) >>= fun () ->
-      LTerm.print_box_with_newlines term matrix >>= fun () ->
-      LTerm.move term (total_height - Array.length matrix) 0 >>= fun () ->
-      (* Print a newline instead of a movement to ensure scrolling when
-         at the end of screen. *)
-      LTerm.fprint term "\n"
+      (if displayed then
+         LTerm.move term (-cursor.row) (-cursor.col) >>= fun () ->
+         LTerm.clear_screen_next term
+       else
+         return ()) >>= fun () ->
+      LTerm.fprints term prompt >>= fun () ->
+      LTerm.fprintls term styled
     end else
       return ()
 
