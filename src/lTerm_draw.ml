@@ -26,14 +26,14 @@ type point = {
 
 type matrix = point array array
 
-let make_matrix size =
+let make_matrix ?(init=UChar.of_char ' ') size =
   Array.init
     size.rows
     (fun _ ->
        Array.init
          size.cols
          (fun _ -> {
-            char = UChar.of_char ' ';
+            char = init;
             bold = false;
             underline = false;
             blink = false;
