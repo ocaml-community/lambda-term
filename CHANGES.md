@@ -1,3 +1,9 @@
+1.12 (next)
+-----------
+
+* Fix: copy & pasting the terminal output doesn't adds many spaces
+  after the end of lines (#52, Deokhwan Kim, fixes diml/utop#186)
+
 1.11 (2017-04-04)
 -----------------
 
