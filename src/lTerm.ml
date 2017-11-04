@@ -331,12 +331,12 @@ let read_char term =
           return char
       | None ->
           Lwt_stream.next st >>= fun byte ->
-          assert (output#output (String.make 1 byte) 0 1 = 1);
+          assert (output#output (Bytes.make 1 byte) 0 1 = 1);
           output#flush ();
           loop st
   in
   Lwt.catch (fun () ->
-      assert (output#output (String.make 1 first_byte) 0 1 = 1);
+      assert (output#output (Bytes.make 1 first_byte) 0 1 = 1);
       Lwt_stream.parse term.input_stream loop)
     (function
     | CharEncoding.Malformed_code | Lwt_stream.Empty ->
@@ -827,7 +827,7 @@ let map_char char =
 
 class output_to_buffer buf res = object
   method output str ofs len =
-    Buffer.add_substring buf str ofs len;
+    Buffer.add_subbytes buf str ofs len;
     len
   method flush () = ()
   method close_out () =
