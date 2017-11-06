@@ -50,7 +50,7 @@ class read_line ~term ~history ~state = object(self)
   inherit LTerm_read_line.read_line ~history ()
   inherit [Zed_utf8.t] LTerm_read_line.term term
 
-  method show_box = false
+  method! show_box = false
 
   initializer
     self#set_prompt (S.const (make_prompt state))

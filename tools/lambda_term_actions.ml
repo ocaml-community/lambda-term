@@ -11,7 +11,7 @@
 
 let print_action length (action, doc) =
   print_string action;
-  for i = String.length action to length do
+  for _ = String.length action to length do
     print_char ' '
   done;
   print_string ": ";
@@ -29,8 +29,8 @@ let () =
   in
 
   (* Search the longest line. *)
-  let length = List.fold_left (fun acc (action, doc) -> max (String.length action) acc) 0 edit_actions in
-  let length = List.fold_left (fun acc (action, doc) -> max (String.length action) acc) length read_line_actions in
+  let length = List.fold_left (fun acc (action, _doc) -> max (String.length action) acc) 0 edit_actions in
+  let length = List.fold_left (fun acc (action, _doc) -> max (String.length action) acc) length read_line_actions in
 
   (* Print actions. *)
   print_string "General actions\n\

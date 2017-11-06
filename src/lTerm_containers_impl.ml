@@ -32,10 +32,10 @@ class virtual abox rc = object(self)
   inherit t rc as super
 
   val mutable children = []
-  method children = List.map (fun child -> child.widget) children
+  method! children = List.map (fun child -> child.widget) children
 
   val mutable size_request = { rows = 0; cols = 0 }
-  method size_request = size_request
+  method! size_request = size_request
 
   method private virtual compute_allocations : unit
     (* Compute sizes of children. *)
@@ -43,7 +43,7 @@ class virtual abox rc = object(self)
   method private virtual compute_size_request : unit
     (* Compute the size request. *)
 
-  method set_allocation rect =
+  method! set_allocation rect =
     super#set_allocation rect;
     self#compute_allocations
 
@@ -144,7 +144,7 @@ class hbox = object(self)
         rect.col1 children
     )
 
-  method draw ctx focused =
+  method! draw ctx focused =
     let rect = self#allocation in
     let rec loop col children =
       match children with
@@ -238,7 +238,7 @@ class vbox = object(self)
         rect.row1 children
     )
 
-  method draw ctx focused =
+  method! draw ctx focused =
     let rect = self#allocation in
     let rec loop row children =
       match children with
@@ -262,17 +262,17 @@ class frame = object(self)
   inherit t "frame" as super
 
   val mutable child = None
-  method children =
+  method! children =
     match child with
       | Some widget -> [widget]
       | None -> []
 
   val mutable size_request = { rows = 2; cols = 2 }
-  method size_request = size_request
+  method! size_request = size_request
 
   val mutable style = LTerm_style.none
   val mutable connection = LTerm_draw.Light
-  method update_resources =
+  method! update_resources =
     let rc = self#resource_class and resources = self#resources in
     style <- LTerm_resources.get_style rc resources;
     connection <- LTerm_resources.get_connection (rc ^ ".connection") resources
@@ -299,7 +299,7 @@ class frame = object(self)
       | None ->
           ()
 
-  method set_allocation rect =
+  method! set_allocation rect =
     super#set_allocation rect;
     self#compute_allocation
 
@@ -325,7 +325,7 @@ class frame = object(self)
     label <- l;
     align <- alignment
 
-  method draw ctx focused =
+  method! draw ctx focused =
     let size = LTerm_draw.size ctx in
     LTerm_draw.fill_style ctx style;
     if size.rows >= 1 && size.cols >= 1 then begin
@@ -356,7 +356,7 @@ class modal_frame = object(self)
 
   val mutable work_area = None
 
-  method private compute_allocation =
+  method! private compute_allocation =
     match child with
     | Some widget ->
       (* The desired layout is as following:
@@ -414,7 +414,7 @@ class modal_frame = object(self)
     | None ->
         ()
 
-  method draw ctx focused =
+  method! draw ctx focused =
     match work_area with
     | None -> ()
     | Some area ->

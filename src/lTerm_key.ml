@@ -7,6 +7,13 @@
  * This file is a part of Lambda-Term.
  *)
 
+(* little hack to maintain 4.02.3 compat with warnings *)
+module String = struct
+  [@@@ocaml.warning "-3-32"]
+  let lowercase_ascii =  StringLabels.lowercase
+  include String
+end
+
 open CamomileLibraryDyn.Camomile
 
 type code =
@@ -112,5 +119,5 @@ let to_string_compact key =
      | Prev_page ->
          Buffer.add_string buffer "prev"
      | code ->
-         Buffer.add_string buffer (String.lowercase (string_of_code code)));
+         Buffer.add_string buffer (String.lowercase_ascii (string_of_code code)));
   Buffer.contents buffer

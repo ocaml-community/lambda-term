@@ -11,10 +11,10 @@ open Lwt
 
 let rec read_char term =
   LTerm.read_event term >>= function
-    | LTerm_event.Key { LTerm_key.code = LTerm_key.Char ch; LTerm_key.control = true } when ch = CamomileLibraryDyn.Camomile.UChar.of_char 'c' ->
+    | LTerm_event.Key { LTerm_key.code = LTerm_key.Char ch; LTerm_key.control = true ; _ } when ch = CamomileLibraryDyn.Camomile.UChar.of_char 'c' ->
         (* Exit on Ctrl+C *)
         Lwt.fail (Failure "interrupted")
-    | LTerm_event.Key { LTerm_key.code = LTerm_key.Char ch } ->
+    | LTerm_event.Key { LTerm_key.code = LTerm_key.Char ch ; _ } ->
         Lwt.return ch
     | _ ->
         read_char term

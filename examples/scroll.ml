@@ -11,15 +11,15 @@ open LTerm_widget
 open LTerm_geom
 
 (* a simple widget with scrollbar support *)
-class scrollable_nums (scroll : scrollable) = object(self)
-  inherit t "nums" as super
+class scrollable_nums (scroll : scrollable) = object
+  inherit t "nums"
 
   initializer scroll#set_range 197
 
-  method can_focus = false
+  method! can_focus = false
 
-  method draw ctx focused = 
-    let { rows; cols } = LTerm_draw.size ctx in
+  method! draw ctx _focused = 
+    let { rows; _ } = LTerm_draw.size ctx in
 
     for row=0 to rows-1 do
       LTerm_draw.draw_string ctx row 0 (string_of_int (row + scroll#offset))

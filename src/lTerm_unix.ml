@@ -339,13 +339,13 @@ let parse_char encoding st first_byte =
           return char
       | None ->
           Lwt_stream.next st >>= fun byte ->
-          assert (output#output (String.make 1 byte) 0 1 = 1);
+          assert (output#output (Bytes.make 1 byte) 0 1 = 1);
           output#flush ();
           loop st
   in
   Lwt.catch
     (fun () ->
-      assert (output#output (String.make 1 first_byte) 0 1 = 1);
+      assert (output#output (Bytes.make 1 first_byte) 0 1 = 1);
       Lwt_stream.parse st loop)
     (function
     | CharEncoding.Malformed_code | Lwt_stream.Empty ->
@@ -382,7 +382,7 @@ let parse_escape escape_time st =
     get () >>= function
       | '0' .. '9' | ';' | '[' ->
           loop ()
-      | ch ->
+      | _ ->
           return (Buffer.contents buf)
   in
 

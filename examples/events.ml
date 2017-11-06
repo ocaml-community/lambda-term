@@ -10,7 +10,6 @@
 (* Show events read from the terminal *)
 
 open Lwt
-open LTerm_event
 
 let rec loop term =
   LTerm.read_event term
@@ -18,7 +17,7 @@ let rec loop term =
   Lwt_io.printl (LTerm_event.to_string ev)
   >>= fun () ->
   match ev with
-  | LTerm_event.Key{ LTerm_key.code = LTerm_key.Escape } ->
+  | LTerm_event.Key{ LTerm_key.code = LTerm_key.Escape; _ } ->
     return ()
   | _ ->
     loop term

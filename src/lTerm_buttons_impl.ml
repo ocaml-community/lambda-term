@@ -24,9 +24,9 @@ class button ?(brackets=("< "," >")) initial_label =
   let brackets_size = String.length bl + String.length br in
 
   object(self)
-  inherit t "button" as super
+  inherit t "button"
 
-  method can_focus = true
+  method! can_focus = true
 
   val click_callbacks = Lwt_sequence.create ()
 
@@ -34,7 +34,7 @@ class button ?(brackets=("< "," >")) initial_label =
     register switch click_callbacks f
 
   val mutable size_request = { rows = 1; cols = brackets_size + Zed_utf8.length initial_label }
-  method size_request = size_request
+  method! size_request = size_request
 
   val mutable label = initial_label
 
@@ -59,7 +59,7 @@ class button ?(brackets=("< "," >")) initial_label =
 
   val mutable focused_style = LTerm_style.none
   val mutable unfocused_style = LTerm_style.none
-  method update_resources =
+  method! update_resources =
     let rc = self#resource_class and resources = self#resources in
     focused_style <- LTerm_resources.get_style (rc ^ ".focused") resources;
     unfocused_style <- LTerm_resources.get_style (rc ^ ".unfocused") resources
@@ -72,7 +72,7 @@ class button ?(brackets=("< "," >")) initial_label =
     in
     LTerm_draw.fill_style ctx style
 
-  method draw ctx focused =
+  method! draw ctx focused =
     let { rows; cols } = LTerm_draw.size ctx in
     let len = Zed_utf8.length label in
     self#apply_style ctx focused;
@@ -105,8 +105,8 @@ class checkbutton initial_label initial_state = object(self)
 
   method state = state
 
-  method draw ctx focused =
-    let { rows; cols } = LTerm_draw.size ctx in
+  method! draw ctx focused =
+    let { rows; _ } = LTerm_draw.size ctx in
     let checked = if state then "[x] " else "[ ] " in
     self#apply_style ctx focused;
     LTerm_draw.draw_string ctx (rows / 2) 0 (checked ^ label);
@@ -119,7 +119,7 @@ class type ['a] radio = object
   method id : 'a
 end
 
-class ['a] radiogroup  = object(self)
+class ['a] radiogroup  = object
 
   val state_change_callbacks = Lwt_sequence.create ()
 
@@ -174,8 +174,8 @@ class ['a] radiobutton (group : 'a radiogroup) initial_label (id : 'a) = object(
     self#set_resource_class "radiobutton";
     group#register_object (self :> 'a radio)
 
-  method draw ctx focused =
-    let { rows; cols } = LTerm_draw.size ctx in
+  method! draw ctx focused =
+    let { rows; _ } = LTerm_draw.size ctx in
     let checked = if state then "(o) " else "( ) " in
     self#apply_style ctx focused;
     LTerm_draw.draw_string ctx (rows / 2) 0 (checked ^ self#label);

@@ -8,7 +8,14 @@
  * This file is a part of Lambda-Term.
  *)
 
-let return, (>>=) = Lwt.return, Lwt.(>>=)
+(* little hack to maintain 4.02.3 compat with warnings *)
+module String = struct
+  [@@@ocaml.warning "-3-32"]
+  let lowercase_ascii =  StringLabels.lowercase
+  include String
+end
+
+let (>>=) = Lwt.(>>=)
 
 let home =
   try
@@ -155,7 +162,7 @@ exception Error of string
 let error str = raise (Error str)
 
 let get_bool key resources =
-  match String.lowercase (get key resources) with
+  match String.lowercase_ascii (get key resources) with
     | "true" -> Some true
     | "false" -> Some false
     | "" | "none" -> None
@@ -165,10 +172,10 @@ let hex_of_char ch = match ch with
   | '0' .. '9' -> Char.code ch - Char.code '0'
   | 'A' .. 'F' -> Char.code ch - Char.code 'A' + 10
   | 'a' .. 'f' -> Char.code ch - Char.code 'a' + 10
-  | ch -> raise Exit
+  | _ -> raise Exit
 
 let get_color key resources =
-  match String.lowercase (get key resources) with
+  match String.lowercase_ascii (get key resources) with
 
     (* Terminal colors. *)
 
@@ -982,7 +989,7 @@ let get_style prefix resources = {
 }
 
 let get_connection key resources =
-  match String.lowercase (get key resources) with
+  match String.lowercase_ascii (get key resources) with
     | "blank" -> LTerm_draw.Blank
     | "light" -> LTerm_draw.Light
     | "heavy" -> LTerm_draw.Heavy

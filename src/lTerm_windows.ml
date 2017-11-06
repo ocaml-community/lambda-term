@@ -9,7 +9,7 @@
 
 open CamomileLibraryDyn.Camomile
 
-let return, (>>=), (>|=) = Lwt.return, Lwt.(>>=), Lwt.(>|=)
+let (>|=) = Lwt.(>|=)
 
 external get_acp : unit -> int = "lt_windows_get_acp"
 external get_console_cp : unit -> int = "lt_windows_get_console_cp"
@@ -63,15 +63,15 @@ let controls = [|
 
 let read_console_input fd =
   Lwt_unix.check_descriptor fd;
-  Lwt_unix.execute_job
-    (read_console_input_job (Lwt_unix.unix_file_descr fd))
-    read_console_input_result
-    read_console_input_free
+  Lwt_unix.execute_job ?async_method:None
+    ~job:(read_console_input_job (Lwt_unix.unix_file_descr fd))
+    ~result:read_console_input_result
+    ~free:read_console_input_free
   >|= function
-    | Key({ LTerm_key.code = LTerm_key.Char ch } as key) when UChar.code ch < 32 ->
-        Key { key with LTerm_key.code = LTerm_key.Char controls.(UChar.code ch) }
-    | input ->
-        input
+  | Key({ LTerm_key.code = LTerm_key.Char ch ; _ } as key) when UChar.code ch < 32 ->
+    Key { key with LTerm_key.code = LTerm_key.Char controls.(UChar.code ch) }
+  | input ->
+    input
 
 type text_attributes = {
   foreground : int;

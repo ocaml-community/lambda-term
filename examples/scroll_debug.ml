@@ -11,27 +11,27 @@ open Lwt
 open LTerm_widget
 open LTerm_geom
 
-class scroll_label scroll = object(self)
+class scroll_label scroll = object
   inherit label "scroll"
-  method can_focus = false
-  method size_request = { rows=1; cols=0 }
+  method! can_focus = false
+  method! size_request = { rows=1; cols=0 }
   val style = LTerm_style.{none with foreground = Some red;
                                      background = Some green };
-  method draw ctx focused = 
+  method! draw ctx _focused =
     LTerm_draw.fill_style ctx style;
     LTerm_draw.draw_string_aligned ctx 0 H_align_center ~style
       (Printf.sprintf "%i/%i" scroll#offset scroll#range)
 
 end
 
-let main () = 
+let main () =
   let waiter, wakener = wait () in
   let exit = new button "exit" in
   exit#on_click (wakeup wakener);
 
   let vbox = new vbox in
 
-  let add_scroll (vbox : vbox) ~range ~size = 
+  let add_scroll (vbox : vbox) ~range ~size =
     let adj = new scrollable in
     let hscroll = new hscrollbar adj in
     let label = new scroll_label adj in
@@ -45,16 +45,16 @@ let main () =
     adj
   in
 
-  let scrolls = List.map 
+  let scrolls = List.map
     (fun range -> add_scroll vbox ~range ~size:1)
     [ 0; 10; 30; 60; 100; 200; 1000 ]
   in
 
-  let mouse_mode = 
+  let mouse_mode =
     let vbox = new vbox in
     let mouse_mode = new radiogroup in
     mouse_mode#on_state_change (function
-      | None -> () 
+      | None -> ()
       | Some(m) -> List.iter (fun h -> h#set_mouse_mode m) scrolls);
     vbox#add ~expand:false (new label "mouse mode");
     vbox#add ~expand:false (new radiobutton mouse_mode "middle" `middle);
@@ -64,11 +64,11 @@ let main () =
     vbox
   in
 
-  let scroll_mode = 
+  let scroll_mode =
     let vbox = new vbox in
     let scroll_mode = new radiogroup in
 
-    let ranged_widget group name value range = 
+    let ranged_widget group name value range =
       let button = new radiobutton group name value in
       let scroll = new hslider range in
       button, scroll
@@ -77,7 +77,7 @@ let main () =
     vbox#add ~expand:false (new label "scroll mode");
     let f,fr = ranged_widget scroll_mode "fixed " `fixed 10 in
     let d,dr = ranged_widget scroll_mode "dynamic " `dynamic 10 in
-    let sbox = 
+    let sbox =
       let in_frame w = let f = new frame in f#set w; f in
       let v1 = new vbox in
       v1#add ~expand:true f;
@@ -122,9 +122,8 @@ let main () =
 
   Lazy.force LTerm.stdout >>= fun term ->
   LTerm.enable_mouse term >>= fun () ->
-  Lwt.finalize 
+  Lwt.finalize
     (fun () -> run term vbox waiter)
     (fun () -> LTerm.disable_mouse term)
 
 let () = Lwt_main.run (main ())
-

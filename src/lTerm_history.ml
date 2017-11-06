@@ -11,8 +11,6 @@ open CamomileLibraryDyn.Camomile
 
 let return, (>>=) = Lwt.return, Lwt.(>>=)
 
-let section = Lwt_log.Section.make "lambda-term(history)"
-
 (* A node contains an entry of the history. *)
 type node = {
   mutable data : Zed_utf8.t;

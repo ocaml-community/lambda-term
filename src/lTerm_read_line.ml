@@ -11,7 +11,6 @@ open CamomileLibraryDyn.Camomile
 open Lwt_react
 open LTerm_geom
 open LTerm_style
-open LTerm_text
 open LTerm_key
 
 let return, (>>=) = Lwt.return, Lwt.(>>=)
@@ -43,7 +42,7 @@ let common_prefix = function
   | word :: rest -> List.fold_left common_prefix_one word rest
 
 let lookup word words = List.filter (fun word' -> Zed_utf8.starts_with word' word) words
-let lookup_assoc word words = List.filter (fun (word', x) -> Zed_utf8.starts_with word' word) words
+let lookup_assoc word words = List.filter (fun (word', _) -> Zed_utf8.starts_with word' word) words
 
 (* +-----------------------------------------------------------------+
    | Actions                                                         |
@@ -115,8 +114,8 @@ let actions = [
   Edit_with_external_editor, "edit-with-external-editor";
 ]
 
-let actions_to_names = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> Pervasives.compare a1 a2) actions)
-let names_to_actions = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> Pervasives.compare n1 n2) actions)
+let actions_to_names = Array.of_list (List.sort (fun (a1, _) (a2, _) -> Pervasives.compare a1 a2) actions)
+let names_to_actions = Array.of_list (List.sort (fun (_, n1) (_, n2) -> Pervasives.compare n1 n2) actions)
 
 let action_of_name x =
   let rec loop a b =
@@ -195,11 +194,6 @@ let () =
 (* +-----------------------------------------------------------------+
    | The read-line engine                                            |
    +-----------------------------------------------------------------+ *)
-
-let rec last_exn = function
-  | [] -> raise (Invalid_argument "last_exn")
-  | [x] -> x
-  | _ :: rest -> last_exn rest
 
 let is_prefix ~prefix s =
   String.length prefix <= String.length s &&
@@ -347,7 +341,7 @@ object(self)
       | [(completion, suffix)] ->
           Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after completion prefix_length));
           Zed_edit.insert context (Zed_rope.of_string suffix)
-      | (completion, suffix) :: rest ->
+      | (completion, _suffix) :: rest ->
           let word = List.fold_left (fun acc (word, _) -> common_prefix_one acc word) completion rest in
           Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after word prefix_length))
 
@@ -386,7 +380,7 @@ object(self)
           match search_string entry input with
           | Some pos -> begin
               match search_status with
-              | Some { match_ = Some (entry', _) } when entry = entry' ->
+              | Some { match_ = Some (entry', _); _ } when entry = entry' ->
                 loop (entry :: other_entries) rest
               | _ ->
                 set_status other_entries rest (Some (entry, pos));
@@ -445,12 +439,12 @@ object(self)
           set_mode Edition;
           set_message None;
           match search_status with
-            | Some { match_ = Some (entry, pos) } ->
+            | Some { match_ = Some (entry, _pos); _ } ->
                 search_status <- None;
                 Zed_edit.goto context 0;
                 Zed_edit.remove context (Zed_rope.length (Zed_edit.text edit));
                 Zed_edit.insert context (Zed_rope.of_string entry)
-            | Some { match_ = None } | None ->
+            | Some { match_ = None; _ } | None ->
                 ()
         end
 
@@ -682,19 +676,19 @@ end
 class read_password () = object(self)
   inherit [Zed_utf8.t] engine () as super
 
-  method stylise last =
+  method! stylise last =
     let text, pos = super#stylise last in
     for i = 0 to Array.length text - 1 do
-      let ch, style = text.(i) in
+      let _ch, style = text.(i) in
       text.(i) <- (UChar.of_char '*', style)
     done;
     (text, pos)
 
   method eval = Zed_rope.to_string (Zed_edit.text self#edit)
 
-  method show_box = false
+  method! show_box = false
 
-  method send_action = function
+  method! send_action = function
     | Prev_search | Next_search -> ()
     | action -> super#send_action action
 end
@@ -712,10 +706,10 @@ class ['a] read_keyword ?history () = object(self)
     let input = Zed_rope.to_string (Zed_edit.text self#edit) in
     try Rk_value(List.assoc input self#keywords) with Not_found -> Rk_error input
 
-  method completion =
+  method! completion =
     let word = Zed_rope.to_string self#input_prev in
-    let keywords = List.filter (fun (keyword, value) -> Zed_utf8.starts_with keyword word) self#keywords in
-    self#set_completion 0 (List.map (fun (keyword, value) -> (keyword, "")) keywords)
+    let keywords = List.filter (fun (keyword, _value) -> Zed_utf8.starts_with keyword word) self#keywords in
+    self#set_completion 0 (List.map (fun (keyword, _value) -> (keyword, "")) keywords)
 end
 
 (* +-----------------------------------------------------------------+
@@ -732,7 +726,7 @@ let rec drop count l =
     l
   else match l with
     | [] -> []
-    | e :: l -> drop (count - 1) l
+    | _ :: l -> drop (count - 1) l
 
 (* Computes the position of the cursor after printing the given styled
    string:
@@ -746,7 +740,7 @@ let rec compute_position cols pos text start stop =
   if start = stop then
     pos
   else
-    let ch, style = text.(start) in
+    let ch, _style = text.(start) in
     if ch = newline then
       compute_position cols { row = pos.row + 1; col = 0 } text (start + 1) stop
     else if pos.col = cols then
@@ -765,7 +759,7 @@ let rec get_index_of_last_displayed_word column columns index words =
   match words with
     | [] ->
         index - 1
-    | (word, suffix) :: words ->
+    | (word, _suffix) :: words ->
         let column = column + Zed_utf8.length word in
         if column <= columns - 1 then
           get_index_of_last_displayed_word (column + 1) columns (index + 1) words
@@ -1021,7 +1015,7 @@ object(self)
                 let rec loop idx col = function
                   | [] ->
                       ()
-                  | (word, suffix) :: words ->
+                  | (word, _suffix) :: words ->
                       let len = Zed_utf8.length word in
                       LTerm_draw.draw_string ctx 0 col word;
                       (* Apply the reverse style if this is the selected word. *)
@@ -1160,7 +1154,7 @@ object(self)
                     | { control = false; meta = false; shift = false; code = Char ch } ->
                         Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert ch)));
                         self#insert ch
-                    | { code = Char ch } when LTerm.windows term && UChar.code ch >= 32 ->
+                    | { code = Char ch; _ } when LTerm.windows term && UChar.code ch >= 32 ->
                         (* Windows reports Shift+A for A, ... *)
                         Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert ch)));
                         self#insert ch

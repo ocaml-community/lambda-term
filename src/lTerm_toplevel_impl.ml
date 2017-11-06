@@ -97,8 +97,8 @@ let focus_down (* root focused coord *) = focus_to (`down,down) avg_row
 class toplevel focused widget = object(self)
   inherit t "toplevel" as super
   val children = [widget]
-  method children = children
-  method draw ctx focused = widget#draw ctx focused
+  method! children = children
+  method! draw ctx focused = widget#draw ctx focused
 
   val mutable coord = { row = 0; col = 0 }
     (* Coordinates of the cursor inside the screen. *)
@@ -114,7 +114,7 @@ class toplevel focused widget = object(self)
     push_layer_handler <- E.map push_handler push_event;
     pop_layer_handler <- E.map pop_handler pop_event
 
-  method set_allocation rect =
+  method! set_allocation rect =
     super#set_allocation rect;
     widget#set_allocation rect;
     let rect = !focused#allocation in
@@ -145,8 +145,7 @@ class toplevel focused widget = object(self)
     | LTerm_event.Key { control = false; meta = false; shift = false; code = Down } ->
         self#move_focus focus_down;
         true
-
-    | other_event ->
+    | _ ->
         false
 
   initializer
