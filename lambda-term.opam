@@ -12,6 +12,7 @@ build: [
 depends: [
   "lwt"   {>= "2.7.0"}
   "lwt_react"
+  "react"
   "zed"   {>= "1.2"}
   "camomile"
   "lwt_react"
