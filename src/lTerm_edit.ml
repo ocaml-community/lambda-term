@@ -49,8 +49,8 @@ let actions = [
   Add_macro_counter, "add-macro-counter";
 ]
 
-let actions_to_names = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> Pervasives.compare a1 a2) actions)
-let names_to_actions = Array.of_list (List.sort (fun (a1, n1) (a2, n2) -> Pervasives.compare n1 n2) actions)
+let actions_to_names = Array.of_list (List.sort (fun (a1, _) (a2, _) -> Pervasives.compare a1 a2) actions)
+let names_to_actions = Array.of_list (List.sort (fun (_, n1) (_, n2) -> Pervasives.compare n1 n2) actions)
 
 let action_of_name x =
   let rec loop a b =
@@ -164,9 +164,9 @@ let dummy_cursor = Zed_edit.new_cursor dummy_engine
 let dummy_context = Zed_edit.context dummy_engine dummy_cursor
 let newline = UChar.of_char '\n'
 
-class scrollable = object(self)
+class scrollable = object
   inherit LTerm_widget.scrollable
-  method calculate_range page_size document_size = (document_size - page_size/2)
+  method! calculate_range page_size document_size = (document_size - page_size/2)
 end
 
 class edit ?(clipboard = clipboard) ?(macro = macro) ?(size = { cols = 1; rows = 1 }) () =
@@ -180,7 +180,7 @@ object(self)
   method clipboard = clipboard
   method macro = macro
 
-  method can_focus = true
+  method! can_focus = true
 
   val mutable engine = dummy_engine
   method engine = engine
@@ -196,13 +196,13 @@ object(self)
   val mutable style = LTerm_style.none
   val mutable marked_style = LTerm_style.none
   val mutable current_line_style = LTerm_style.none
-  method update_resources =
+  method! update_resources =
     let rc = self#resource_class and resources = self#resources in
     style <- LTerm_resources.get_style rc resources;
     marked_style <- LTerm_resources.get_style (rc ^ ".marked") resources;
     current_line_style <- LTerm_resources.get_style (rc ^ ".current-line") resources
 
-  method editable pos len = true
+  method editable _pos _len = true
   method match_word text pos = match_by_regexp regexp_word text pos
   method locale = S.value locale
   method set_locale locale = set_locale locale
@@ -364,7 +364,7 @@ object(self)
   )
 
 
-  method draw ctx focused =
+  method! draw ctx _focused =
     let open LTerm_draw in
 
     let size = LTerm_draw.size ctx in
@@ -431,7 +431,7 @@ object(self)
       end else
         draw_line row 0 zip
 
-    and draw_eoi row =
+    and draw_eoi _row =
       ()
     in
 
@@ -490,7 +490,7 @@ object(self)
       end
     end
 
-  method cursor_position =
+  method! cursor_position =
     let line_set = Zed_edit.lines engine in
     let cursor_offset = Zed_cursor.get_position cursor in
     let cursor_line = Zed_lines.line_index line_set cursor_offset in

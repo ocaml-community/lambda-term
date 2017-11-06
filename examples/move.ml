@@ -8,32 +8,31 @@
  *)
 
 open Lwt
-open Lwt_react
 open LTerm_geom
 open LTerm_text
 open LTerm_key
 
 let rec loop ui coord =
   LTerm_ui.wait ui >>= function
-    | LTerm_event.Key{ code = Up } ->
+    | LTerm_event.Key{ code = Up; _ } ->
         coord := { !coord with row = !coord.row - 1 };
         LTerm_ui.draw ui;
         loop ui coord
-    | LTerm_event.Key{ code = Down } ->
+    | LTerm_event.Key{ code = Down; _ } ->
         coord := { !coord with row = !coord.row + 1 };
         LTerm_ui.draw ui;
         loop ui coord
-    | LTerm_event.Key{ code = Left } ->
+    | LTerm_event.Key{ code = Left; _ } ->
         coord := { !coord with col = !coord.col - 1 };
         LTerm_ui.draw ui;
         loop ui coord
-    | LTerm_event.Key{ code = Right } ->
+    | LTerm_event.Key{ code = Right; _ } ->
         coord := { !coord with col = !coord.col + 1 };
         LTerm_ui.draw ui;
         loop ui coord
-    | LTerm_event.Key{ code = Escape } ->
+    | LTerm_event.Key{ code = Escape; _ } ->
         return ()
-    | ev ->
+    | _ ->
         loop ui coord
 
 let draw ui matrix coord =

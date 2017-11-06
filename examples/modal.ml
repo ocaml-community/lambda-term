@@ -1,5 +1,3 @@
-open Lwt
-open Lwt_react
 open LTerm_widget
 
 let main () =

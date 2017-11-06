@@ -8,15 +8,8 @@
  *)
 
 open CamomileLibraryDyn.Camomile
-open Lwt_react
 open LTerm_geom
 open LTerm_draw
-open LTerm_key
-open LTerm_style
-open LTerm_text
-open LTerm_widget_callbacks
-
-let return, (>>=) = Lwt.return, Lwt.(>>=)
 
 (* +-----------------------------------------------------------------+
    | The widget class                                                |
@@ -51,10 +44,10 @@ class label initial_text = object(self)
   val mutable text = initial_text
 
   val mutable size_request = text_size initial_text
-  method size_request = size_request
+  method! size_request = size_request
 
   val mutable style = LTerm_style.none
-  method update_resources =
+  method! update_resources =
     style <- LTerm_resources.get_style self#resource_class self#resources
 
   method text = text
@@ -66,8 +59,8 @@ class label initial_text = object(self)
   val mutable alignment = H_align_center
   method set_alignment a = alignment <- a
 
-  method draw ctx focused =
-    let { rows } = LTerm_draw.size ctx in
+  method! draw ctx _focused =
+    let { rows ; _ } = LTerm_draw.size ctx in
     let row = (rows - size_request.rows) / 2 in
     LTerm_draw.fill_style ctx style;
     LTerm_draw.draw_string_aligned ctx row alignment text
@@ -91,7 +84,7 @@ class modal_frame = LTerm_containers_impl.modal_frame
 class spacing ?(rows=0) ?(cols=0) () = object
   inherit t "glue"
   val size_request = { rows; cols }
-  method size_request = size_request
+  method! size_request = size_request
 end
 
 (* +-----------------------------------------------------------------+
@@ -102,17 +95,17 @@ class hline = object(self)
   inherit t "hline"
 
   val size_request = { rows = 1; cols = 0 }
-  method size_request = size_request
+  method! size_request = size_request
 
   val mutable style = LTerm_style.none
   val mutable connection = LTerm_draw.Light
-  method update_resources =
+  method! update_resources =
     let rc = self#resource_class and resources = self#resources in
     style <- LTerm_resources.get_style rc resources;
     connection <- LTerm_resources.get_connection (rc ^ ".connection") resources
 
-  method draw ctx focused =
-    let { rows } = LTerm_draw.size ctx in
+  method! draw ctx _focused =
+    let { rows ; _ } = LTerm_draw.size ctx in
     LTerm_draw.fill_style ctx style;
     draw_hline ctx (rows / 2) 0 (LTerm_draw.size ctx).cols connection
 end
@@ -121,17 +114,17 @@ class vline = object(self)
   inherit t "vline"
 
   val size_request = { rows = 0; cols = 1 }
-  method size_request = size_request
+  method! size_request = size_request
 
   val mutable style = LTerm_style.none
   val mutable connection = LTerm_draw.Light
-  method update_resources =
+  method! update_resources =
     let rc = self#resource_class and resources = self#resources in
     style <- LTerm_resources.get_style rc resources;
     connection <- LTerm_resources.get_connection (rc ^ ".connection") resources
 
-  method draw ctx focused =
-    let { cols } = LTerm_draw.size ctx in
+  method! draw ctx _focused =
+    let { cols ; _ } = LTerm_draw.size ctx in
     LTerm_draw.fill_style ctx style;
     draw_vline ctx 0 (cols / 2) (LTerm_draw.size ctx).rows connection
 end

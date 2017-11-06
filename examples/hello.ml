@@ -7,7 +7,6 @@
  * This file is a part of Lambda-Term.
  *)
 
-open Lwt_react
 open Lwt
 
 let main () =
@@ -19,7 +18,7 @@ let main () =
   vbox#add (new LTerm_widget.label "Hello, world!");
   vbox#add (new LTerm_widget.label "Press escape to exit.");
   vbox#on_event (function
-                   | LTerm_event.Key { LTerm_key.code = LTerm_key.Escape } -> wakeup wakener (); true
+                   | LTerm_event.Key { LTerm_key.code = LTerm_key.Escape; _ } -> wakeup wakener (); true
                    | _ -> false);
 
   (* Run. *)

@@ -9,7 +9,6 @@
 
 open CamomileLibraryDyn.Camomile
 open LTerm_geom
-open LTerm_style
 
 let unsafe_get matrix line column =
   Array.unsafe_get (Array.unsafe_get matrix line) column

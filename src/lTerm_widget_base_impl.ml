@@ -59,7 +59,7 @@ end = object(self)
     queue_draw <- f;
     List.iter (fun w -> w#set_queue_draw f) self#children
 
-  method draw (ctx : LTerm_draw.context) (focused : t) = ()
+  method draw (_ : LTerm_draw.context) (_focused : t) = ()
   method cursor_position = None
 
   val mutable allocation = { row1 = 0; col1 = 0; row2 = 0; col2 = 0 }

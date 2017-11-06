@@ -382,7 +382,7 @@ let parse_escape escape_time st =
     get () >>= function
       | '0' .. '9' | ';' | '[' ->
           loop ()
-      | ch ->
+      | _ ->
           return (Buffer.contents buf)
   in
 

@@ -123,11 +123,11 @@ let () =
    | Creation                                                        |
    +-----------------------------------------------------------------+ *)
 
-let default_model, term_defined =
+let default_model =
   try
-    (Sys.getenv "TERM", true)
+    Sys.getenv "TERM"
   with Not_found ->
-    ("dumb", false)
+    "dumb"
 
 let colors_of_term = function
   | "Eterm-256color" -> 256
@@ -304,7 +304,7 @@ let size term =
 let get_size term =
   Lwt.catch (fun () -> return (size term)) Lwt.fail
 
-let set_size term size = Lwt.fail (Failure "LTerm.set_size is deprecated")
+let set_size _ _ = Lwt.fail (Failure "LTerm.set_size is deprecated")
 
 (* +-----------------------------------------------------------------+
    | Events                                                          |

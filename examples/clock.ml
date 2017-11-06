@@ -7,7 +7,6 @@
  * This file is a part of Lambda-Term.
  *)
 
-open Lwt_react
 open Lwt
 open LTerm_widget
 

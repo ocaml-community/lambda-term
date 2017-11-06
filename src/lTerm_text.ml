@@ -72,7 +72,7 @@ let of_string_maybe_invalid str =
 
 let to_string txt =
   let buf = Buffer.create (Array.length txt) in
-  Array.iter (fun (ch, style) -> Buffer.add_string buf (Zed_utf8.singleton ch)) txt;
+  Array.iter (fun (ch, _style) -> Buffer.add_string buf (Zed_utf8.singleton ch)) txt;
   Buffer.contents buf
 
 let of_rope rope =
@@ -90,7 +90,7 @@ let of_rope rope =
 
 let to_rope txt =
   let buf = Zed_rope.Buffer.create () in
-  Array.iter (fun (ch, style) -> Zed_rope.Buffer.add buf ch) txt;
+  Array.iter (fun (ch, _style) -> Zed_rope.Buffer.add buf ch) txt;
   Zed_rope.Buffer.contents buf
 
 let stylise str style =
