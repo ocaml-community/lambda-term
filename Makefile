@@ -2,7 +2,7 @@ INSTALL_ARGS := $(if $(PREFIX),--prefix $(PREFIX),)
 
 .PHONY: all
 all:
-	jbuilder build @install
+	jbuilder build --dev @install @examples/all
 
 .PHONY: examples
 examples:
@@ -31,9 +31,8 @@ test:
 
 .PHONY: all-supported-ocaml-versions
 all-supported-ocaml-versions:
-	jbuilder runtest --workspace jbuild-workspace.dev
+	jbuilder build @install @examples/all @runtest --dev --workspace jbuild-workspace.dev
 
 .PHONY: clean
 clean:
-	rm -rf _build *.install
-	find . -name .merlin -delete
+	jbuilder clean
