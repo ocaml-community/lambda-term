@@ -21,7 +21,8 @@
           read_password
           read_yes_no
           editor))
-  (libraries (lambda-term str))))
+  (libraries (lambda-term str))
+  (flags (:standard -safe-string))))
 
 (alias
  ((name all)
