@@ -1,8 +1,9 @@
 INSTALL_ARGS := $(if $(PREFIX),--prefix $(PREFIX),)
+FLAGS ?= --dev
 
 .PHONY: all
 all:
-	jbuilder build --dev @install @examples/all
+	jbuilder build $(FLAGS) @install @examples/all
 
 .PHONY: examples
 examples:
@@ -31,7 +32,7 @@ test:
 
 .PHONY: all-supported-ocaml-versions
 all-supported-ocaml-versions:
-	jbuilder build @install @examples/all @runtest --dev --workspace jbuild-workspace.dev
+	jbuilder build @install @examples/all @runtest $(FLAGS) --workspace jbuild-workspace.dev
 
 .PHONY: clean
 clean:
