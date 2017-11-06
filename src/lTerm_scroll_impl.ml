@@ -223,7 +223,7 @@ class virtual scrollbar
       (match LTerm_resources.get (rc ^ ".barstyle") resources with
       | "filled" -> `filled
       | "outline" | "" -> `outline
-      | str -> Printf.ksprintf failwith "invalid scrollbar style");
+      | style -> Printf.ksprintf failwith "invalid scrollbar style %s" style);
     show_track <- 
       (match LTerm_resources.get_bool (rc ^ ".track") resources with
       | Some(x) -> x
