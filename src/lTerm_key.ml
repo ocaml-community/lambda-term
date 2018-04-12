@@ -14,7 +14,7 @@ module String = struct
   include String
 end
 
-open CamomileLibraryDyn.Camomile
+open CamomileLibraryDefault.Camomile
 
 type code =
   | Char of UChar.t

@@ -7,7 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDyn.Camomile
+open CamomileLibraryDefault.Camomile
 open LTerm_geom
 open LTerm_key
 open LTerm_mouse
@@ -76,7 +76,7 @@ class button ?(brackets=("< "," >")) initial_label =
     let { rows; cols } = LTerm_draw.size ctx in
     let len = Zed_utf8.length label in
     self#apply_style ctx focused;
-    LTerm_draw.draw_string ctx (rows / 2) ((cols - len - brackets_size) / 2) 
+    LTerm_draw.draw_string ctx (rows / 2) ((cols - len - brackets_size) / 2)
       (Printf.sprintf "%s%s%s" bl label br)
 end
 
@@ -87,17 +87,17 @@ class checkbutton initial_label initial_state = object(self)
 
   initializer
     self#on_event (fun ev ->
-      let update () = 
+      let update () =
         state <- not state;
         (* checkbutton changes the state when clicked, so has to be redrawn *)
         self#queue_draw;
         exec_callbacks click_callbacks ();
         true
       in
-      match ev with 
+      match ev with
         | LTerm_event.Key { control = false; meta = false; shift = false; code }
           when (code = Enter || code = space) -> update ()
-        | LTerm_event.Mouse m 
+        | LTerm_event.Mouse m
           when m.button = Button1 -> update ()
         | _ ->
             false);
@@ -157,7 +157,7 @@ class ['a] radiobutton (group : 'a radiogroup) initial_label (id : 'a) = object(
   initializer
     self#on_event
     (fun ev ->
-      let update () = 
+      let update () =
         if state
         (* no need to do anything if the button is on already *)
         then ()

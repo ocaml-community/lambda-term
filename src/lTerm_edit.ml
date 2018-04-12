@@ -7,7 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDyn.Camomile
+open CamomileLibraryDefault.Camomile
 open Zed_edit
 open LTerm_key
 open LTerm_geom
@@ -217,10 +217,10 @@ object(self)
   val mutable start = 0
   val mutable start_line = 0
   val mutable size = size
-  
+
   method! size_request = size
 
-  method private update_window_position = 
+  method private update_window_position =
     let line_set = Zed_edit.lines engine in
     let line_count = Zed_lines.count line_set in
     let cursor_offset = Zed_cursor.get_position cursor in
@@ -266,7 +266,7 @@ object(self)
     cursor <- Zed_edit.new_cursor engine;
     context <- Zed_edit.context engine cursor;
     Zed_edit.set_data engine (self :> edit);
-    event <- E.map (fun _ -> 
+    event <- E.map (fun _ ->
       self#update_window_position;
       self#queue_draw) (Zed_edit.update engine [cursor]);
     self#on_event
@@ -341,8 +341,8 @@ object(self)
     start <- 0; shift <- 0; start_line <- 0;
     self#update_window_position
 
-  initializer vscroll#on_offset_change (fun n -> 
- 
+  initializer vscroll#on_offset_change (fun n ->
+
     (* find what line the cursor is currently on. *)
     let line_set = Zed_edit.lines engine in
     let cursor_offset = Zed_cursor.get_position cursor in
@@ -350,7 +350,7 @@ object(self)
 
     start_line <- n;
     start <- Zed_lines.line_start line_set start_line;
-    
+
     if cursor_line < start_line then begin
       let d = start_line - cursor_line in
       Zed_edit.move_line context d (* first row *)

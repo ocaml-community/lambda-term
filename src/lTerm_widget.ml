@@ -7,7 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDyn.Camomile
+open CamomileLibraryDefault.Camomile
 open LTerm_geom
 open LTerm_draw
 
@@ -155,7 +155,7 @@ class type scrollable_adjustment = object
   method set_mouse_mode : [ `middle | `ratio | `auto ] -> unit
   method set_min_scroll_bar_size : int -> unit
   method set_max_scroll_bar_size : int -> unit
-  method on_scrollbar_change : ?switch:LTerm_widget_callbacks.switch -> 
+  method on_scrollbar_change : ?switch:LTerm_widget_callbacks.switch ->
     (unit -> unit) -> unit
 end
 
