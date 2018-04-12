@@ -7,7 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDyn.Camomile
+open CamomileLibraryDefault.Camomile
 open LTerm_key
 
 let return, (>>=), (>|=) = Lwt.return, Lwt.(>>=), Lwt.(>|=)
