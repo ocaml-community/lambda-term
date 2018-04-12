@@ -4,13 +4,19 @@
  ((name lambda_term)
   (public_name lambda-term)
   (wrapped false)
-  (libraries (lwt lwt.unix lwt_react zed))
+  (libraries
+   (lwt lwt_react zed
+    (select lTerm_sequence.ml from
+     (lwt.unix -> lTerm_sequence_lwt3.ml)
+     (lwt-unix -> lTerm_sequence_lwt4.ml))
+    (select lTerm_sequence.mli from
+     (lwt.unix -> lTerm_sequence_lwt3.mli)
+     (lwt-unix -> lTerm_sequence_lwt4.mli))))
   (flags (:standard -safe-string))
   (synopsis "Cross-platform library for terminal manipulation")
   (c_names (lTerm_term_stubs lTerm_unix_stubs lTerm_windows_stubs))
   (c_flags         (:standard (:include c_flags)))
-  (c_library_flags (:standard (:include c_library_flags)))
-  ))
+  (c_library_flags (:standard (:include c_library_flags)))))
 
 (ocamllex (lTerm_inputrc lTerm_resource_lexer))
 
