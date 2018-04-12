@@ -10,14 +10,14 @@
 type switch
   (** Switches are used to stop signals. *)
 
-val register : switch option -> 'a Lwt_sequence.t -> 'a -> unit
+val register : switch option -> 'a LTerm_sequence.t -> 'a -> unit
   (** *)
 
 val stop : switch -> unit
   (** *)
 
-val exec_callbacks : ('a -> unit) Lwt_sequence.t -> 'a -> unit
+val exec_callbacks : ('a -> unit) LTerm_sequence.t -> 'a -> unit
   (** [apply_callbacks callbacks x] *)
 
-val exec_filters : ('a -> bool) Lwt_sequence.t -> 'a -> bool
+val exec_filters : ('a -> bool) LTerm_sequence.t -> 'a -> bool
 

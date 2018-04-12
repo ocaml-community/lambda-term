@@ -18,12 +18,12 @@ type switch = { mutable switch_state : (unit -> unit) list option }
 let register switch_opt seq f =
   match switch_opt with
     | None ->
-        ignore (Lwt_sequence.add_l f seq)
+        ignore (LTerm_sequence.add_l f seq)
     | Some switch ->
         match switch.switch_state with
           | Some l ->
-              let node = Lwt_sequence.add_l f seq in
-              switch.switch_state <- Some ((fun () -> Lwt_sequence.remove node) :: l)
+              let node = LTerm_sequence.add_l f seq in
+              switch.switch_state <- Some ((fun () -> LTerm_sequence.remove node) :: l)
           | None ->
               ()
 
@@ -36,7 +36,7 @@ let stop switch =
         ()
 
 let exec_callbacks seq x =
-  Lwt_sequence.iter_l
+  LTerm_sequence.iter_l
     (fun f ->
        try
          f x
@@ -45,7 +45,7 @@ let exec_callbacks seq x =
     seq
 
 let exec_filters seq x =
-  Lwt_sequence.fold_l
+  LTerm_sequence.fold_l
     (fun f acc ->
        if acc then
          true
