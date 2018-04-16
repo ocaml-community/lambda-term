@@ -14,6 +14,9 @@ let section = Lwt_log.Section.make "lambda-term(widget_callbacks)"
    +-----------------------------------------------------------------+ *)
 
 type switch = { mutable switch_state : (unit -> unit) list option }
+type 'a callbacks = 'a Lwt_sequence.t
+
+let create () = Lwt_sequence.create ()
 
 let register switch_opt seq f =
   match switch_opt with
