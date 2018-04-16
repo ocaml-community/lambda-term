@@ -4,7 +4,7 @@
  ((name lambda_term)
   (public_name lambda-term)
   (wrapped false)
-  (libraries (lwt lwt.unix lwt_react zed))
+  (libraries (lwt lwt.unix lwt_react zed lwt_log))
   (flags (:standard -safe-string))
   (synopsis "Cross-platform library for terminal manipulation")
   (c_names (lTerm_term_stubs lTerm_unix_stubs lTerm_windows_stubs))
