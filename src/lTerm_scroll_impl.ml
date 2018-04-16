@@ -20,7 +20,7 @@ let map_range range1 range2 offset1 =
 class adjustment = object(self)
 
   (* callbacks *)
-  val offset_change_callbacks = Lwt_sequence.create ()
+  val offset_change_callbacks = LTerm_widget_callbacks.create ()
   method on_offset_change ?switch (f : int -> unit) =
     LTerm_widget_callbacks.register switch offset_change_callbacks f
 
@@ -46,7 +46,7 @@ end
 class scrollable_adjustment = object(self)
   inherit adjustment as adj
 
-  val scrollbar_change_callbacks = Lwt_sequence.create ()
+  val scrollbar_change_callbacks = LTerm_widget_callbacks.create ()
   method on_scrollbar_change ?switch (f : unit -> unit) =
     LTerm_widget_callbacks.register switch scrollbar_change_callbacks f
 

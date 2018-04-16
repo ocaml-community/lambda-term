@@ -66,7 +66,7 @@ end = object(self)
   method allocation = allocation
   method set_allocation rect = allocation <- rect
 
-  val event_filters = Lwt_sequence.create ()
+  val event_filters = LTerm_widget_callbacks.create ()
 
   method send_event ev =
     if not (exec_filters event_filters ev) then

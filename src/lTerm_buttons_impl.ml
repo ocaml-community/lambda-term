@@ -28,7 +28,7 @@ class button ?(brackets=("< "," >")) initial_label =
 
   method! can_focus = true
 
-  val click_callbacks = Lwt_sequence.create ()
+  val click_callbacks = LTerm_widget_callbacks.create ()
 
   method on_click ?switch f =
     register switch click_callbacks f
@@ -121,7 +121,7 @@ end
 
 class ['a] radiogroup  = object
 
-  val state_change_callbacks = Lwt_sequence.create ()
+  val state_change_callbacks = LTerm_widget_callbacks.create ()
 
   method on_state_change ?switch f =
     register switch state_change_callbacks f
