@@ -22,9 +22,7 @@ type input =
   | Key of LTerm_key.t
   | Mouse of LTerm_mouse.t
 
-external read_console_input_job : Unix.file_descr -> [ `read_console_input ] Lwt_unix.job = "lt_windows_read_console_input_job"
-external read_console_input_result : [ `read_console_input ] Lwt_unix.job -> input = "lt_windows_read_console_input_result"
-external read_console_input_free : [ `read_console_input ] Lwt_unix.job -> unit = "lt_windows_read_console_input_free"
+external read_console_input_job : Unix.file_descr -> input Lwt_unix.job = "lt_windows_read_console_input_job"
 
 let controls = [|
   UChar.of_char ' ';
@@ -63,10 +61,8 @@ let controls = [|
 
 let read_console_input fd =
   Lwt_unix.check_descriptor fd;
-  Lwt_unix.execute_job ?async_method:None
-    ~job:(read_console_input_job (Lwt_unix.unix_file_descr fd))
-    ~result:read_console_input_result
-    ~free:read_console_input_free
+  Lwt_unix.run_job ?async_method:None
+   (read_console_input_job (Lwt_unix.unix_file_descr fd))
   >|= function
   | Key({ LTerm_key.code = LTerm_key.Char ch ; _ } as key) when UChar.code ch < 32 ->
     Key { key with LTerm_key.code = LTerm_key.Char controls.(UChar.code ch) }
