@@ -34,10 +34,10 @@ let () =
   };
   (* Read and print key sequences. *)
   print_endline "press 'q' to quit";
-  let buf = String.create 128 in
+  let buf = Bytes.create 128 in
   let rec loop () =
-    let n = Unix.read Unix.stdin buf 0 (String.length buf) in
-    let s = String.sub buf 0 n in
+    let n = Unix.read Unix.stdin buf 0 (Bytes.length buf) in
+    let s = Bytes.to_string (Bytes.sub buf 0 n) in
     print_endline (String.escaped s);
     if s <> "q" then loop ()
   in
