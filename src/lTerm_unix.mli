@@ -9,7 +9,7 @@
 
 (** Unix specific functions *)
 
-open CamomileLibraryDyn.Camomile
+open CamomileLibraryDefault.Camomile
 
 val sigwinch : int option
   (** The number of the signal used to indicate that the terminal size
