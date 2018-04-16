@@ -7,7 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDyn.Camomile
+open CamomileLibraryDefault.Camomile
 open Lwt_react
 open LTerm_geom
 open LTerm_style

@@ -7,7 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDyn.Camomile
+open CamomileLibraryDefault.Camomile
 open LTerm_style
 
 type t = (UChar.t * LTerm_style.t) array

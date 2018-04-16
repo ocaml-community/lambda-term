@@ -7,7 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDyn.Camomile
+open CamomileLibraryDefault.Camomile
 open LTerm_geom
 
 let unsafe_get matrix line column =
