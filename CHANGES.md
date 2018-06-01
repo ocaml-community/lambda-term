@@ -1,9 +1,15 @@
+1.13 (2018-06-01)
+-----------------
+
+* Make lambda-term compatible with Lwt 4 and Camomile 1 (#63,
+  @ncihnegn)
+
 1.12 (2017-11-05)
------------
+-----------------
 
 * Fix: copy & pasting the terminal output doesn't adds many spaces
   after the end of lines (#52, Deokhwan Kim, fixes diml/utop#186)
-  
+
 * -safe-string compatibility (#54)
 
 1.11 (2017-04-04)
