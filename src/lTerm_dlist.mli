@@ -1,0 +1,72 @@
+(* Lightweight thread library for OCaml
+ * http://www.ocsigen.org/lwt
+ * Interface Lwt_sequence
+ * Copyright (C) 2009 Jérémie Dimino
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, with linking exceptions;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. See COPYING file for details.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *)
+
+(** Mutable sequence of elements (deprecated) *)
+
+(** A sequence is an object holding a list of elements which support
+    the following operations:
+
+    - adding an element to the left or the right in time and space O(1)
+    - taking an element from the left or the right in time and space O(1)
+    - removing a previously added element from a sequence in time and space O(1)
+    - removing an element while the sequence is being transversed.
+
+   @deprecated This module should be an internal implementation detail of Lwt,
+   and may be removed from the API at some point in the future. Use any other
+   doubly-linked list library as an alternative.
+*)
+
+type 'a t
+  (** Type of a sequence holding values of type ['a] *)
+
+type 'a node
+  (** Type of a node holding one value of type ['a] in a sequence *)
+
+(** {2 Operation on nodes} *)
+
+val remove : 'a node -> unit
+  (** Removes a node from the sequence it is part of. It does nothing
+      if the node has already been removed. *)
+
+(** {2 Operations on sequence} *)
+
+val create : unit -> 'a t
+  (** [create ()] creates a new empty sequence *)
+
+val add_l : 'a -> 'a t -> 'a node
+  (** [add_l x s] adds [x] to the left of the sequence [s] *)
+
+(** {2 Sequence iterators} *)
+
+(** Note: it is OK to remove a node while traversing a sequence *)
+
+val iter_l : ('a -> unit) -> 'a t -> unit
+  (** [iter_l f s] applies [f] on all elements of [s] starting from
+      the left *)
+
+val fold_l : ('a -> 'b -> 'b) -> 'a t -> 'b -> 'b
+  (** [fold_l f s] is:
+      {[
+        fold_l f s x = f en (... (f e2 (f e1 x)))
+      ]}
+      where [e1], [e2], ..., [en] are the elements of [s]
+  *)
