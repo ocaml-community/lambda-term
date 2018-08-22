@@ -1,0 +1,3 @@
+(install
+  (section share_root)
+  (files lambda-term-inputrc lambda-termrc))
