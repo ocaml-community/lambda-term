@@ -1,6 +1,8 @@
 Lambda-Term
 ===========
 
+[![Build Status](https://travis-ci.org/ocaml-community/lambda-term.svg?branch=master)](https://travis-ci.org/ocaml-community/lambda-term)
+
 Lambda-Term is a cross-platform library for manipulating the
 terminal. It provides an abstraction for keys, mouse events, colors,
 as well as a set of widgets to write curses-like applications.
