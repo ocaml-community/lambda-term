@@ -1,0 +1,5 @@
+(executable
+ (name asciiart)
+ (libraries lambda-term
+             camlimages.png
+             camlimages.jpeg))

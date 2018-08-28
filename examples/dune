@@ -1,0 +1,31 @@
+(executables
+ (names double_editor
+        events
+        colors
+        colors_256
+        rgb
+        move
+        hello
+        clock
+        buttons
+        focus
+        scroll
+        scroll_debug
+        checkbuttons
+        radiobuttons
+        shell
+        repl
+        modal
+        read_password
+        read_yes_no
+        editor)
+ (libraries lambda-term str)
+ (flags :standard -safe-string))
+
+(alias
+ (name all)
+ (deps (glob_files *.exe)))
+
+(alias
+ (name all.bc)
+ (deps (glob_files *.bc)))

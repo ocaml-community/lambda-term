@@ -20,38 +20,44 @@ Installation
 
 To build and install Lambda-Term:
 
-    $ make
-    $ make install
+    $ dune build
+    $ dune install
 
-### Documentation and manual pages _(optional)_
+Note that this will build Lambda-Term using the development build
+profile which has strict compilation flags. If the build fails, try
+passing `--profile=release` to `dune` or alternatively create a
+`dune-workspace` file with the following contents:
 
-_This part hasn't been ported to jbuilder yet_
+    (lang dune 1.1)
+    (profile release)
+
+### HTML API Documentation _(optional)_
 
 To build the documentation:
 
-    $ make doc
+    $ dune build @doc
 
-It will then be installed by `make install`.
+You can then consult it by openning
+`_build/default/_doc/_html/index.html`.
 
 ### Tests _(optional)_
 
 To build and execute tests:
 
-    $ make test
+    $ dune runtest
 
 ### Examples _(optional)_
 
-To build examples:
+To build the examples:
 
-    $ make examples
+    $ dune build @examples
 
 Binaries for the examples will be in `_build/default/examples`.
 
-To build the `asciiart` example:
+The `asciiart` example is not built by default as it as an additional
+dependency on the `camlimages` library. To build it run:
 
-    $ make asciiart
-
-Note that it requires the `camlimages` library.
+    $ dune build examples/asciiart/asciiart.exe
 
 Terminal emulators compatibility
 --------------------------------

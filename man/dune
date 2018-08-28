@@ -1,0 +1,4 @@
+(install
+ (section man)
+ (files lambda-term-actions.1
+        lambda-term-inputrc.5))

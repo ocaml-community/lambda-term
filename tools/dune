@@ -1,0 +1,5 @@
+(executable
+ (name lambda_term_actions)
+ (flags :standard -safe-string)
+ (public_name lambda-term-actions)
+ (libraries lambda-term))
