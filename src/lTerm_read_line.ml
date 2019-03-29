@@ -17,7 +17,7 @@ let return, (>>=) = Lwt.return, Lwt.(>>=)
 
 exception Interrupt
 type prompt = LTerm_text.t
-type history = Zed_utf8.t list
+type history = Zed_string.t list
 
 (* +-----------------------------------------------------------------+
    | Completion                                                      |
@@ -40,6 +40,24 @@ let common_prefix_one a b =
 let common_prefix = function
   | [] -> ""
   | word :: rest -> List.fold_left common_prefix_one word rest
+
+let zed_common_prefix_one a b =
+  let rec loop ofs =
+    if ofs = Zed_string.length a || ofs = Zed_string.length b then
+      Zed_string.sub a 0 ofs
+    else
+      let ch1= Zed_string.get a ofs
+      and ch2= Zed_string.get b ofs in
+      if ch1 = ch2 then
+        loop (ofs + 1)
+      else
+        Zed_string.sub a 0 ofs
+  in
+  loop 0
+
+let zed_common_prefix = function
+  | [] -> Zed_string.empty ()
+  | word :: rest -> List.fold_left zed_common_prefix_one word rest
 
 let lookup word words = List.filter (fun word' -> Zed_utf8.starts_with word' word) words
 let lookup_assoc word words = List.filter (fun (word', _) -> Zed_utf8.starts_with word' word) words
@@ -196,10 +214,10 @@ let () =
    +-----------------------------------------------------------------+ *)
 
 let is_prefix ~prefix s =
-  String.length prefix <= String.length s &&
+  Zed_string.length prefix <= Zed_string.length s &&
   (let i = ref 0 in
-   while !i < String.length prefix && s.[!i] = prefix.[!i] do incr i done;
-   !i = String.length prefix
+   while !i < Zed_string.length prefix && Zed_string.get s  !i = Zed_string.get prefix  !i do incr i done;
+   !i = Zed_string.length prefix
   )
 
 let history_find predicate history =
@@ -215,18 +233,19 @@ let history_find predicate history =
 
 let search_string str sub =
   let rec equal_at a b =
-    (b = String.length sub) || (String.unsafe_get str a = String.unsafe_get sub b) && equal_at (a + 1) (b + 1)
+    (b = Zed_string.length sub) ||
+    (Zed_string.get str a = Zed_string.get sub b) && equal_at (a + 1) (b + 1)
   in
-  let rec loop ofs idx =
-    if ofs + String.length sub > String.length str then
+  let rec loop idx=
+    if idx + Zed_string.length sub > Zed_string.length str then
       None
     else
-      if equal_at ofs 0 then
+      if equal_at idx 0 then
         Some idx
       else
-        loop (Zed_utf8.unsafe_next str ofs) (idx + 1)
+        loop (idx + 1)
   in
-  loop 0 0
+  loop 0
 
 let macro = Zed_macro.create []
 
@@ -240,7 +259,7 @@ type completion_state = {
   start : int; (* Beginning of the word being completed *)
   index : int; (* Index of the selected in [words]      *)
   count : int; (* Length of [words]                     *)
-  words : (Zed_utf8.t * Zed_utf8.t) list;
+  words : (Zed_string.t * Zed_string.t) list;
 }
 
 let no_completion = {
@@ -253,9 +272,9 @@ let no_completion = {
 type direction = Forward | Backward
 
 type search_status =
-  { before : Zed_utf8.t list
-  ; after  : Zed_utf8.t list
-  ; match_ : (Zed_utf8.t * int) option
+  { before : Zed_string.t list
+  ; after  : Zed_string.t list
+  ; match_ : (Zed_string.t * int) option
   }
 
 class virtual ['a] engine ?(history = []) ?(clipboard = LTerm_edit.clipboard) ?(macro = macro) () =
@@ -282,7 +301,7 @@ class virtual ['a] engine ?(history = []) ?(clipboard = LTerm_edit.clipboard) ?(
     let ev, send = E.create () in
     let edit_changes = Zed_edit.changes edit in
     let edit_changes = E.map (fun _ -> Zed_edit.text edit) edit_changes in
-    let prefix = S.hold Zed_rope.empty (E.select [ev; edit_changes]) in
+    let prefix = S.hold (Zed_rope.empty ()) (E.select [ev; edit_changes]) in
     prefix, send
   in
 object(self)
@@ -300,7 +319,7 @@ object(self)
   val mutable completion_event = E.never
 
   (* Save for when setting the macro counter. *)
-  val mutable save = (0, Zed_rope.empty)
+  val mutable save = (0, Zed_rope.empty ())
 
   method set_completion ?(index=0) start words =
     let count = List.length words in
@@ -336,14 +355,20 @@ object(self)
     let comp = S.value completion_state in
     let prefix_length = Zed_edit.position context - comp.start in
     match comp.words with
-      | [] ->
-          ()
-      | [(completion, suffix)] ->
-          Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after completion prefix_length));
-          Zed_edit.insert context (Zed_rope.of_string suffix)
-      | (completion, _suffix) :: rest ->
-          let word = List.fold_left (fun acc (word, _) -> common_prefix_one acc word) completion rest in
-          Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after word prefix_length))
+    | [] -> ()
+    | [(completion, suffix)] ->
+      Zed_edit.insert context (Zed_rope.of_string
+        (Zed_string.sub completion prefix_length
+          (Zed_string.length completion - prefix_length)));
+      Zed_edit.insert context (Zed_rope.of_string suffix)
+    | (completion, _suffix) :: rest ->
+      let word = List.fold_left
+        (fun acc (word, _) -> zed_common_prefix_one acc word)
+        completion rest
+      in
+      Zed_edit.insert context (Zed_rope.of_string
+        (Zed_string.sub word prefix_length
+          (Zed_string.length word - prefix_length)))
 
   (* The event which search for the string in the history. *)
   val mutable search_event = E.never
@@ -375,7 +400,7 @@ object(self)
         match entries with
         | [] ->
           set_status other_entries entries None;
-          set_message (Some(LTerm_text.of_string "Reverse search: not found"))
+          set_message (Some(LTerm_text.of_utf8 "Reverse search: not found"))
         | entry :: rest ->
           match search_string entry input with
           | Some pos -> begin
@@ -390,7 +415,7 @@ object(self)
                   txt.(i) <- (ch, { style with underline = Some true })
                 done;
                 set_message
-                  (Some (Array.append (LTerm_text.of_string "Reverse search: ") txt))
+                  (Some (Array.append (LTerm_text.of_utf8 "Reverse search: ") txt))
             end
           | None ->
             loop (entry :: other_entries) rest
@@ -430,7 +455,7 @@ object(self)
       ()
 
   method insert ch =
-    Zed_edit.insert context (Zed_rope.singleton ch)
+    Zed_edit.insert_char context ch
 
   method send_action action =
     if action <> Edit LTerm_edit.Stop_macro then Zed_macro.add macro action;
@@ -485,7 +510,8 @@ object(self)
           if comp.words <> [] then begin
             let prefix_length = Zed_edit.position context - comp.start in
             let completion, suffix = List.nth comp.words comp.index in
-            Zed_edit.insert context (Zed_rope.of_string (Zed_utf8.after completion prefix_length));
+            Zed_edit.insert context (Zed_rope.of_string
+              (Zed_string.after completion prefix_length));
             Zed_edit.insert context (Zed_rope.of_string suffix)
           end
 
@@ -568,7 +594,7 @@ object(self)
           List.iter self#send_action (Zed_macro.contents macro)
 
       | Edit LTerm_edit.Insert_macro_counter ->
-          Zed_edit.insert context (Zed_rope.of_string (string_of_int (Zed_macro.get_counter macro)));
+          Zed_edit.insert context (Zed_rope.of_string (Zed_string_UTF8.to_t_exn (string_of_int (Zed_macro.get_counter macro))));
           Zed_macro.add_counter macro 1
 
       | Edit LTerm_edit.Set_macro_counter when S.value mode = Edition ->
@@ -577,7 +603,7 @@ object(self)
           Zed_edit.goto context 0;
           Zed_edit.remove context (Zed_rope.length text);
           set_mode Set_counter;
-          set_message (Some (LTerm_text.of_string "Enter a value for the macro counter."))
+          set_message (Some (LTerm_text.of_utf8 "Enter a value for the macro counter."))
 
       | Edit LTerm_edit.Add_macro_counter when S.value mode = Edition ->
           let text = Zed_edit.text edit in
@@ -585,7 +611,7 @@ object(self)
           Zed_edit.goto context 0;
           Zed_edit.remove context (Zed_rope.length text);
           set_mode Add_counter;
-          set_message (Some (LTerm_text.of_string "Enter a value to add to the macro counter."))
+          set_message (Some (LTerm_text.of_utf8 "Enter a value to add to the macro counter."))
 
       | Accept -> begin
           match S.value mode with
@@ -593,9 +619,9 @@ object(self)
                 ()
             | Set_counter ->
                 let pos, text = save in
-                save <- (0, Zed_rope.empty);
+                save <- (0, Zed_rope.empty ());
                 (try
-                   Zed_macro.set_counter macro (int_of_string (Zed_rope.to_string (Zed_edit.text edit)))
+                   Zed_macro.set_counter macro (int_of_string (Zed_string_UTF8.of_t (Zed_rope.to_string (Zed_edit.text edit))))
                  with Failure _ ->
                    ());
                 Zed_edit.goto context 0;
@@ -606,9 +632,9 @@ object(self)
                 set_message None
             | Add_counter ->
                 let pos, text = save in
-                save <- (0, Zed_rope.empty);
+                save <- (0, Zed_rope.empty ());
                 (try
-                   Zed_macro.add_counter macro (int_of_string (Zed_rope.to_string (Zed_edit.text edit)))
+                   Zed_macro.add_counter macro (int_of_string (Zed_string_UTF8.of_t (Zed_rope.to_string (Zed_edit.text edit))))
                  with Failure _ ->
                    ());
                 Zed_edit.goto context 0;
@@ -651,13 +677,13 @@ class virtual ['a] abstract = object
   method virtual clipboard : Zed_edit.clipboard
   method virtual macro : action Zed_macro.t
   method virtual stylise : bool -> LTerm_text.t * int
-  method virtual history : (Zed_utf8.t list * Zed_utf8.t list) signal
+  method virtual history : (Zed_string.t list * Zed_string.t list) signal
   method virtual message : LTerm_text.t option signal
   method virtual input_prev : Zed_rope.t
   method virtual input_next : Zed_rope.t
-  method virtual completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
+  method virtual completion_words : (Zed_string.t * Zed_string.t) list signal
   method virtual completion_index : int signal
-  method virtual set_completion : ?index:int -> int -> (Zed_utf8.t * Zed_utf8.t) list -> unit
+  method virtual set_completion : ?index:int -> int -> (Zed_string.t * Zed_string.t) list -> unit
   method virtual completion : unit
   method virtual complete : unit
   method virtual show_box : bool
@@ -669,18 +695,18 @@ end
    +-----------------------------------------------------------------+ *)
 
 class read_line ?history () = object(self)
-  inherit [Zed_utf8.t] engine ?history ()
+  inherit [Zed_string.t] engine ?history ()
   method eval = Zed_rope.to_string (Zed_edit.text self#edit)
 end
 
 class read_password () = object(self)
-  inherit [Zed_utf8.t] engine () as super
+  inherit [Zed_string.t] engine () as super
 
   method! stylise last =
     let text, pos = super#stylise last in
     for i = 0 to Array.length text - 1 do
       let _ch, style = text.(i) in
-      text.(i) <- (UChar.of_char '*', style)
+      text.(i) <- (Zed_char.unsafe_of_char '*', style)
     done;
     (text, pos)
 
@@ -695,7 +721,7 @@ end
 
 type 'a read_keyword_result =
   | Rk_value of 'a
-  | Rk_error of Zed_utf8.t
+  | Rk_error of Zed_string.t
 
 class ['a] read_keyword ?history () = object(self)
   inherit ['a read_keyword_result] engine ?history ()
@@ -708,18 +734,19 @@ class ['a] read_keyword ?history () = object(self)
 
   method! completion =
     let word = Zed_rope.to_string self#input_prev in
-    let keywords = List.filter (fun (keyword, _value) -> Zed_utf8.starts_with keyword word) self#keywords in
-    self#set_completion 0 (List.map (fun (keyword, _value) -> (keyword, "")) keywords)
+    let keywords = List.filter (fun (keyword, _value) -> Zed_string.starts_with ~prefix:word keyword) self#keywords in
+    self#set_completion 0 (List.map (fun (keyword, _value) -> (keyword, Zed_string.empty ())) keywords)
 end
 
 (* +-----------------------------------------------------------------+
    | Running in a terminal                                           |
    +-----------------------------------------------------------------+ *)
 
-let newline = UChar.of_char '\n'
+let newline_uChar = UChar.of_char '\n'
+let newline = Zed_char.unsafe_of_uChar @@ newline_uChar
 let vline = LTerm_draw.({ top = Light; bottom = Light; left = Blank; right = Blank })
 let reverse_style = { LTerm_style.none with LTerm_style.reverse = Some true }
-let default_prompt = LTerm_text.of_string "# "
+let default_prompt = LTerm_text.of_utf8 "# "
 
 let rec drop count l =
   if count <= 0 then
@@ -743,10 +770,12 @@ let rec compute_position cols pos text start stop =
     let ch, _style = text.(start) in
     if ch = newline then
       compute_position cols { row = pos.row + 1; col = 0 } text (start + 1) stop
-    else if pos.col = cols then
-      compute_position cols { row = pos.row + 1; col = 1 } text (start + 1) stop
     else
-      compute_position cols { pos with col = pos.col + 1 } text (start + 1) stop
+      let width= Zed_char.width ch in
+      if pos.col + width > cols then
+        compute_position cols { row = pos.row + 1; col = 1 } text (start + 1) stop
+      else
+        compute_position cols { pos with col = pos.col + max 0 width } text (start + 1) stop
 
 (* Return the "real" position of the cursor, i.e. on the screen. *)
 let real_pos cols pos =
@@ -760,11 +789,22 @@ let rec get_index_of_last_displayed_word column columns index words =
     | [] ->
         index - 1
     | (word, _suffix) :: words ->
-        let column = column + Zed_utf8.length word in
+        let column = column + Zed_string.length word in
         if column <= columns - 1 then
           get_index_of_last_displayed_word (column + 1) columns (index + 1) words
         else
           index - 1
+
+(*let rec get_index_of_last_displayed_word_by_width column columns index words =
+  match words with
+    | [] ->
+        index - 1
+    | (word, _suffix) :: words ->
+        let column = column + Zed_string.(aval_width (width word)) in
+        if column <= columns - 1 then
+          get_index_of_last_displayed_word_by_width (column + 1) columns (index + 1) words
+        else
+          index - 1*)
 
 let draw_styled ctx row col str =
   let size = LTerm_draw.size ctx in
@@ -774,40 +814,35 @@ let draw_styled ctx row col str =
       if ch = newline then
         loop (row + 1) 0 (idx + 1)
       else begin
-        let point = LTerm_draw.point ctx row col in
-        point.LTerm_draw.char <- ch;
-        LTerm_draw.set_style point style;
-        let col = col + 1 in
-        if col = size.cols then
-          loop (row + 1) 0 (idx + 1)
+        let width= max 1 (Zed_char.width ch) in
+        if col + width > size.cols then
+          loop (row + 1) 0 idx
         else
-          loop row col (idx + 1)
+          begin
+            LTerm_draw.draw_char ctx row col ~style ch;
+            loop row (col+width) (idx + 1)
+          end
       end
     end
   in
   loop row col 0
-
-let unsafe_get matrix row col =
-  Array.unsafe_get (Array.unsafe_get matrix row) col
 
 let draw_styled_with_newlines matrix cols row col str =
   let rec loop row col idx =
     if idx < Array.length str then begin
       let ch, style = Array.unsafe_get str idx in
       if ch = newline then begin
-        (unsafe_get matrix row col).LTerm_draw.char <- newline;
+        LTerm_draw.draw_char_matrix matrix row col newline;
         loop (row + 1) 0 (idx + 1)
       end else begin
-        let row, col =
-          if col = cols then
-            (row + 1, 0)
-          else
-            (row, col)
-        in
-        let point = unsafe_get matrix row col in
-        point.LTerm_draw.char <- ch;
-        LTerm_draw.set_style point style;
-        loop row (col + 1) (idx + 1)
+        let width= max 1 (Zed_char.width ch) in
+        if col + width > cols then
+          loop (row + 1) 0 idx
+        else
+          begin
+            LTerm_draw.draw_char_matrix matrix row col ~style ch;
+            loop row (col + width) (idx + 1)
+          end
       end
     end
   in
@@ -952,7 +987,7 @@ object(self)
                   col2 = size.cols;
                 } LTerm_draw.Light;
                 for row = prompt_input_height to total_height - 1 do
-                  (unsafe_get matrix row size.cols).LTerm_draw.char <- newline
+                  LTerm_draw.draw_char_matrix matrix row size.cols newline;
                 done;
 
                 (* Draw the message. *)
@@ -1001,7 +1036,7 @@ object(self)
                   col2 = size.cols;
                 } LTerm_draw.Light;
                 for row = prompt_input_height to total_height - 1 do
-                  (unsafe_get matrix row size.cols).LTerm_draw.char <- newline
+                  LTerm_draw.draw_char_matrix matrix row size.cols newline;
                 done;
 
                 (* Draw the completion. *)
@@ -1016,7 +1051,7 @@ object(self)
                   | [] ->
                       ()
                   | (word, _suffix) :: words ->
-                      let len = Zed_utf8.length word in
+                      let len = Zed_string.length word in
                       LTerm_draw.draw_string ctx 0 col word;
                       (* Apply the reverse style if this is the selected word. *)
                       if idx = comp_index then
@@ -1091,7 +1126,7 @@ object(self)
           let matrix_size = { cols = size.cols + 1; rows = height } in
           let matrix = LTerm_draw.make_matrix matrix_size in
           for row = 0 to height - 1 do
-            (unsafe_get matrix row 0).LTerm_draw.char <- newline
+            LTerm_draw.draw_char_matrix matrix row 0 newline;
           done;
           LTerm.move term (-cursor.row) (-cursor.col) >>= fun () ->
           LTerm.print_box_with_newlines term matrix >>= fun () ->
@@ -1152,11 +1187,11 @@ object(self)
                 if resolver = None then
                   match key with
                     | { control = false; meta = false; shift = false; code = Char ch } ->
-                        Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert ch)));
+                        Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert (Zed_char.unsafe_of_uChar ch))));
                         self#insert ch
                     | { code = Char ch; _ } when LTerm.windows term && UChar.code ch >= 32 ->
                         (* Windows reports Shift+A for A, ... *)
-                        Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert ch)));
+                        Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert (Zed_char.unsafe_of_uChar ch))));
                         self#insert ch
                     | _ ->
                         ()
@@ -1229,7 +1264,7 @@ object(self)
         end >>= fun () ->
         let temp_fn = self#create_temporary_file_for_external_editor in
         let input = Zed_rope.to_string (Zed_edit.text self#edit) in
-        Lwt_io.with_file ~mode:Output temp_fn (fun oc -> Lwt_io.write_line oc input)
+        Lwt_io.with_file ~mode:Output temp_fn (fun oc -> Lwt_io.write_line oc (Zed_string_UTF8.of_t input))
         >>= fun () ->
         let editor = self#external_editor in
         Printf.ksprintf Lwt_unix.system "%s %s" editor (Filename.quote temp_fn)
@@ -1247,7 +1282,7 @@ object(self)
                 let s = Zed_utf8.rstrip s in
                 Zed_edit.goto_bot self#context;
                 Zed_edit.replace self#context (Zed_rope.length (Zed_edit.text self#edit))
-                  (Zed_rope.of_string s);
+                  (Zed_rope.of_string (Zed_string_UTF8.to_t_exn s));
                 Lwt.return ())
              (function
                | Unix.Unix_error (err, _, _) ->

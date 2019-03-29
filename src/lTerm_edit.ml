@@ -157,12 +157,12 @@ let macro = Zed_macro.create []
 let regexp_word =
   let set = UCharInfo.load_property_set `Alphabetic in
   let set = List.fold_left (fun set ch -> USet.add (UChar.of_char ch) set) set ['0'; '1'; '2'; '3'; '4'; '5'; '6'; '7'; '8'; '9'] in
-  Zed_re.compile (`Repn(`Set set, 1, None))
+  Zed_re.Core.compile (`Repn(`Set set, 1, None))
 
 let dummy_engine = Zed_edit.create ()
 let dummy_cursor = Zed_edit.new_cursor dummy_engine
 let dummy_context = Zed_edit.context dummy_engine dummy_cursor
-let newline = UChar.of_char '\n'
+let newline = Zed_char.unsafe_of_uChar (UChar.of_char '\n')
 
 class scrollable = object
   inherit LTerm_widget.scrollable
@@ -203,7 +203,7 @@ object(self)
     current_line_style <- LTerm_resources.get_style (rc ^ ".current-line") resources
 
   method editable _pos _len = true
-  method match_word text pos = match_by_regexp regexp_word text pos
+  method match_word text pos = match_by_regexp_core regexp_word text pos
   method locale = S.value locale
   method set_locale locale = set_locale locale
 
@@ -305,7 +305,7 @@ object(self)
                          exec (Zed_macro.contents macro @ actions)
                      | Insert_macro_counter :: actions ->
                          Zed_macro.add macro Insert_macro_counter;
-                         Zed_edit.insert context (Zed_rope.of_string (string_of_int (Zed_macro.get_counter macro)));
+                         Zed_edit.insert context (Zed_rope.of_string (Zed_string_UTF8.to_t_exn (string_of_int (Zed_macro.get_counter macro))));
                          Zed_macro.add_counter macro 1;
                          exec actions
                      | (Add_macro_counter | Set_macro_counter) :: actions ->
@@ -321,7 +321,7 @@ object(self)
                    if resolver = None then
                      match key with
                        | { control = false; meta = false; shift = false; code = Char ch } ->
-                           Zed_edit.insert context (Zed_rope.singleton ch);
+                           Zed_edit.insert_char context ch;
                            true
                        | _ ->
                            false
@@ -377,7 +377,7 @@ object(self)
     (*** Drawing ***)
 
     (* Initialises points with the text style and spaces. *)
-    fill ctx (UChar.of_char ' ');
+    fill ctx (Zed_char.unsafe_of_char ' ');
     fill_style ctx style;
 
     (*** Text drawing ***)
@@ -396,7 +396,7 @@ object(self)
             if row < size.rows then skip_eol row zip
           end else begin
             draw_char ctx row col char;
-            draw_line row (col + 1) zip
+            draw_line row (col + (Zed_char.width char)) zip
           end
         end
 
@@ -495,6 +495,7 @@ object(self)
     let cursor_offset = Zed_cursor.get_position cursor in
     let cursor_line = Zed_lines.line_index line_set cursor_offset in
     let cursor_column = cursor_offset - Zed_lines.line_start line_set cursor_line in
+    let column_display= Zed_lines.force_width line_set (Zed_lines.line_start line_set cursor_line) cursor_column in
     let start_line = Zed_lines.line_index line_set start in
-    Some { row = cursor_line - start_line; col = cursor_column - shift }
+    Some { row = cursor_line - start_line; col = column_display - shift }
 end

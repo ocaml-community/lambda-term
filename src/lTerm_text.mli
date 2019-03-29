@@ -9,21 +9,32 @@
 
 (** Styled text. *)
 
-open CamomileLibrary
-
-type t = (UChar.t * LTerm_style.t) array
+type t = (Zed_char.t * LTerm_style.t) array
     (** Type of a string with styles for each characters. *)
+
+(***)
+val aval_width : Zed_string.width -> int
 
 (** {6 Conversions} *)
 
-val of_string : Zed_utf8.t -> t
+val of_string : Zed_string.t -> t
   (** Creates a styled string from a string. All characters of the
       string have no style. *)
 
-val to_string : t -> Zed_utf8.t
+val to_string : t -> Zed_string.t
   (** Returns the string part of a styled string. *)
 
-val of_string_maybe_invalid : string -> t
+val of_utf8 : string -> t
+  (** Creates a styled string from a utf8 string. All characters of the
+      string have no style. *)
+
+val of_string_maybe_invalid : Zed_string.t -> t
+  (** Creates a styled string from a Zed_string. All characters of the
+      string have no style. The string may contain invalid
+      sequences, in which case invalid bytes are escaped with the
+      syntax [\yXX]. *)
+
+val of_utf8_maybe_invalid : string -> t
   (** Creates a styled string from a string. All characters of the
       string have no style. The string may contain invalid UTF-8
       sequences, in which case invalid bytes are escaped with the
@@ -41,7 +52,7 @@ val stylise : string -> LTerm_style.t -> t
 
 (** {6 Parenthesis matching} *)
 
-val stylise_parenthesis : t -> ?paren : (UChar.t * UChar.t) list -> int -> LTerm_style.t -> unit
+val stylise_parenthesis : t -> ?paren : (Zed_char.t * Zed_char.t) list -> int -> LTerm_style.t -> unit
   (** [stylise_parenthesis text ?paren pos style] searchs for
       parenthesis group starting or ending at [pos] and apply them the
       style [style]. [paren] is the list of parenthesis recognized. *)

@@ -156,6 +156,11 @@ let contents history =
         history.cache <- Some l;
         l
 
+let zed_contents history =
+  List.map
+    Zed_string_UTF8.to_t_exn
+    (contents history)
+
 let size history = history.full_size
 let length history = history.length
 let old_count history = history.old_count

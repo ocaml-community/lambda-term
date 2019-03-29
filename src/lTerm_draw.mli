@@ -9,26 +9,33 @@
 
 (** Drawing *)
 
-open CamomileLibrary
 open LTerm_geom
 
-(** Type of a point in a matrix of styled characters. *)
-type point = {
-  mutable char : UChar.t;
+(** Type of a element in a matrix of styled characters. *)
+type elem = {
+  char : Zed_char.t;
   (** The unicode character. *)
-  mutable bold : bool;
+  bold : bool;
   (** Whether the character is in bold or not. *)
-  mutable underline : bool;
+  underline : bool;
   (** Whether the character is underlined or not. *)
-  mutable blink : bool;
+  blink : bool;
   (** Whether the character is blinking or not. *)
-  mutable reverse : bool;
+  reverse : bool;
   (** Whether the character is in reverse video mode or not. *)
-  mutable foreground : LTerm_style.color;
+  foreground : LTerm_style.color;
   (** The foreground color. *)
-  mutable background : LTerm_style.color;
+  background : LTerm_style.color;
   (** The background color. *)
 }
+
+type point'=
+  | Elem of elem
+  | WidthHolder of int
+
+(** Type of a point in a matrix of styled characters. *)
+type point= point' ref
+
 
 type matrix = point array array
     (** Type of a matrix of points. The matrix is indexed by lines
@@ -78,7 +85,7 @@ val clear : context -> unit
   (** [clear ctx] clears the given context. It resets all styles to
       their default and sets characters to spaces. *)
 
-val fill : context -> ?style : LTerm_style.t -> UChar.t -> unit
+val fill : context -> ?style : LTerm_style.t -> Zed_char.t -> unit
   (** [fill ctx ch] fills the given context with [ch]. *)
 
 val fill_style : context -> LTerm_style.t -> unit
@@ -89,12 +96,17 @@ val point : context -> int -> int -> point
       [ctx]. It raises {!Out_of_bounds} if the coordinates are outside
       the given context. *)
 
-val draw_char : context -> int -> int -> ?style : LTerm_style.t -> UChar.t -> unit
+val draw_char_matrix : matrix -> int -> int -> ?style : LTerm_style.t -> Zed_char.t -> unit
+  (** [draw_char_matrix matrix row column ?style ch] sets the character at given
+      coordinates to [ch]. It does nothing if the given coordinates
+      are outside the bounds of the context. *)
+
+val draw_char : context -> int -> int -> ?style : LTerm_style.t -> Zed_char.t -> unit
   (** [draw_char ctx row column ?style ch] sets the character at given
       coordinates to [ch]. It does nothing if the given coordinates
       are outside the bounds of the context. *)
 
-val draw_string : context -> int -> int -> ?style : LTerm_style.t -> string -> unit
+val draw_string : context -> int -> int -> ?style : LTerm_style.t -> Zed_string.t -> unit
   (** [draw_string ctx row column ?style str] draws the given string
       at given coordinates. This does not affect styles. [str] may
       contains newlines. *)
@@ -103,7 +115,7 @@ val draw_styled : context -> int -> int -> ?style : LTerm_style.t -> LTerm_text.
   (** [draw_styled ctx row column ?style text] draws the given styled
       text at given coordinates. *)
 
-val draw_string_aligned : context -> int -> horz_alignment -> ?style : LTerm_style.t -> string -> unit
+val draw_string_aligned : context -> int -> horz_alignment -> ?style : LTerm_style.t -> Zed_string.t -> unit
   (** Draws a string with the given alignment. *)
 
 val draw_styled_aligned : context -> int -> horz_alignment -> ?style : LTerm_style.t -> LTerm_text.t -> unit
@@ -138,5 +150,5 @@ val draw_frame : context -> rect -> ?style : LTerm_style.t -> connection -> unit
 
 val draw_frame_labelled : context -> rect -> 
   ?style : LTerm_style.t -> ?alignment : LTerm_geom.horz_alignment -> 
-  string -> connection -> unit
+  Zed_string.t -> connection -> unit
   (** Draws a rectangle with a label on the top row. *)

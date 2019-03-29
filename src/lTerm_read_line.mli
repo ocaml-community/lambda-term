@@ -22,13 +22,16 @@ exception Interrupt
 type prompt = LTerm_text.t
     (** Type of prompts. *)
 
-type history = Zed_utf8.t list
+type history = Zed_string.t list
     (** Type of histories. It is a list of entries from the most
         recent to the oldest. *)
 
 (** {6 Completion} *)
 
 val common_prefix : string list -> string
+  (** Returns the common prefix of a list of words. *)
+
+val zed_common_prefix : Zed_string.t list -> Zed_string.t
   (** Returns the common prefix of a list of words. *)
 
 val lookup : Zed_utf8.t -> Zed_utf8.t list -> Zed_utf8.t list
@@ -176,7 +179,7 @@ class virtual ['a] engine : ?history : history -> ?clipboard : Zed_edit.clipboar
         argument is [true] if this is for the last drawing or [false]
         otherwise. *)
 
-  method history : (Zed_utf8.t list * Zed_utf8.t list) signal
+  method history : (Zed_string.t list * Zed_string.t list) signal
     (** The history zipper. *)
 
   method message : LTerm_text.t option signal
@@ -186,7 +189,7 @@ class virtual ['a] engine : ?history : history -> ?clipboard : Zed_edit.clipboar
 
   (** {6 Completion} *)
 
-  method completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
+  method completion_words : (Zed_string.t * Zed_string.t) list signal
     (** Current possible completions. Each completion is of the form
         [(word, suffix)] where [word] is the completion itself and
         [suffix] is a suffix to add if the completion is choosen. *)
@@ -194,7 +197,7 @@ class virtual ['a] engine : ?history : history -> ?clipboard : Zed_edit.clipboar
   method completion_index : int signal
     (** The position in the completion bar. *)
 
-  method set_completion : ?index:int -> int -> (Zed_utf8.t * Zed_utf8.t) list -> unit
+  method set_completion : ?index:int -> int -> (Zed_string.t * Zed_string.t) list -> unit
     (** [set_completion ?index start words] sets the current
         completions. [start] is the position of the beginning of the word
         being completed and [words] is the list of possible
@@ -224,13 +227,13 @@ class virtual ['a] abstract : object
   method virtual clipboard : Zed_edit.clipboard
   method virtual macro : action Zed_macro.t
   method virtual stylise : bool -> LTerm_text.t * int
-  method virtual history : (Zed_utf8.t list * Zed_utf8.t list) signal
+  method virtual history : (Zed_string.t list * Zed_string.t list) signal
   method virtual message : LTerm_text.t option signal
   method virtual input_prev : Zed_rope.t
   method virtual input_next : Zed_rope.t
-  method virtual completion_words : (Zed_utf8.t * Zed_utf8.t) list signal
+  method virtual completion_words : (Zed_string.t * Zed_string.t) list signal
   method virtual completion_index : int signal
-  method virtual set_completion : ?index:int -> int -> (Zed_utf8.t * Zed_utf8.t) list -> unit
+  method virtual set_completion : ?index:int -> int -> (Zed_string.t * Zed_string.t) list -> unit
   method virtual completion : unit
   method virtual complete : unit
   method virtual show_box : bool
@@ -241,9 +244,9 @@ end
 
 (** Simple read-line engine which returns the result as a string. *)
 class read_line : ?history : history -> unit -> object
-  inherit [Zed_utf8.t] engine
+  inherit [Zed_string.t] engine
 
-  method eval : Zed_utf8.t
+  method eval : Zed_string.t
     (** Returns the result as a UTF-8 encoded string. *)
 end
 
@@ -258,9 +261,9 @@ end
     Also showing completion is disabled.
 *)
 class read_password : unit -> object
-  inherit [Zed_utf8.t] engine
+  inherit [Zed_string.t] engine
 
-  method eval : Zed_utf8.t
+  method eval : Zed_string.t
     (** Returns the result as a UTF-8 encoded string. *)
 end
 
@@ -269,7 +272,7 @@ type 'a read_keyword_result =
   | Rk_value of 'a
       (** The user typed a correct keyword and this is its associated
           value. *)
-  | Rk_error of Zed_utf8.t
+  | Rk_error of Zed_string.t
       (** The user did not enter a correct keyword and this is what he
           typed instead. *)
 
@@ -281,7 +284,7 @@ class ['a] read_keyword : ?history : history -> unit -> object
     (** If the input correspond to a keyword, returns its associated
         value. otherwise returns [`Error input]. *)
 
-  method keywords : (string * 'a) list
+  method keywords : (Zed_string.t * 'a) list
     (** List of keywords with their associated values. *)
 end
 
