@@ -116,7 +116,7 @@ val set_console_text_attribute : Lwt_unix.file_descr -> text_attributes -> unit
 (** {6 Rendering} *)
 
 type char_info = {
-  ci_char : UChar.t;
+  ci_char : Zed_char.t;
   (** The unicode character. *)
   ci_foreground : int;
   (** The foreground color. *)

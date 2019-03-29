@@ -89,7 +89,7 @@ class edit :
   method macro : action Zed_macro.t
     (** The macro recorder. *)
 
-  method text : string
+  method text : Zed_string.t
     (** Shorthand for [Zed_rope.to_string (Zed_edit.text
         edit#engine)]. *)
 

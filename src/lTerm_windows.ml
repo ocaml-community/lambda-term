@@ -133,7 +133,7 @@ let set_console_text_attribute fd attrs =
   set_console_text_attribute (Lwt_unix.unix_file_descr fd) attrs
 
 type char_info = {
-  ci_char : UChar.t;
+  ci_char : Zed_char.t;
   ci_foreground : int;
   ci_background : int;
 }

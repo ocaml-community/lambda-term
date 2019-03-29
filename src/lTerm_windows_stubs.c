@@ -410,7 +410,7 @@ CAMLprim value lt_windows_write_console_output(value val_fd, value val_chars, va
     line = Field(val_chars, l);
     for (c = 0; c < columns; c++) {
       src = Field(line, c);
-      dst->Char.UnicodeChar = Int_val(Field(src, 0));
+      dst->Char.UnicodeChar = Int_val(Field(Field(src, 0)), 0);
       fg = Int_val(Field(src, 1));
       bg = Int_val(Field(src, 2));
       attrs = 0;

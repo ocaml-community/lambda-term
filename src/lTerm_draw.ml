@@ -2,6 +2,7 @@
  * lTerm_draw.ml
  * -------------
  * Copyright : (c) 2011, Jeremie Dimino <jeremie@dimino.org>
+ * Copyright : (c) 2019, ZAN DoYe <zandoye@gmail.com>
  * Licence   : BSD3
  *
  * This file is a part of Lambda-Term.
@@ -13,15 +14,34 @@ open LTerm_geom
 let unsafe_get matrix line column =
   Array.unsafe_get (Array.unsafe_get matrix line) column
 
-type point = {
-  mutable char : UChar.t;
-  mutable bold : bool;
-  mutable underline : bool;
-  mutable blink : bool;
-  mutable reverse : bool;
-  mutable foreground : LTerm_style.color;
-  mutable background : LTerm_style.color;
+type elem = {
+  char : Zed_char.t;
+  bold : bool;
+  underline : bool;
+  blink : bool;
+  reverse : bool;
+  foreground : LTerm_style.color;
+  background : LTerm_style.color;
 }
+
+let space = Zed_char.unsafe_of_char ' '
+let newline = Zed_char.unsafe_of_char '\n'
+
+let elem_empty=
+  { char= space;
+    bold= false;
+    underline= false;
+    blink= false;
+    reverse= false;
+    foreground= LTerm_style.default;
+    background= LTerm_style.default;
+  }
+
+type point'=
+  | Elem of elem
+  | WidthHolder of int
+
+type point= point' ref
 
 type matrix = point array array
 
@@ -31,8 +51,8 @@ let make_matrix size =
     (fun _ ->
        Array.init
          size.cols
-         (fun _ -> {
-            char = UChar.of_char ' ';
+         (fun _ -> ref @@ Elem {
+            char = Zed_char.unsafe_of_char ' ';
             bold = false;
             underline = false;
             blink = false;
@@ -41,46 +61,46 @@ let make_matrix size =
             background = LTerm_style.default;
           }))
 
-let set_style point style =
-  begin
+let set_style_elem elem style=
+  let bold=
     match LTerm_style.bold style with
-      | Some x -> point.bold <- x
-      | None -> ()
-  end;
-  begin
+    | Some x-> x
+    | None-> elem.bold
+  and underline=
     match LTerm_style.underline style with
-      | Some x -> point.underline <- x
-      | None -> ()
-  end;
-  begin
+    | Some x-> x
+    | None-> elem.underline
+  and blink=
     match LTerm_style.blink style with
-      | Some x -> point.blink <- x
-      | None -> ()
-  end;
-  begin
+    | Some x-> x
+    | None-> elem.blink
+  and reverse=
     match LTerm_style.reverse style with
-      | Some x -> point.reverse <- x
-      | None -> ()
-  end;
-  begin
+    | Some x-> x
+    | None-> elem.reverse
+  and foreground=
     match LTerm_style.foreground style with
-      | Some x -> point.foreground <- x
-      | None -> ()
-  end;
-  begin
+    | Some x-> x
+    | None-> elem.foreground
+  and background=
     match LTerm_style.background style with
-      | Some x -> point.background <- x
-      | None -> ()
-  end
+    | Some x-> x
+    | None-> elem.background
+  in
+  { elem with bold; underline; blink; reverse; foreground; background }
 
-let maybe_set_style point style =
-  match style with
-    | Some style ->
-        set_style point style
-    | None ->
-        ()
+let set_style point style=
+  match !point with
+  | Elem elem-> point:= Elem (set_style_elem elem style)
+  | WidthHolder _-> ()
 
-type context = {
+let maybe_set_style point style=
+  match !point, style with
+  | Elem _, Some style->
+    set_style point style
+  | _-> ()
+
+type context= {
   ctx_matrix : matrix;
   ctx_matrix_size : size;
   ctx_row1 : int;
@@ -118,44 +138,57 @@ let sub_opt ctx rect =
     if row2 > ctx.ctx_row2 || col2 > ctx.ctx_col2 then None
     else Some { ctx with ctx_row1 = row1; ctx_col1 = col1; ctx_row2 = row2; ctx_col2 = col2 }
 
-let sub ctx rect = 
-  match sub_opt ctx rect with 
-  | None -> raise Out_of_bounds 
+let sub ctx rect =
+  match sub_opt ctx rect with
+  | None -> raise Out_of_bounds
   | Some(ctx) -> ctx
-
-let space = UChar.of_char ' '
-let newline = UChar.of_char '\n'
 
 let clear ctx =
   for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
     for col = ctx.ctx_col1 to ctx.ctx_col2 - 1 do
       let point = unsafe_get ctx.ctx_matrix row col in
-      point.char <- space;
-      point.bold <- false;
-      point.underline <- false;
-      point.blink <- false;
-      point.reverse <- false;
-      point.foreground <- LTerm_style.default;
-      point.background <- LTerm_style.default
+      point:= Elem elem_empty
     done
   done
 
+let get_elem matrix row col=
+  let point = unsafe_get matrix row col in
+  match !point with
+  | Elem elem-> elem
+  | WidthHolder _-> elem_empty
+
 let fill ctx ?style ch =
+  let get_elem= get_elem ctx.ctx_matrix in
   match style with
-    | Some style ->
-        for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
-          for col = ctx.ctx_col1 to ctx.ctx_col2 - 1 do
-            let point = unsafe_get ctx.ctx_matrix row col in
-            point.char <- ch;
-            set_style point style
-          done
-        done
-    | None ->
-        for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
-          for col = ctx.ctx_col1 to ctx.ctx_col2 - 1 do
-            (unsafe_get ctx.ctx_matrix row col).char <- ch
-          done
-        done
+  | Some style ->
+    for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
+      for col = ctx.ctx_col1 to ctx.ctx_col2 - 1 do
+        let point = unsafe_get ctx.ctx_matrix row col in
+        let elem= 
+          match !point with
+          | Elem elem-> { elem with char= ch}
+          | WidthHolder n->
+            let elem= get_elem row (col-n) in
+            { elem with char= ch }
+        in
+        point:= Elem elem;
+        set_style point style
+      done
+    done
+  | None ->
+    for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
+      for col = ctx.ctx_col1 to ctx.ctx_col2 - 1 do
+        let point = unsafe_get ctx.ctx_matrix row col in
+        let elem= 
+          match !point with
+          | Elem elem-> { elem with char= ch}
+          | WidthHolder n->
+            let elem= get_elem row (col-n) in
+            { elem with char= ch }
+        in
+        point:= Elem elem;
+      done
+    done
 
 let fill_style ctx style =
   for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
@@ -170,90 +203,173 @@ let point ctx row col =
   if row >= ctx.ctx_row2 || col >= ctx.ctx_col2 then raise Out_of_bounds;
   unsafe_get ctx.ctx_matrix row col
 
-let draw_char ctx row col ?style ch =
-  if row >= 0 && col >= 0 then begin
-    let row = ctx.ctx_row1 + row and col = ctx.ctx_col1 + col in
-    if row < ctx.ctx_row2 && col < ctx.ctx_col2 then
-      let point = unsafe_get ctx.ctx_matrix row col in
-      point.char <- ch;
-      maybe_set_style point style
+let unsafe_del matrix row col len=
+  let pos_end= col + len in
+  let rec fill elem col n=
+    if n > 0 then
+      let point= unsafe_get matrix row col in
+      point:= Elem elem;
+      fill elem (col+1) (n-1)
+  in
+  let rec find col=
+    let point= unsafe_get matrix row col in
+    match !point with
+    | Elem elem->
+      let width= Zed_char.width elem.char in
+      let elem= { elem with char= space } in
+      point:= Elem elem;
+      if width > 1 then
+        fill elem (col + 1) (width - 1);
+      col + (max width 1)
+    | WidthHolder n->
+      find (col-n)
+  in
+  let rec del pos=
+    if pos < pos_end then
+      del (find col)
+  in
+  del col
+
+let draw_char_matrix matrix row col ?style ch=
+  let size=
+    let rows= Array.length matrix in
+    let cols=
+      if rows > 0 then
+        Array.length matrix.(0)
+      else 0
+    in
+    { rows; cols }
+  in
+  let unsafe_get matrix row col =
+    Array.unsafe_get (Array.unsafe_get matrix row) col
+  in
+  let width= Zed_char.width ch in
+  if row >= 0 && col >= 0 && col + width <= size.cols then begin
+    let point= unsafe_get matrix row col in
+    (match !point with
+    | Elem elem-> point:= Elem { elem with char= ch };
+      if width > 1 then
+        for i = 1 to width - 1 do
+          let point= unsafe_get matrix row (col+i) in
+          point:= WidthHolder i
+        done
+    | WidthHolder n->
+      unsafe_del matrix row (col-n) 1;
+      let elem= get_elem matrix row (col-n) in
+      point:= Elem { elem with char= ch };
+      if width > 1 then
+        for i = 1 to width - 1 do
+          let point= unsafe_get matrix row (col+i) in
+          point:= WidthHolder i
+        done
+      );
+    maybe_set_style point style
   end
 
-let draw_string ctx row col ?style str =
-  let rec loop row col ofs =
-    if ofs < String.length str then begin
-      let ch, ofs = Zed_utf8.unsafe_extract_next str ofs in
+let unsafe_draw_char_raw ctx row col ?style ch=
+  let width= Zed_char.width ch in
+  if row >= 0 && col >= 0 then begin
+    let point= unsafe_get ctx.ctx_matrix row col in
+    (match !point with
+    | Elem elem-> point:= Elem { elem with char= ch };
+      if width > 1 then
+        for i = 1 to width - 1 do
+          let point= unsafe_get ctx.ctx_matrix row (col+i) in
+          point:= WidthHolder i
+        done
+    | WidthHolder n->
+      unsafe_del ctx.ctx_matrix row (col-n) 1;
+      let elem= get_elem ctx.ctx_matrix row (col-n) in
+      point:= Elem { elem with char= ch };
+      if width > 1 then
+        for i = 1 to width - 1 do
+          let point= unsafe_get ctx.ctx_matrix row (col+i) in
+          point:= WidthHolder i
+        done
+      );
+    maybe_set_style point style
+  end
+
+let draw_char_raw ctx row col ?style ch=
+  let width= Zed_char.width ch in
+  if row >= 0 && col >= 0 then begin
+    if row < ctx.ctx_row2 && col < ctx.ctx_col2 && col + width <= ctx.ctx_col2 then
+      unsafe_draw_char_raw ctx row col ?style ch
+  end
+
+let draw_char ctx row col ?style ch=
+  let row= ctx.ctx_row1 + row
+  and col = ctx.ctx_col1 + col in
+  draw_char_raw ctx row col ?style ch
+
+let draw_string ctx row col ?style str=
+  let row= ctx.ctx_row1 + row
+  and col= ctx.ctx_col1 + col in
+  let len= Zed_string.length str in
+  let rec loop row col ofs=
+    if ofs < len then
+      let ch= Zed_string.get str ofs in
+      let ofs= ofs + 1 in
       if ch = newline then
         loop (row + 1) ctx.ctx_col1 ofs
       else begin
-        if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col < ctx.ctx_col2 then begin
-          let point = unsafe_get ctx.ctx_matrix row col in
-          point.char <- ch;
-          maybe_set_style point style
-        end;
-        loop row (col + 1) ofs
+        let width= Zed_char.width ch in
+        draw_char_raw ctx row col ?style ch;
+        loop row (col + max 0 width) ofs
       end
-    end
   in
-  loop (ctx.ctx_row1 + row) (ctx.ctx_col1 + col) 0
+  loop row col 0
 
-let draw_styled ctx row col ?style str =
-  let rec loop row col idx =
+let draw_styled ctx row col ?style str=
+  let rec loop row col idx=
     if idx < Array.length str then begin
-      let ch, ch_style = Array.unsafe_get str idx in
+      let ch, ch_style= Array.unsafe_get str idx in
       if ch = newline then
         loop (row + 1) ctx.ctx_col1 (idx + 1)
       else begin
-        if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col < ctx.ctx_col2 then begin
-          let point = unsafe_get ctx.ctx_matrix row col in
-          point.char <- ch;
-          maybe_set_style point style;
+        let width= Zed_char.width ch in
+        if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col + width <= ctx.ctx_col2 then begin
+          let point= unsafe_get ctx.ctx_matrix row col in
+          draw_char_raw ctx row col ?style ch;
           set_style point ch_style
         end;
-        loop row (col + 1) (idx + 1)
+        loop row (col + max 0 width) (idx + 1)
       end
     end
   in
   loop (ctx.ctx_row1 + row) (ctx.ctx_col1 + col) 0
 
-let draw_string_aligned ctx row alignment ?style str =
-  let rec line_length ofs len =
-    if ofs = String.length str then
-      len
-    else
-      let ch, ofs = Zed_utf8.unsafe_extract_next str ofs in
-      if ch = newline then
-        len
-      else
-        line_length ofs (len + 1)
+let draw_string_aligned ctx row alignment ?style str=
+  let actual_width= function
+    | Ok Zed_string.{len=_;width}-> width
+    | Error Zed_string.{start=_;len=_;width}-> width
   in
-  let rec loop row col ofs =
-    if ofs < String.length str then begin
-      let ch, ofs = Zed_utf8.unsafe_extract_next str ofs in
+  let line_width start= actual_width (Zed_string.width_from start str) in
+  let rec loop row col ofs=
+    if ofs < Zed_string.length str then begin
+      let ch= Zed_string.get str ofs
+      and ofs= ofs + 1 in
       if ch = newline then
         ofs
       else begin
-        if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col < ctx.ctx_col2 then begin
-          let point = unsafe_get ctx.ctx_matrix row col in
-          point.char <- ch;
-          maybe_set_style point style
-        end;
-        loop row (col + 1) ofs
+        let width= Zed_char.width ch in
+        draw_char_raw ctx row col ?style ch;
+        loop row (col + max 0 width) ofs;
       end
     end else
       ofs
   in
-  let rec loop_lines row ofs =
-    if ofs < String.length str then begin
-      let ofs =
+  let rec loop_lines row ofs=
+    if ofs < Zed_string.length str then begin
+      let ofs=
         loop row
           (match alignment with
-             | H_align_left ->
-                 ctx.ctx_col1
-             | H_align_center ->
-                 ctx.ctx_col1 + (ctx.ctx_col2 - ctx.ctx_col1 - line_length ofs 0) / 2
-             | H_align_right ->
-                 ctx.ctx_col2 - line_length ofs 0)
+          | H_align_left ->
+            ctx.ctx_col1
+          | H_align_center ->
+            ctx.ctx_col1 + (ctx.ctx_col2 - ctx.ctx_col1 - line_width ofs) / 2
+          | H_align_right ->
+            ctx.ctx_col2 - line_width ofs)
           ofs
       in
       loop_lines (row + 1) ofs
@@ -261,44 +377,43 @@ let draw_string_aligned ctx row alignment ?style str =
   in
   loop_lines (ctx.ctx_row1 + row) 0
 
-let draw_styled_aligned ctx row alignment ?style str =
-  let rec line_length idx len =
-    if idx = Array.length str then
-      len
-    else
-      if fst (Array.unsafe_get str idx) = newline then
-        len
-      else
-        line_length (idx + 1) (len + 1)
+let draw_styled_aligned ctx row alignment ?style str=
+  let str, styles=
+    let len= Array.length str in
+    Zed_string.of_char_array (Array.init len (fun i-> fst (Array.get str i)))
+    , (Array.init len (fun i-> snd (Array.get str i)))
   in
-  let rec loop row col idx =
-    if idx < Array.length str then begin
-      let ch, ch_style = Array.unsafe_get str idx in
+  let actual_width= function
+    | Ok Zed_string.{len=_;width}-> width
+    | Error Zed_string.{start=_;len=_;width}-> width
+  in
+  let line_width start= actual_width (Zed_string.width_from start str) in
+  let rec loop row col idx=
+    if idx < Zed_string.length str then begin
+      let ch, ch_style= Zed_string.get str idx, Array.unsafe_get styles idx
+      and idx= idx + 1 in
       if ch = newline then
-        idx + 1
+        idx
       else begin
-        if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col < ctx.ctx_col2 then begin
-          let point = unsafe_get ctx.ctx_matrix row col in
-          point.char <- ch;
-          maybe_set_style point style;
-          set_style point ch_style
-        end;
-        loop row (col + 1) (idx + 1)
+        let point= unsafe_get ctx.ctx_matrix row col in
+        draw_char_raw ctx row col ?style ch;
+        set_style point ch_style;
+        loop row (col + Zed_char.width ch) idx;
       end
     end else
       idx
   in
-  let rec loop_lines row idx =
-    if idx < Array.length str then begin
-      let idx =
+  let rec loop_lines row idx=
+    if idx < Zed_string.length str then begin
+      let idx=
         loop row
           (match alignment with
-             | H_align_left ->
-                 ctx.ctx_col1
-             | H_align_center ->
-                 ctx.ctx_col1 + (ctx.ctx_col2 - ctx.ctx_col1 - line_length idx 0) / 2
-             | H_align_right ->
-                 ctx.ctx_col2 - line_length idx 0)
+          | H_align_left ->
+            ctx.ctx_col1
+          | H_align_center ->
+            ctx.ctx_col1 + (ctx.ctx_col2 - ctx.ctx_col1 - line_width idx) / 2
+          | H_align_right ->
+            ctx.ctx_col2 - line_width idx)
           idx
       in
       loop_lines (row + 1) idx
@@ -480,88 +595,104 @@ let char_of_piece = function
   | { top = Blank; bottom = Blank; left = Heavy; right = Light } -> UChar.of_int 0x257e
   | { top = Heavy; bottom = Light; left = Blank; right = Blank } -> UChar.of_int 0x257f
 
-let draw_piece ctx row col ?style piece =
-  let row = ctx.ctx_row1 + row and col = ctx.ctx_col1 + col in
+let piece_of_point point=
+  match !point with
+  | Elem elem-> piece_of_char elem.char.core
+  | WidthHolder _-> None
+
+let draw_piece ctx row col ?style piece=
+  let row= ctx.ctx_row1 + row and col= ctx.ctx_col1 + col in
   if row >= ctx.ctx_row1 && col >= ctx.ctx_col1 && row < ctx.ctx_row2 && col < ctx.ctx_col2 then begin
-    let piece =
+    let piece=
       if row > 0 then begin
-        let point = unsafe_get ctx.ctx_matrix (row - 1) col in
-        match piece_of_char point.char with
-          | None ->
-              piece
-          | Some piece' ->
-              if piece.top = piece'.bottom then
-                piece
-              else if piece.top = Blank then
-                { piece with top = piece'.bottom }
-              else if piece'.bottom = Blank then begin
-                point.char <- char_of_piece { piece' with bottom = piece.top };
-                piece
-              end else
-                piece
+        let point= unsafe_get ctx.ctx_matrix (row - 1) col in
+        match piece_of_point point with
+        | None ->
+          piece
+        | Some piece' ->
+          if piece.top = piece'.bottom then
+            piece
+          else if piece.top = Blank then
+            { piece with top = piece'.bottom }
+          else if piece'.bottom = Blank then begin
+            let char= Zed_char.unsafe_of_uChar
+              (char_of_piece { piece' with bottom = piece.top })
+            in
+            unsafe_draw_char_raw ctx (row-1) col char;
+            piece
+          end else
+            piece
       end else
         piece
     in
-    let piece =
+    let piece=
       if row < ctx.ctx_matrix_size.rows - 1 then begin
-        let point = unsafe_get ctx.ctx_matrix (row + 1) col in
-        match piece_of_char point.char with
-          | None ->
-              piece
-          | Some piece' ->
-              if piece.bottom = piece'.top then
-                piece
-              else if piece.bottom = Blank then
-                { piece with bottom = piece'.top }
-              else if piece'.top = Blank then begin
-                point.char <- char_of_piece { piece' with top = piece.bottom };
-                piece
-              end else
-                piece
+        let point= unsafe_get ctx.ctx_matrix (row + 1) col in
+        match piece_of_point point with
+        | None ->
+          piece
+        | Some piece' ->
+          if piece.bottom = piece'.top then
+            piece
+          else if piece.bottom = Blank then
+            { piece with bottom = piece'.top }
+          else if piece'.top = Blank then begin
+            let char= Zed_char.unsafe_of_uChar
+              (char_of_piece { piece' with top = piece.bottom })
+            in
+            unsafe_draw_char_raw ctx (row+1) col char;
+            piece
+          end else
+            piece
       end else
         piece
     in
-    let piece =
+    let piece=
       if col > 0 then begin
-        let point = unsafe_get ctx.ctx_matrix row (col - 1) in
-        match piece_of_char point.char with
-          | None ->
-              piece
-          | Some piece' ->
-              if piece.left = piece'.right then
-                piece
-              else if piece.left = Blank then
-                { piece with left = piece'.right }
-              else if piece'.right = Blank then begin
-                point.char <- char_of_piece { piece' with right = piece.left };
-                piece
-              end else
-                piece
+        let point= unsafe_get ctx.ctx_matrix row (col - 1) in
+        match piece_of_point point with
+        | None ->
+          piece
+        | Some piece' ->
+          if piece.left = piece'.right then
+            piece
+          else if piece.left = Blank then
+            { piece with left = piece'.right }
+          else if piece'.right = Blank then begin
+            let char= Zed_char.unsafe_of_uChar
+              (char_of_piece { piece' with right = piece.left })
+            in
+            unsafe_draw_char_raw ctx row (col-1) char;
+            piece
+          end else
+            piece
       end else
         piece
     in
-    let piece =
+    let piece=
       if col < ctx.ctx_matrix_size.cols - 1 then begin
-        let point = unsafe_get ctx.ctx_matrix row (col + 1) in
-        match piece_of_char point.char with
-          | None ->
-              piece
-          | Some piece' ->
-              if piece.right = piece'.left then
-                piece
-              else if piece.right = Blank then
-                { piece with right = piece'.left }
-              else if piece'.left = Blank then begin
-                point.char <- char_of_piece { piece' with left = piece.right };
-                piece
-              end else
-                piece
+        let point= unsafe_get ctx.ctx_matrix row (col + 1) in
+        match piece_of_point point with
+        | None ->
+          piece
+        | Some piece' ->
+          if piece.right = piece'.left then
+            piece
+          else if piece.right = Blank then
+            { piece with right = piece'.left }
+          else if piece'.left = Blank then begin
+            let char= Zed_char.unsafe_of_uChar
+              (char_of_piece { piece' with left = piece.right })
+            in
+            unsafe_draw_char_raw ctx row (col+1) char;
+            piece
+          end else
+            piece
       end else
         piece
     in
-    let point = unsafe_get ctx.ctx_matrix row col in
-    point.char <- char_of_piece piece;
-    maybe_set_style point style
+    let char= Zed_char.unsafe_of_uChar (char_of_piece piece) in
+    unsafe_draw_char_raw ctx row col ?style char
   end
 
 let draw_hline ctx row col len ?style connection =
@@ -592,7 +723,7 @@ let draw_frame ctx rect ?style connection =
   draw_piece ctx (rect.row2 - 1) (rect.col2 - 1) ?style { top = connection; bottom = Blank; left = connection; right = Blank };
   draw_piece ctx (rect.row2 - 1) (rect.col1 + 0) ?style { top = connection; bottom = Blank; left = Blank; right = connection }
 
-let draw_frame_labelled ctx rect ?style ?(alignment=H_align_left) label connection = 
+let draw_frame_labelled ctx rect ?style ?(alignment=H_align_left) label connection =
   draw_frame ctx rect ?style connection;
   let rect = { row1 = rect.row1; row2 = rect.row1+1; col1 = rect.col1+1; col2 = rect.col2-1 } in
   match sub_opt ctx rect with

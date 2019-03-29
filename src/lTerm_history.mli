@@ -44,6 +44,10 @@ val contents : t -> Zed_utf8.t list
   (** Returns all the entries of the history. The first element of the
       list is the most recent entry. *)
 
+val zed_contents : t -> Zed_string.t list
+  (** Returns all the entries of the history. The first element of the
+      list is the most recent entry. *)
+
 val size : t -> int
   (** Returns the size (in bytes) of the history. *)
 

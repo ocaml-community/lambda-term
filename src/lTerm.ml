@@ -14,6 +14,7 @@ open LTerm_geom
 let return, (>>=) = Lwt.return, Lwt.(>>=)
 
 let uspace = UChar.of_char ' '
+let yspace = Zed_char.unsafe_of_uChar uspace
 
 (* +-----------------------------------------------------------------+
    | TTYs sizes                                                      |
@@ -972,7 +973,7 @@ let expand term text =
       end else begin
         let ch, style = Array.unsafe_get text idx in
         if not (LTerm_style.equal style prev_style) then add_style term buf style;
-        Buffer.add_string buf (Zed_utf8.singleton ch);
+        Buffer.add_string buf (Zed_char_UTF8.of_t ch);
         loop (idx + 1) style
       end
     in
@@ -1018,7 +1019,12 @@ let fprints_windows term oc text =
         else
           return ()
       end >>= fun () ->
-      Lwt_io.write oc (encode_char term ch) >>= fun () ->
+      let chars= Zed_char.to_raw ch in
+      let s= chars
+        |> List.map (encode_char term)
+        |> String.concat ""
+      in
+      Lwt_io.write oc s >>= fun () ->
       loop (idx + 1) attr
     end
   in
@@ -1033,10 +1039,10 @@ let fprints term text =
     else
       fprint term (expand term text)
   else
-    fprint term (LTerm_text.to_string text)
+    fprint term (Zed_string_UTF8.of_t (LTerm_text.to_string text))
 
 let fprintls term text =
-  fprints term (Array.append text (LTerm_text.of_string "\n"))
+  fprints term (Array.append text (LTerm_text.of_utf8 "\n"))
 
 (* +-----------------------------------------------------------------+
    | Printing with contexts                                          |
@@ -1137,8 +1143,9 @@ let same_style p1 p2 =
       p1.foreground = p2.foreground &&
       p1.background = p2.background
 
-let unknown_char = UChar.of_int 0xfffd
-let unknown_utf8 = Zed_utf8.singleton unknown_char
+let unknown_uchar = UChar.of_int 0xfffd
+let unknown_char = Zed_char.unsafe_of_uChar unknown_uchar
+let unknown_utf8 = Zed_char_UTF8.of_t unknown_char
 
 let render_style term buf old_point new_point =
   let open LTerm_draw in
@@ -1157,10 +1164,10 @@ let render_style term buf old_point new_point =
 let render_point term buf old_point new_point =
   render_style term buf old_point new_point;
   (* Skip control characters, otherwise output will be messy. *)
-  if UChar.code new_point.LTerm_draw.char < 32 then
+  if UChar.code new_point.LTerm_draw.char.core < 32 then
     Buffer.add_string buf unknown_utf8
   else
-    Buffer.add_string buf (Zed_utf8.singleton new_point.LTerm_draw.char)
+    Buffer.add_string buf (Zed_char_UTF8.of_t new_point.LTerm_draw.char)
 
 type render_kind = Render_screen | Render_box
 
@@ -1177,7 +1184,7 @@ let render_update_unix term kind old_matrix matrix =
            "\r\027[0m");
   (* The last displayed point. *)
   let last_point = ref {
-    char = uspace;
+    char = yspace;
     bold = false;
     underline = false;
     blink = false;
@@ -1191,9 +1198,12 @@ let render_update_unix term kind old_matrix matrix =
     (* If the current line is equal to the displayed one, skip it *)
     if y >= old_rows || line <> Array.unsafe_get old_matrix y then begin
       for x = 0 to Array.length line - 1 do
-        let point = Array.unsafe_get line x in
-        render_point term buf !last_point point;
-        last_point := point
+        let point = !(Array.unsafe_get line x) in
+        match point with
+        | Elem elem->
+          render_point term buf !last_point elem;
+          last_point := elem
+        | WidthHolder _n-> ()
       done
     end;
     if y < rows - 1 then Buffer.add_char buf '\n'
@@ -1204,7 +1214,7 @@ let render_update_unix term kind old_matrix matrix =
   fprint term (Buffer.contents buf)
 
 let blank_windows = {
-  LTerm_windows.ci_char = uspace;
+  LTerm_windows.ci_char = yspace;
   LTerm_windows.ci_foreground = 7;
   LTerm_windows.ci_background = 0;
 }
@@ -1225,31 +1235,36 @@ let render_windows term kind handle_newlines matrix =
   let matrix =
     Array.map
       (fun line ->
-         let len = Array.length line - (if handle_newlines then 1 else 0) in
-         if len < 0 then invalid_arg "LTerm.print_box_with_newlines";
-         let res = Array.make len blank_windows in
-         let rec loop i =
-           if i = len then
-             res
-           else begin
-             let point = Array.unsafe_get line i in
-             let code = UChar.code point.LTerm_draw.char in
-             if handle_newlines && code = 10 then begin
-               (* Copy styles. *)
-               Array.unsafe_set res i (windows_char_info term point uspace);
-               for i = i + 1 to len - 1 do
-                 let point = Array.unsafe_get line i in
-                 Array.unsafe_set res i (windows_char_info term point uspace)
-               done;
-               res
-             end else begin
-               let char = if code < 32 then unknown_char else point.LTerm_draw.char in
-               Array.unsafe_set res i (windows_char_info term point char);
-               loop (i + 1)
-             end
-           end
-         in
-         loop 0)
+        let len = Array.length line - (if handle_newlines then 1 else 0) in
+        if len < 0 then invalid_arg "LTerm.print_box_with_newlines";
+        let res = Array.make len blank_windows in
+        let rec loop i =
+          if i = len then
+            res
+          else begin
+            match !(Array.unsafe_get line i) with
+            | LTerm_draw.Elem point->
+              let code = UChar.code point.LTerm_draw.char.core in
+              if handle_newlines && code = 10 then begin
+                (* Copy styles. *)
+                Array.unsafe_set res i (windows_char_info term point yspace);
+                for i = i + 1 to len - 1 do
+                  match !(Array.unsafe_get line i) with
+                  | LTerm_draw.Elem point->
+                    Array.unsafe_set res i
+                      (windows_char_info term point yspace)
+                  | _-> ()
+                done;
+                res
+              end else begin
+                let char = if code < 32 then unknown_char else point.LTerm_draw.char in
+                Array.unsafe_set res i (windows_char_info term point char);
+                loop (i + 1)
+              end
+            | WidthHolder _n-> res
+          end
+        in
+        loop 0)
       matrix
   in
   let rows = Array.length matrix in
@@ -1314,7 +1329,7 @@ let print_box_with_newlines_unix term matrix =
   Buffer.add_string buf "\r\027[0m";
   (* The last displayed point. *)
   let last_point = ref {
-    char = uspace;
+    char = yspace;
     bold = false;
     underline = false;
     blink = false;
@@ -1328,23 +1343,25 @@ let print_box_with_newlines_unix term matrix =
     let cols = Array.length line - 1 in
     if cols < 0 then invalid_arg "LTerm.print_box_with_newlines";
     let rec loop x =
-      let point = Array.unsafe_get line x in
-      let code = UChar.code point.char in
-      if x = cols then begin
-        if code = 10 && y < rows - 1 then
-          Buffer.add_char buf '\n'
-      end else if code = 10 then begin
-        (* Use the style of the newline for the rest of the line. *)
-        render_style term buf !last_point point;
-        last_point := point;
-        (* Erase everything until the end of line. *)
-        Buffer.add_string buf "\027[K";
-        if y < rows - 1 then Buffer.add_char buf '\n'
-      end else begin
-        render_point term buf !last_point point;
-        last_point := point;
-        loop (x + 1)
-      end
+      match !(Array.unsafe_get line x) with
+      | Elem point->
+        let code = UChar.code point.char.core in
+        if x = cols then begin
+          if code = 10 && y < rows - 1 then
+            Buffer.add_char buf '\n'
+        end else if code = 10 then begin
+          (* Use the style of the newline for the rest of the line. *)
+          render_style term buf !last_point point;
+          last_point := point;
+          (* Erase everything until the end of line. *)
+          Buffer.add_string buf "\027[K";
+          if y < rows - 1 then Buffer.add_char buf '\n'
+        end else begin
+          render_point term buf !last_point point;
+          last_point := point;
+          loop (x + 1)
+        end
+      | WidthHolder _n-> loop (x+1)
     in
     loop 0
   done;

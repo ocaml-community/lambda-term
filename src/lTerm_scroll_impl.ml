@@ -264,7 +264,7 @@ class virtual scrollbar
       in
       for c=rect.col1 to rect.col2-1 do
         for r=rect.row1 to rect.row2-1 do
-          draw_char ctx r c ~style x
+          draw_char ctx r c ~style (Zed_char.unsafe_of_uChar x)
         done
       done
     else

@@ -19,6 +19,7 @@
     ["button.focused.foreground"], ["button.unfocused.bold"], ... so
     their resource class is ["button"].
 *)
+
 class t : string -> object
   method children : t list
     (** The children of the widget. *)
@@ -178,6 +179,9 @@ class button : ?brackets:(string * string) -> string -> object
   method label : string
     (** The text displayed on the button. *)
 
+  method label_zed : Zed_string.t
+    (** The text displayed on the button. *)
+
   method set_label : string -> unit
 
   method on_click : ?switch : LTerm_widget_callbacks.switch -> (unit -> unit) -> unit
@@ -190,6 +194,9 @@ class checkbutton : string -> bool -> object
 
   method label : string
     (** The text displayed on the checkbutton. *)
+
+  method label_zed : Zed_string.t
+    (** The text displayed on the button. *)
 
   method state : bool
     (** The state of checkbutton; [true] means checked and [false] means unchecked. *)
@@ -250,6 +257,9 @@ class ['a] radiobutton : 'a radiogroup -> string -> 'a -> object
 
   method label : string
   (** The text displayed on the radiobutton. *)
+
+  method label_zed : Zed_string.t
+    (** The text displayed on the button. *)
 
   method set_label : string -> unit
 
