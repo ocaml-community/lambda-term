@@ -64,7 +64,7 @@ open CamomileLibrary
 class asciiart img = object(self)
   inherit t "asciiart" as super
 
-  method can_focus = true
+  method! can_focus = true
 
   (* scrollable interfaces *)
   val vscroll = new scrollable
@@ -81,7 +81,7 @@ class asciiart img = object(self)
     vscroll#set_document_size self#document_size.rows;
     hscroll#set_document_size self#document_size.cols
 
-  method set_allocation r = 
+  method! set_allocation r = 
     super#set_allocation r;
     let size = size_of_rect r in
     vscroll#set_page_size size.rows;
@@ -98,13 +98,13 @@ class asciiart img = object(self)
     | Some(r, c, i) when r = !avg_rows && c = !avg_cols -> i
     | _ -> stored_img <- Some(!avg_rows, !avg_cols, indices img); self#img
 
-  method draw ctx focused = 
+  method! draw ctx _focused = 
     let { rows; cols } = LTerm_draw.size ctx in
     let img = self#img in
     for row=0 to rows-1 do
       for col=0 to cols-1 do
         LTerm_draw.draw_char ~style ctx row col @@ 
-          UChar.of_char palette.[ 
+          Zed_char.unsafe_of_char palette.[ 
             try img.(row + vscroll#offset).(col + hscroll#offset) with _ -> 0 
           ]
       done
@@ -126,19 +126,19 @@ class asciiart img = object(self)
 
   (* adjust scale, which changes the document size *)
   method private scale_event = function
-    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c} when c = UChar.of_char 'w' ->
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c;_} when c = UChar.of_char 'w' ->
       avg_rows := max 1 (!avg_rows - 1);
       vscroll#set_document_size self#document_size.rows;
       self#queue_draw; true
-    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c} when c = UChar.of_char 's' ->
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c;_} when c = UChar.of_char 's' ->
       avg_rows := !avg_rows + 1; 
       vscroll#set_document_size self#document_size.rows;
       self#queue_draw; true
-    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c} when c = UChar.of_char 'a' ->
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c;_} when c = UChar.of_char 'a' ->
       avg_cols := max 1 (!avg_cols - 1); 
       hscroll#set_document_size self#document_size.cols;
       self#queue_draw; true
-    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c} when c = UChar.of_char 'd' ->
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c;_} when c = UChar.of_char 'd' ->
       avg_cols := !avg_cols + 1; 
       hscroll#set_document_size self#document_size.cols;
       self#queue_draw; true
@@ -146,9 +146,9 @@ class asciiart img = object(self)
 
   (* page up/down *)
   method page_event = function
-    | LTerm_event.Key{LTerm_key.code=LTerm_key.Next_page} ->
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Next_page;_} ->
       vscroll#set_offset @@ vscroll#page_next; self#queue_draw; true
-    | LTerm_event.Key{LTerm_key.code=LTerm_key.Prev_page} ->
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Prev_page;_} ->
       vscroll#set_offset @@ vscroll#page_prev; self#queue_draw; true
     | _ -> false
 
@@ -202,7 +202,7 @@ let main () =
   top#set vbox;
 
   top#on_event (function (* quit with escape key *)
-    | LTerm_event.Key{LTerm_key.code=LTerm_key.Escape} -> 
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Escape;_} -> 
       wakeup wakener (); false 
     | _ -> false);
 

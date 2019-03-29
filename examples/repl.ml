@@ -48,7 +48,7 @@ let make_output state out =
 
 class read_line ~term ~history ~state = object(self)
   inherit LTerm_read_line.read_line ~history ()
-  inherit [Zed_utf8.t] LTerm_read_line.term term
+  inherit [Zed_string.t] LTerm_read_line.term term
 
   method! show_box = false
 
@@ -62,13 +62,14 @@ end
 
 let rec loop term history state =
   Lwt.catch (fun () ->
-    let rl = new read_line ~term ~history:(LTerm_history.contents history) ~state in
+    let rl = new read_line ~term ~history:(LTerm_history.zed_contents history) ~state in
     rl#run >|= fun command -> Some command)
     (function
       | Sys.Break -> return None
       | exn -> Lwt.fail exn)
   >>= function
   | Some command ->
+    let command= Zed_string_UTF8.of_t command in 
     let state, out = Interpreter.eval state command in
     LTerm.fprintls term (make_output state out)
     >>= fun () ->
