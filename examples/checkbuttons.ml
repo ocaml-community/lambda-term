@@ -14,8 +14,8 @@ let main () =
   let waiter, wakener = wait () in
 
   let vbox = new vbox in
-  let checked_label = (new label "") in
-  let create_button n = new checkbutton ("button" ^ (string_of_int n)) false in
+  let checked_label = new label "" in
+  let create_button n = new checkbutton ("button按钮" ^ (string_of_int n)) false in
   let checkbuttons = Array.init 9 create_button in
   let callback () =
     let new_label = ref "" in
@@ -26,7 +26,7 @@ let main () =
     done;
     checked_label#set_text !new_label
   in
-  let button = new button "exit" in
+  let button = new button "exit退出" in
   button#on_click (wakeup wakener);
   vbox#add ~expand:false button;
   vbox#add ~expand:false (new hline);

@@ -15,7 +15,7 @@ let ( >>= ) = Lwt.( >>= )
 
 class read_password term = object(self)
   inherit LTerm_read_line.read_password () as super
-  inherit [Zed_utf8.t] LTerm_read_line.term term
+  inherit [Zed_string.t] LTerm_read_line.term term
 
   method! send_action = function
     | LTerm_read_line.Break ->
@@ -25,7 +25,7 @@ class read_password term = object(self)
         super#send_action action
 
   initializer
-    self#set_prompt (S.const (LTerm_text.of_string "Type a password: "))
+    self#set_prompt (S.const (LTerm_text.of_utf8 "Type a password: "))
 end
 
 let main () =
@@ -35,6 +35,6 @@ let main () =
   >>= fun term ->
   (new read_password term)#run
   >>= fun password ->
-  Lwt_io.printlf "You typed %S" password
+  Lwt_io.printlf "You typed %S" (Zed_string_UTF8.of_t password)
 
 let () = Lwt_main.run (main ())

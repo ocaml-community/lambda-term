@@ -114,6 +114,7 @@ let get_binaries () =
     String_set.empty
     (get_paths ())
   >|= String_set.elements
+  >|= List.map Zed_string_UTF8.to_t_exn
 
 (* +-----------------------------------------------------------------+
    | Customization of the read-line engine                           |
@@ -128,12 +129,12 @@ let time =
 
 class read_line ~term ~history ~exit_code ~binaries = object(self)
   inherit LTerm_read_line.read_line ~history ()
-  inherit [Zed_utf8.t] LTerm_read_line.term term
+  inherit [Zed_string.t] LTerm_read_line.term term
 
   method! completion =
     let prefix  = Zed_rope.to_string self#input_prev in
-    let binaries = List.filter (fun file -> Zed_utf8.starts_with file prefix) binaries in
-    self#set_completion 0 (List.map (fun file -> (file, " ")) binaries)
+    let binaries = List.filter (fun file -> Zed_string.starts_with ~prefix file) binaries in
+    self#set_completion 0 (List.map (fun file -> (file, Zed_string_UTF8.to_t_exn " ")) binaries)
 
   initializer
     self#set_prompt (S.l2 (fun size time -> make_prompt size exit_code time) self#size time)
@@ -147,7 +148,7 @@ let rec loop term history exit_code =
   get_binaries ()
   >>= fun binaries ->
   Lwt.catch (fun () ->
-    (new read_line ~term ~history:(LTerm_history.contents history)
+    (new read_line ~term ~history:(LTerm_history.zed_contents history)
       ~exit_code ~binaries)#run
     >|= fun command -> Some command)
     (function
@@ -155,6 +156,7 @@ let rec loop term history exit_code =
       | exn -> Lwt.fail exn)
   >>= function
   | Some command ->
+    let command= Zed_string_UTF8.of_t command in
     Lwt.catch (fun () -> Lwt_process.exec (Lwt_process.shell command))
       (function
         | Unix.Unix_error (Unix.ENOENT, _, _) ->

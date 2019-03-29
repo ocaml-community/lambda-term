@@ -22,7 +22,7 @@ let main () =
 
   let vbox = new vbox in
   let clock = new label (get_time ()) in
-  let button = new button "exit" in
+  let button = new button "exit退出" in
   vbox#add clock;
   vbox#add button;
 

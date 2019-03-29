@@ -16,7 +16,9 @@ let main () =
   (* Create the UI. *)
   let vbox = new LTerm_widget.vbox in
   vbox#add (new LTerm_widget.label "Hello, world!");
-  vbox#add (new LTerm_widget.label "Press escape to exit.");
+  vbox#add (new LTerm_widget.label "你好，世界！");
+  vbox#add (new LTerm_widget.label "ハロー・ワールド");
+  vbox#add (new LTerm_widget.label "안녕, 세계!");
   vbox#on_event (function
                    | LTerm_event.Key { LTerm_key.code = LTerm_key.Escape; _ } -> wakeup wakener (); true
                    | _ -> false);
