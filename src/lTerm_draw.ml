@@ -344,7 +344,7 @@ let draw_string_aligned ctx row alignment ?style str=
     | Ok Zed_string.{len=_;width}-> width
     | Error Zed_string.{start=_;len=_;width}-> width
   in
-  let line_width start= actual_width (Zed_string.width_from start str) in
+  let line_width start= actual_width (Zed_string.width ~start str) in
   let rec loop row col ofs=
     if ofs < Zed_string.length str then begin
       let ch= Zed_string.get str ofs
@@ -387,7 +387,7 @@ let draw_styled_aligned ctx row alignment ?style str=
     | Ok Zed_string.{len=_;width}-> width
     | Error Zed_string.{start=_;len=_;width}-> width
   in
-  let line_width start= actual_width (Zed_string.width_from start str) in
+  let line_width start= actual_width (Zed_string.width ~start str) in
   let rec loop row col idx=
     if idx < Zed_string.length str then begin
       let ch, ch_style= Zed_string.get str idx, Array.unsafe_get styles idx
