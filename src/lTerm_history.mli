@@ -12,7 +12,7 @@
 type t
   (** Type of a history. *)
 
-val create : ?max_size : int -> ?max_entries : int -> Zed_utf8.t list -> t
+val create : ?max_size : int -> ?max_entries : int -> Zed_string.t list -> t
   (** [create ?max_size ?max_lines init] creates a new history.
 
       [max_size] is the maximum size in bytes of the history. Oldest
@@ -30,7 +30,7 @@ val create : ?max_size : int -> ?max_entries : int -> Zed_utf8.t list -> t
       Note: the first element of [init] must be the most recent
       entry. *)
 
-val add : t -> ?skip_empty : bool -> ?skip_dup : bool -> Zed_utf8.t -> unit
+val add : t -> ?skip_empty : bool -> ?skip_dup : bool -> Zed_string.t -> unit
   (** [add history ?skip_empty ?skip_dup entry] adds [entry] to the
       top of the history. If [skip_empty] is [true] (the default) and
       [entry] contains only spaces, it is not added. If [skip_dup] is
@@ -40,11 +40,7 @@ val add : t -> ?skip_empty : bool -> ?skip_dup : bool -> Zed_utf8.t -> unit
       If [entry] is bigger than the maximum size of the history, the
       history is not modified. *)
 
-val contents : t -> Zed_utf8.t list
-  (** Returns all the entries of the history. The first element of the
-      list is the most recent entry. *)
-
-val zed_contents : t -> Zed_string.t list
+val contents : t -> Zed_string.t list
   (** Returns all the entries of the history. The first element of the
       list is the most recent entry. *)
 
@@ -119,7 +115,7 @@ val save : t ->
       [history] are marked as old, i.e. [old_count history = length
       history]. *)
 
-val entry_size : Zed_utf8.t -> int
+val entry_size : Zed_string.t -> int
   (** [entry_size entry] returns the size taken by an entry in the
       history file in bytes. This is not exactly [String.length entry]
       since some characters are escaped and the entry is terminated by
