@@ -62,15 +62,15 @@ end
 
 let rec loop term history state =
   Lwt.catch (fun () ->
-    let rl = new read_line ~term ~history:(LTerm_history.zed_contents history) ~state in
+    let rl = new read_line ~term ~history:(LTerm_history.contents history) ~state in
     rl#run >|= fun command -> Some command)
     (function
       | Sys.Break -> return None
       | exn -> Lwt.fail exn)
   >>= function
   | Some command ->
-    let command= Zed_string_UTF8.of_t command in 
-    let state, out = Interpreter.eval state command in
+    let command_utf8= Zed_string_UTF8.of_t command in 
+    let state, out = Interpreter.eval state command_utf8 in
     LTerm.fprintls term (make_output state out)
     >>= fun () ->
     LTerm_history.add history command;
