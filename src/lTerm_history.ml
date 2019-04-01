@@ -13,7 +13,7 @@ let return, (>>=) = Lwt.return, Lwt.(>>=)
 
 (* A node contains an entry of the history. *)
 type node = {
-  mutable data : Zed_utf8.t;
+  mutable data : Zed_string.t;
   mutable size : int;
   mutable prev : node;
 }
@@ -27,19 +27,21 @@ type t = {
   mutable max_size : int;
   mutable max_entries : int;
   mutable old_count : int;
-  mutable cache : Zed_utf8.t list option;
+  mutable cache : Zed_string.t list option;
   (* When set, the cache is equal to the list of entries, from the
      most recent to the oldest. *)
 }
 
 let entry_size str =
+  let zChar_newline= Zed_char.unsafe_of_char '\n'
+  and zChar_slash= Zed_char.unsafe_of_char '\\' in
   let size = ref 0 in
-  for i = 0 to String.length str - 1 do
-    match String.unsafe_get str i with
-      | '\n' | '\\' ->
-          size := !size + 2
-      | _ ->
-          size := !size + 1
+  for i = 0 to Zed_string.length str - 1 do
+    let ch= Zed_string.get str i in
+    if Zed_char.compare ch zChar_newline = 0 || Zed_char.compare ch zChar_slash = 0 then
+      size := !size + 2
+    else
+      size := !size + 1
   done;
   !size + 1
 
@@ -60,14 +62,14 @@ let create ?(max_size=max_int) ?(max_entries=max_int) init =
       | entry :: entries ->
           let entry_size = entry_size entry in
           if size_ok size entry_size max_size && count + 1 < max_entries then begin
-            let next = { data = ""; prev = node; size = 0 } in
+            let next = { data = Zed_string.empty (); prev = node; size = 0 } in
             node.data <- entry;
             node.size <- entry_size;
             aux (size + entry_size) (count + 1) next entries
           end else
             (size, count, node)
   in
-  let rec node = { data = ""; size = 0; prev = node } in
+  let rec node = { data = Zed_string.empty (); size = 0; prev = node } in
   let size, count, marker = aux 0 0 node init in
   node.prev <- marker;
   {
@@ -82,8 +84,9 @@ let create ?(max_size=max_int) ?(max_entries=max_int) init =
 
 let spaces = UCharInfo.load_property_tbl `White_Space
 
-let is_space ch = UCharTbl.Bool.get spaces ch
-let is_empty str = Zed_utf8.for_all is_space str
+let is_space_uChar ch = UCharTbl.Bool.get spaces ch
+let is_space ch = Zed_char.for_all is_space_uChar ch
+let is_empty str = Zed_string.for_all is_space str
 
 let is_dup history entry =
   history.length > 0 && history.entries.data = entry
@@ -99,7 +102,7 @@ let drop_oldest history =
   history.full_size <- history.full_size - last.size;
   if history.old_count > 0 then history.old_count <- history.old_count - 1;
   (* Clear the marker so its contents can be garbage collected. *)
-  last.data <- "";
+  last.data <- Zed_string.empty ();
   last.size <- 0
 
 let add_aux history data size =
@@ -156,11 +159,6 @@ let contents history =
         history.cache <- Some l;
         l
 
-let zed_contents history =
-  List.map
-    Zed_string_UTF8.to_t_exn
-    (contents history)
-
 let size history = history.full_size
 let length history = history.length
 let old_count history = history.old_count
@@ -202,7 +200,7 @@ let set_max_entries history n =
   end;
   history.max_entries <- n
 
-let escape entry =
+(*let escape_utf8 entry =
   let len = String.length entry in
   let buf = Buffer.create len in
   let rec loop ofs =
@@ -224,9 +222,40 @@ let escape entry =
             Buffer.add_substring buf entry ofs (ofs' - ofs);
             loop ofs'
   in
+  loop 0*)
+
+let escape entry =
+  let len = Zed_string.length entry in
+  let buf = Zed_string.Buf.create len in
+  let zChar_n= Zed_char.unsafe_of_char 'n' in
+  let zChar_slash= Zed_char.unsafe_of_char '\\' in
+  let zChar_nl= Zed_char.unsafe_of_char '\n' in
+  let rec loop ofs =
+    if ofs = len then
+      Zed_string.Buf.contents buf
+    else
+      let ch= Zed_string.get entry ofs in
+      if Zed_char.compare ch zChar_nl = 0 then
+        begin
+          Zed_string.Buf.add_zChar buf zChar_slash;
+          Zed_string.Buf.add_zChar buf zChar_n;
+          loop (ofs + 1);
+        end
+      else if Zed_char.compare ch zChar_slash = 0 then
+        begin
+          Zed_string.Buf.add_zChar buf zChar_slash;
+          Zed_string.Buf.add_zChar buf zChar_slash;
+          loop (ofs + 1);
+        end
+      else
+        begin
+          Zed_string.Buf.add_zChar buf ch;
+          loop (ofs + 1);
+        end
+  in
   loop 0
 
-let unescape line =
+(*let unescape_utf8 line =
   let len = String.length line in
   let buf = Buffer.create len in
   let rec loop ofs size =
@@ -257,6 +286,38 @@ let unescape line =
             let ofs' = Zed_utf8.unsafe_next line ofs in
             Buffer.add_substring buf line ofs (ofs' - ofs);
             loop ofs' (size + ofs' - ofs)
+  in
+  loop 0 0*)
+
+let unescape line =
+  let len = Zed_string.length line in
+  let buf= Zed_string.Buf.create len in
+  let zChar_n= Zed_char.unsafe_of_char 'n' in
+  let zChar_slash= Zed_char.unsafe_of_char '\\' in
+  let zChar_nl= Zed_char.unsafe_of_char '\n' in
+  let rec loop ofs size =
+    if ofs = len then
+      (Zed_string.Buf.contents buf, size + 1)
+    else
+      let ch= Zed_string.get line ofs in
+      if Zed_char.compare ch zChar_slash = 0 then
+        if ofs = len then
+          (Zed_string.Buf.add_zChar buf zChar_slash;
+          (Zed_string.Buf.contents buf, size + 3);)
+        else
+          (let next= Zed_string.get line (ofs + 1) in
+          if Zed_char.compare next zChar_n = 0 then
+            (Zed_string.Buf.add_zChar buf zChar_nl;
+            loop (ofs + 2) (size + 2);)
+          else if Zed_char.compare next zChar_slash = 0 then
+            (Zed_string.Buf.add_zChar buf zChar_slash;
+            loop (ofs + 2) (size + 2);)
+          else
+            (Zed_string.Buf.add_zChar buf zChar_slash;
+            loop (ofs + 1) (size + 2);))
+      else
+        (Zed_string.Buf.add_zChar buf ch;
+        loop (ofs + 1) (size + Zed_char.size ch);)
   in
   loop 0 0
 
@@ -325,6 +386,7 @@ let load history ?log ?(skip_empty=true) ?(skip_dup=true) fn =
                 | None ->
                     return ()
                 | Some line ->
+                  let line= Zed_string_UTF8.to_t_exn line in
                     (try
                        let entry, size = unescape line in
                        if not (skip_empty && is_empty entry) && not (skip_dup && is_dup history entry) then begin
@@ -360,7 +422,7 @@ let rec dump_entries oc marker node =
   if node == marker then
     return ()
   else begin
-    Lwt_io.write_line oc node.data >>= fun () ->
+    Lwt_io.write_line oc (Zed_string_UTF8.of_t node.data) >>= fun () ->
     dump_entries oc marker node.prev
   end
 
@@ -405,10 +467,11 @@ let save history ?max_size ?max_entries ?(skip_empty=true) ?(skip_dup=true) ?(ap
                   Lwt_io.close ic >>= fun () ->
                   return count
               | Some line ->
+                  let line= Zed_string_UTF8.to_t_exn line in
                   (* Do not bother unescaping. Tests remain the same
                      on the unescaped version. *)
                   if not (skip_empty && is_empty line) && not (skip_dup && is_dup history_save line) then
-                    add_aux history_save line (String.length line + 1);
+                    add_aux history_save line (Zed_string.length line + 1);
                   aux (count + 1)
           in
           aux 0
