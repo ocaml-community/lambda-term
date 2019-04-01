@@ -148,7 +148,7 @@ let rec loop term history exit_code =
   get_binaries ()
   >>= fun binaries ->
   Lwt.catch (fun () ->
-    (new read_line ~term ~history:(LTerm_history.zed_contents history)
+    (new read_line ~term ~history:(LTerm_history.contents history)
       ~exit_code ~binaries)#run
     >|= fun command -> Some command)
     (function
@@ -156,8 +156,8 @@ let rec loop term history exit_code =
       | exn -> Lwt.fail exn)
   >>= function
   | Some command ->
-    let command= Zed_string_UTF8.of_t command in
-    Lwt.catch (fun () -> Lwt_process.exec (Lwt_process.shell command))
+    let command_utf8= Zed_string_UTF8.of_t command in
+    Lwt.catch (fun () -> Lwt_process.exec (Lwt_process.shell command_utf8))
       (function
         | Unix.Unix_error (Unix.ENOENT, _, _) ->
           LTerm.fprintls term (eval [B_fg lred; S "command not found"])
