@@ -1164,7 +1164,7 @@ let render_style term buf old_point new_point =
 let render_point term buf old_point new_point =
   render_style term buf old_point new_point;
   (* Skip control characters, otherwise output will be messy. *)
-  if UChar.code new_point.LTerm_draw.char.core < 32 then
+  if UChar.code (Zed_char.core new_point.LTerm_draw.char) < 32 then
     Buffer.add_string buf unknown_utf8
   else
     Buffer.add_string buf (Zed_char_UTF8.of_t new_point.LTerm_draw.char)
@@ -1244,7 +1244,7 @@ let render_windows term kind handle_newlines matrix =
           else begin
             match !(Array.unsafe_get line i) with
             | LTerm_draw.Elem point->
-              let code = UChar.code point.LTerm_draw.char.core in
+              let code = UChar.code (Zed_char.core point.LTerm_draw.char) in
               if handle_newlines && code = 10 then begin
                 (* Copy styles. *)
                 Array.unsafe_set res i (windows_char_info term point yspace);
@@ -1345,7 +1345,7 @@ let print_box_with_newlines_unix term matrix =
     let rec loop x =
       match !(Array.unsafe_get line x) with
       | Elem point->
-        let code = UChar.code point.char.core in
+        let code = UChar.code (Zed_char.core point.char) in
         if x = cols then begin
           if code = 10 && y < rows - 1 then
             Buffer.add_char buf '\n'
