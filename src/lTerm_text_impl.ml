@@ -20,7 +20,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
   let dummy = (Zed_char.unsafe_of_char ' ', LTerm_style.none)
 
   let of_string str=
-    Array.map (fun chr-> (chr, LTerm_style.none)) str.Zed_string.chars
+    Array.map (fun chr-> (chr, LTerm_style.none)) (Zed_string.chars str)
 
   let aval_width= function
     | Ok Zed_string.{len=_;width}-> width
@@ -54,7 +54,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
           let chr= Zed_string.get str idx in
           match Zed_char.prop chr with
           | Other->
-            let code= UChar.int_of (Zed_string.get str idx).core in
+            let code= UChar.int_of (Zed_char.core (Zed_string.get str idx)) in
             Array.unsafe_set arr (idx + 0)
               (Zed_char.unsafe_of_char '\\', LTerm_style.none);
             Array.unsafe_set arr (idx + 1)
@@ -102,7 +102,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
 
   let stylise str style =
     let str= Zed_string_UTF8.to_t_exn str in
-    Array.map (fun chr-> (chr, style)) str.chars
+    Array.map (fun chr-> (chr, style)) (Zed_string.chars str)
 
   (* +-----------------------------------------------------------------+
     | Parenthesis matching                                            |

@@ -1,6 +1,6 @@
 (*
- * lTerm.ml
- * --------
+ * lTerm_buttons_impl.ml
+ * ---------------------
  * Copyright : (c) 2011, Jeremie Dimino <jeremie@dimino.org>
  * Licence   : BSD3
  *

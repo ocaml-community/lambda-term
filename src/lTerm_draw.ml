@@ -597,7 +597,7 @@ let char_of_piece = function
 
 let piece_of_point point=
   match !point with
-  | Elem elem-> piece_of_char elem.char.core
+  | Elem elem-> piece_of_char (Zed_char.core elem.char)
   | WidthHolder _-> None
 
 let draw_piece ctx row col ?style piece=
