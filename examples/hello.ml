@@ -19,6 +19,7 @@ let main () =
   vbox#add (new LTerm_widget.label "你好，世界！");
   vbox#add (new LTerm_widget.label "ハロー・ワールド");
   vbox#add (new LTerm_widget.label "안녕, 세계!");
+  vbox#add (new LTerm_widget.label "Press escape to exit.");
   vbox#on_event (function
                    | LTerm_event.Key { LTerm_key.code = LTerm_key.Escape; _ } -> wakeup wakener (); true
                    | _ -> false);
