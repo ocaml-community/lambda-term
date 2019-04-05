@@ -380,7 +380,7 @@ let draw_string_aligned ctx row alignment ?style str=
 let draw_styled_aligned ctx row alignment ?style str=
   let str, styles=
     let len= Array.length str in
-    Zed_string.of_char_array (Array.init len (fun i-> fst (Array.get str i)))
+    Zed_string.implode (Array.to_list (Array.init len (fun i-> fst (Array.get str i))))
     , (Array.init len (fun i-> snd (Array.get str i)))
   in
   let actual_width= function
