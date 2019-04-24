@@ -25,12 +25,12 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
 
   let text_size str =
     let rec loop ofs rows cols max_cols =
-      if ofs = Zed_string.length str then
+      if ofs = Zed_string.bytes str then
         { rows; cols = max cols max_cols }
       else
-        let chr, ofs = Zed_string.get str ofs, ofs+1 in
+        let chr, ofs = Zed_string.extract_next str ofs in
         if chr = newline then
-          if ofs = Zed_string.length str then
+          if ofs = Zed_string.bytes str then
             { rows; cols = max cols max_cols }
           else
             loop ofs (rows + 1) 0 (max cols max_cols)
