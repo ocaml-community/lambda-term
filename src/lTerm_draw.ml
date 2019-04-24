@@ -10,6 +10,7 @@
 
 open CamomileLibraryDefault.Camomile
 open LTerm_geom
+open Result
 
 let unsafe_get matrix line column =
   Array.unsafe_get (Array.unsafe_get matrix line) column
@@ -340,9 +341,10 @@ let draw_styled ctx row col ?style str=
   loop (ctx.ctx_row1 + row) (ctx.ctx_col1 + col) 0
 
 let draw_string_aligned ctx row alignment ?style str=
-  let actual_width= function
-    | Ok Zed_string.{len=_;width}-> width
-    | Error Zed_string.{start=_;len=_;width}-> width
+  let actual_width=
+    function
+    | Ok {Zed_string.len=_;width}-> width
+    | Error {Zed_string.start=_;len=_;width}-> width
   in
   let line_width start= actual_width (Zed_string.width ~start str) in
   let rec loop row col ofs=
@@ -384,8 +386,8 @@ let draw_styled_aligned ctx row alignment ?style str=
     , (Array.init len (fun i-> snd (Array.get str i)))
   in
   let actual_width= function
-    | Ok Zed_string.{len=_;width}-> width
-    | Error Zed_string.{start=_;len=_;width}-> width
+    | Ok {Zed_string.len=_;width}-> width
+    | Error {Zed_string.start=_;len=_;width}-> width
   in
   let line_width start= actual_width (Zed_string.width ~start str) in
   let rec loop row col idx=

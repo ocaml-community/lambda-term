@@ -225,7 +225,7 @@ let set_max_entries history n =
   loop 0*)
 
 let escape entry =
-  let len = Zed_string.length entry in
+  let len = Zed_string.bytes entry in
   let buf = Zed_string.Buf.create len in
   let zChar_n= Zed_char.unsafe_of_char 'n' in
   let zChar_slash= Zed_char.unsafe_of_char '\\' in

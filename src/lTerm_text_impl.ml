@@ -10,6 +10,7 @@
 module Make (LiteralIntf: LiteralIntf.Type) = struct
   open CamomileLibraryDefault.Camomile
   open LTerm_style
+  open Result
 
   type t = (Zed_char.t * LTerm_style.t) array
 
@@ -23,8 +24,8 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
     Array.map (fun chr-> (chr, LTerm_style.none)) (Array.of_list (Zed_string.explode str))
 
   let aval_width= function
-    | Ok Zed_string.{len=_;width}-> width
-    | Error Zed_string.{start=_;len=_;width}-> width
+    | Ok {Zed_string.len=_;width}-> width
+    | Error {Zed_string.start=_;len=_;width}-> width
 
   let of_utf8 str=
     let str,_= Zed_string_UTF8.to_t str in
@@ -251,12 +252,12 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
     } in
     let arr = Array.make (markup_length markup) dummy in
     let rec copy_string str ofs idx style =
-      if ofs = Zed_string.length str then
+      if ofs >= Zed_string.bytes str then
         idx
       else begin
-        let chr= Zed_string.get str ofs in
+        let chr, ofs= Zed_string.extract_next str ofs in
         Array.unsafe_set arr idx (chr, style);
-        copy_string str (ofs + 1) (idx + 1) style
+        copy_string str ofs (idx + 1) style
       end
     in
     let rec copy_rope zip idx style =
