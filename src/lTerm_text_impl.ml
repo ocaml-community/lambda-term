@@ -28,7 +28,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
     | Error {Zed_string.start=_;len=_;width}-> width
 
   let of_utf8 str=
-    let str,_= Zed_string_UTF8.to_t str in
+    let str= Zed_string.unsafe_of_utf8 str in
     of_string str
 
   (*let rec invalid_length str ofs acc =
@@ -47,15 +47,18 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
   let of_string_maybe_invalid str=
     let len= Zed_string.length str in
     let arr= Array.make len dummy in
-    let rec loop idx=
+    let rec loop ofs idx=
       if idx = len then
         arr
       else begin
-        let idx=
-          let chr= Zed_string.get str idx in
-          match Zed_char.prop chr with
-          | Other->
-            let code= UChar.int_of (Zed_char.core (Zed_string.get str idx)) in
+        let idx, ofs=
+          try
+            let chr, ofs= Zed_string.extract_next str ofs in
+            Array.unsafe_set arr idx (chr, LTerm_style.none);
+            (ofs, idx + 1)
+          with
+            Zed_utf8.Invalid _->
+            let code= UChar.int_of (Zed_char.core (Zed_string.extract str ofs)) in
             Array.unsafe_set arr (idx + 0)
               (Zed_char.unsafe_of_char '\\', LTerm_style.none);
             Array.unsafe_set arr (idx + 1)
@@ -66,18 +69,15 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
             Array.unsafe_set arr (idx + 3)
               (Zed_char.unsafe_of_uChar (uchar_of_hex (code land 15))
               , LTerm_style.none);
-            idx + 4
-          | _->
-            Array.unsafe_set arr idx (chr, LTerm_style.none);
-            idx + 1
+            ofs + 1, idx + 4
         in
-        loop idx
+        loop ofs idx
       end
     in
-    loop 0
+    loop 0 0
 
   let of_utf8_maybe_invalid str=
-    let str,_= Zed_string_UTF8.to_t str in
+    let str= Zed_string.unsafe_of_utf8 str in
     of_string_maybe_invalid str
 
   let to_string txt =
@@ -102,7 +102,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
     Zed_rope.Buffer.contents buf
 
   let stylise str style =
-    let str= Zed_string_UTF8.to_t_exn str in
+    let str= Zed_string.unsafe_of_utf8 str in
     Array.map (fun chr-> (chr, style)) (Array.of_list (Zed_string.explode str))
 
   (* +-----------------------------------------------------------------+

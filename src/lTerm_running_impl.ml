@@ -21,14 +21,14 @@ and find_focusable_in_list = function
         | None -> find_focusable_in_list rest
 
 (* Mouse support *)
-let rec pick coord widget = 
+let rec pick coord widget =
   if not (LTerm_geom.in_rect widget#allocation coord) then None
   else
     let f () = if widget#can_focus then Some(widget, coord)  else None in
-    let w = (* search children *) 
-      List.fold_left 
+    let w = (* search children *)
+      List.fold_left
         (function None -> pick coord
-                | Some(w, c) -> (fun _ -> Some(w, c))) 
+                | Some(w, c) -> (fun _ -> Some(w, c)))
         None widget#children
     in
     if w = None then f() else w

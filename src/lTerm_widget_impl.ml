@@ -159,7 +159,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
     method set_mouse_mode : [ `middle | `ratio | `auto ] -> unit
     method set_min_scroll_bar_size : int -> unit
     method set_max_scroll_bar_size : int -> unit
-    method on_scrollbar_change : ?switch:LTerm_widget_callbacks.switch -> 
+    method on_scrollbar_change : ?switch:LTerm_widget_callbacks.switch ->
       (unit -> unit) -> unit
   end
 

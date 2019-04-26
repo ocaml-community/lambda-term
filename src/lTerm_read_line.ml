@@ -213,11 +213,13 @@ let () =
    | The read-line engine                                            |
    +-----------------------------------------------------------------+ *)
 
-let is_prefix ~prefix s =
-  Zed_string.length prefix <= Zed_string.length s &&
+let is_prefix ~prefix s=
+  let prefix= Zed_string.to_utf8 prefix
+  and s= Zed_string.to_utf8 s in
+  String.length prefix <= String.length s &&
   (let i = ref 0 in
-   while !i < Zed_string.length prefix && Zed_string.get s  !i = Zed_string.get prefix  !i do incr i done;
-   !i = Zed_string.length prefix
+   while !i < String.length prefix && s.[!i] = prefix.[!i] do incr i done;
+   !i = String.length prefix
   )
 
 let history_find predicate history =
@@ -232,20 +234,21 @@ let history_find predicate history =
   history_find_ [] history
 
 let search_string str sub =
+  let str= Zed_string.to_utf8 str
+  and sub= Zed_string.to_utf8 sub in
   let rec equal_at a b =
-    (b = Zed_string.length sub) ||
-    (Zed_string.get str a = Zed_string.get sub b) && equal_at (a + 1) (b + 1)
+    (b = String.length sub) || (String.unsafe_get str a = String.unsafe_get sub b) && equal_at (a + 1) (b + 1)
   in
-  let rec loop idx=
-    if idx + Zed_string.length sub > Zed_string.length str then
+  let rec loop ofs idx =
+    if ofs + String.length sub > String.length str then
       None
     else
-      if equal_at idx 0 then
+      if equal_at ofs 0 then
         Some idx
       else
-        loop (idx + 1)
+        loop (Zed_utf8.unsafe_next str ofs) (idx + 1)
   in
-  loop 0
+  loop 0 0
 
 let macro = Zed_macro.create []
 
@@ -594,7 +597,7 @@ object(self)
           List.iter self#send_action (Zed_macro.contents macro)
 
       | Edit LTerm_edit.Insert_macro_counter ->
-          Zed_edit.insert context (Zed_rope.of_string (Zed_string_UTF8.to_t_exn (string_of_int (Zed_macro.get_counter macro))));
+          Zed_edit.insert context (Zed_rope.of_string (Zed_string.unsafe_of_utf8 (string_of_int (Zed_macro.get_counter macro))));
           Zed_macro.add_counter macro 1
 
       | Edit LTerm_edit.Set_macro_counter when S.value mode = Edition ->
@@ -621,7 +624,7 @@ object(self)
                 let pos, text = save in
                 save <- (0, Zed_rope.empty ());
                 (try
-                   Zed_macro.set_counter macro (int_of_string (Zed_string_UTF8.of_t (Zed_rope.to_string (Zed_edit.text edit))))
+                   Zed_macro.set_counter macro (int_of_string (Zed_string.to_utf8 (Zed_rope.to_string (Zed_edit.text edit))))
                  with Failure _ ->
                    ());
                 Zed_edit.goto context 0;
@@ -634,7 +637,7 @@ object(self)
                 let pos, text = save in
                 save <- (0, Zed_rope.empty ());
                 (try
-                   Zed_macro.add_counter macro (int_of_string (Zed_string_UTF8.of_t (Zed_rope.to_string (Zed_edit.text edit))))
+                   Zed_macro.add_counter macro (int_of_string (Zed_string.to_utf8 (Zed_rope.to_string (Zed_edit.text edit))))
                  with Failure _ ->
                    ());
                 Zed_edit.goto context 0;
@@ -1264,7 +1267,7 @@ object(self)
         end >>= fun () ->
         let temp_fn = self#create_temporary_file_for_external_editor in
         let input = Zed_rope.to_string (Zed_edit.text self#edit) in
-        Lwt_io.with_file ~mode:Output temp_fn (fun oc -> Lwt_io.write_line oc (Zed_string_UTF8.of_t input))
+        Lwt_io.with_file ~mode:Output temp_fn (fun oc -> Lwt_io.write_line oc (Zed_string.to_utf8 input))
         >>= fun () ->
         let editor = self#external_editor in
         Printf.ksprintf Lwt_unix.system "%s %s" editor (Filename.quote temp_fn)
@@ -1282,7 +1285,7 @@ object(self)
                 let s = Zed_utf8.rstrip s in
                 Zed_edit.goto_bot self#context;
                 Zed_edit.replace self#context (Zed_rope.length (Zed_edit.text self#edit))
-                  (Zed_rope.of_string (Zed_string_UTF8.to_t_exn s));
+                  (Zed_rope.of_string (Zed_string.unsafe_of_utf8 s));
                 Lwt.return ())
              (function
                | Unix.Unix_error (err, _, _) ->
