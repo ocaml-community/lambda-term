@@ -35,7 +35,7 @@ class t : string -> object
     (** Whether the widget can receive the focus or not. *)
 
   method focus : t option LTerm_geom.directions
-    (** Specify a target widget to the left, right, up and/or down 
+    (** Specify a target widget to the left, right, up and/or down
         when changing focus. *)
 
   method set_focus : t option LTerm_geom.directions -> unit
@@ -288,8 +288,8 @@ class adjustment : object
 
   method set_offset : ?trigger_callback:bool -> int -> unit
     (** Set offset clipped to range. *)
-    
-  method on_offset_change : ?switch:LTerm_widget_callbacks.switch -> 
+
+  method on_offset_change : ?switch:LTerm_widget_callbacks.switch ->
      (int -> unit) -> unit
     (** [on_offset_change ?switch f] calls f when the offset changes. *)
 
@@ -301,8 +301,8 @@ class type scrollable_adjustment = object
   inherit adjustment
 
   method incr : int
-    (** Return offset incremented by one step 
-    
+    (** Return offset incremented by one step
+
     If range > number of scroll bar steps then step>=1. *)
 
   method decr : int
@@ -317,7 +317,7 @@ class type scrollable_adjustment = object
 
      [`fixed x] sets the size to x.
 
-     [`dynamic 0] sets the size to reflect the ratio between 
+     [`dynamic 0] sets the size to reflect the ratio between
      the range and scroll window size.
 
      [`dynamic x] (x>0) interprets [x] as the viewable size and
@@ -326,7 +326,7 @@ class type scrollable_adjustment = object
 
   method set_mouse_mode : [ `middle | `ratio | `auto ] -> unit
     (** Configure how a mouse coordinate is converted to a scroll bar offest.
-     
+
      [`middle] sets the middle of the scrollbar to the position clicked.
 
      [`ratio] computes the offset relative to the scroll bar and scroll window sizes,
@@ -341,7 +341,7 @@ class type scrollable_adjustment = object
   method set_max_scroll_bar_size : int -> unit
     (** Set the maximum scroll bar size (default: scroll window size *)
 
-  method on_scrollbar_change : ?switch:LTerm_widget_callbacks.switch -> 
+  method on_scrollbar_change : ?switch:LTerm_widget_callbacks.switch ->
     (unit -> unit) -> unit
     (** [on_scrollbar_change ?switch f] calls f when the scrollbar is changed and
      needs to be re-drawn. *)
@@ -384,12 +384,12 @@ class type scrollable_document = object
 
 end
 
-(** Interface used by the scrollbar widget to configure the 
+(** Interface used by the scrollbar widget to configure the
   scrollbar and get parameters needed for rendering *)
 class type scrollable_private = object
 
   method set_scroll_window_size : int -> unit
-    (** The attached scroll bar needs to provide its window 
+    (** The attached scroll bar needs to provide its window
     size during [set_allocation] *)
 
   method get_render_params : int * int * int
@@ -397,15 +397,15 @@ class type scrollable_private = object
 
 end
 
-(** Main object implementing scroll logic for coordination 
+(** Main object implementing scroll logic for coordination
  between a scrollable wigdet and a scrollbar widget.
 
  [scrollable_adjustment] implements the main logic and provides a
  lowlevel interface for controlling how mouse events are translated
- to scroll offsets ([set_mouse_mode]) and the size of the scrollbar 
+ to scroll offsets ([set_mouse_mode]) and the size of the scrollbar
  ([set_scroll_bar_mode]).
 
- [scrollable_document] provides a higher level interface for 
+ [scrollable_document] provides a higher level interface for
  configuring the operation of the scrollbar where the scrollbar
  is used to reflect the area of a page within a potentially larger
  document.
@@ -426,27 +426,27 @@ class type default_scroll_events = object
   method scroll_key_event : LTerm_event.t -> bool
 end
 
-(** Vertical scrollbar widget. 
- 
+(** Vertical scrollbar widget.
+
  [rc] is the resource class of the widget.  [".(un)focused"] sets the
- (un)focused style of the widget.  [".barstyle"] can be [filled] or 
+ (un)focused style of the widget.  [".barstyle"] can be [filled] or
  [outline].  [".track"] is a bool to display a central track line.
 
- [default_event_handler] when true (the default) installs the 
+ [default_event_handler] when true (the default) installs the
  [mouse_event] and [scroll_key_event] handlers.
- 
+
  [width] (resp. [height]) defines the prefered thickness of the
  scrollbar. *)
-class vscrollbar : 
-  ?rc:string -> ?default_event_handler:bool -> ?width:int -> 
+class vscrollbar :
+  ?rc:string -> ?default_event_handler:bool -> ?width:int ->
   #scrollable -> object
   inherit t
   inherit default_scroll_events
 end
 
 (** Horizontal scrollbar widget. *)
-class hscrollbar : 
-  ?rc:string -> ?default_event_handler:bool -> ?height:int -> 
+class hscrollbar :
+  ?rc:string -> ?default_event_handler:bool -> ?height:int ->
   #scrollable -> object
   inherit t
   inherit default_scroll_events

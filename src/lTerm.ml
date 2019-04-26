@@ -1039,7 +1039,7 @@ let fprints term text =
     else
       fprint term (expand term text)
   else
-    fprint term (Zed_string_UTF8.of_t (LTerm_text.to_string text))
+    fprint term (Zed_string.to_utf8 (LTerm_text.to_string text))
 
 let fprintls term text =
   fprints term (Array.append text (LTerm_text.of_utf8 "\n"))

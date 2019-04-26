@@ -165,7 +165,7 @@ let fill ctx ?style ch =
     for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
       for col = ctx.ctx_col1 to ctx.ctx_col2 - 1 do
         let point = unsafe_get ctx.ctx_matrix row col in
-        let elem= 
+        let elem=
           match !point with
           | Elem elem-> { elem with char= ch}
           | WidthHolder n->
@@ -180,7 +180,7 @@ let fill ctx ?style ch =
     for row = ctx.ctx_row1 to ctx.ctx_row2 - 1 do
       for col = ctx.ctx_col1 to ctx.ctx_col2 - 1 do
         let point = unsafe_get ctx.ctx_matrix row col in
-        let elem= 
+        let elem=
           match !point with
           | Elem elem-> { elem with char= ch}
           | WidthHolder n->
@@ -309,8 +309,7 @@ let draw_string ctx row col ?style str=
   let len= Zed_string.length str in
   let rec loop row col ofs=
     if ofs < len then
-      let ch= Zed_string.get str ofs in
-      let ofs= ofs + 1 in
+      let ch, ofs= Zed_string.extract_next str ofs in
       if ch = newline then
         loop (row + 1) ctx.ctx_col1 ofs
       else begin
@@ -346,11 +345,10 @@ let draw_string_aligned ctx row alignment ?style str=
     | Ok {Zed_string.len=_;width}-> width
     | Error {Zed_string.start=_;len=_;width}-> width
   in
-  let line_width start= actual_width (Zed_string.width ~start str) in
+  let line_width start= actual_width (Zed_string.width_ofs ~start str) in
   let rec loop row col ofs=
     if ofs < Zed_string.length str then begin
-      let ch= Zed_string.get str ofs
-      and ofs= ofs + 1 in
+      let ch, ofs= Zed_string.extract_next str ofs in
       if ch = newline then
         ofs
       else begin
@@ -362,7 +360,7 @@ let draw_string_aligned ctx row alignment ?style str=
       ofs
   in
   let rec loop_lines row ofs=
-    if ofs < Zed_string.length str then begin
+    if ofs < Zed_string.bytes str then begin
       let ofs=
         loop row
           (match alignment with
@@ -389,39 +387,41 @@ let draw_styled_aligned ctx row alignment ?style str=
     | Ok {Zed_string.len=_;width}-> width
     | Error {Zed_string.start=_;len=_;width}-> width
   in
-  let line_width start= actual_width (Zed_string.width ~start str) in
-  let rec loop row col idx=
-    if idx < Zed_string.length str then begin
-      let ch, ch_style= Zed_string.get str idx, Array.unsafe_get styles idx
+  let line_width start= actual_width (Zed_string.width_ofs ~start str) in
+  let rec loop row col idx ofs=
+    if ofs < Zed_string.bytes str then begin
+      let (ch, ofs), ch_style=
+        Zed_string.extract_next str ofs, Array.unsafe_get styles idx
       and idx= idx + 1 in
       if ch = newline then
-        idx
+        (idx, ofs)
       else begin
         let point= unsafe_get ctx.ctx_matrix row col in
         draw_char_raw ctx row col ?style ch;
         set_style point ch_style;
-        loop row (col + Zed_char.width ch) idx;
+        loop row (col + Zed_char.width ch) idx ofs;
       end
     end else
-      idx
+      (idx, ofs)
   in
-  let rec loop_lines row idx=
-    if idx < Zed_string.length str then begin
-      let idx=
+  let rec loop_lines row idx ofs=
+    if ofs < Zed_string.bytes str then begin
+      let idx, ofs=
         loop row
           (match alignment with
           | H_align_left ->
             ctx.ctx_col1
           | H_align_center ->
-            ctx.ctx_col1 + (ctx.ctx_col2 - ctx.ctx_col1 - line_width idx) / 2
+            ctx.ctx_col1 + (ctx.ctx_col2 - ctx.ctx_col1 - line_width ofs) / 2
           | H_align_right ->
             ctx.ctx_col2 - line_width idx)
           idx
+          ofs
       in
-      loop_lines (row + 1) idx
+      loop_lines (row + 1) idx ofs
     end
   in
-  loop_lines (ctx.ctx_row1 + row) 0
+  loop_lines (ctx.ctx_row1 + row) 0 0
 
 type connection =
   | Blank

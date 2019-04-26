@@ -322,7 +322,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
             ()
     val mutable label = Zed_string.empty ()
     val mutable align = H_align_left
-    method set_label ?(alignment=H_align_left) l = 
+    method set_label ?(alignment=H_align_left) l =
       label <- LiteralIntf.to_string_exn l;
       align <- alignment
 
@@ -330,7 +330,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
       let size = LTerm_draw.size ctx in
       LTerm_draw.fill_style ctx style;
       if size.rows >= 1 && size.cols >= 1 then begin
-        let rect = 
+        let rect =
           { row1 = 0;
             col1 = 0;
             row2 = size.rows;

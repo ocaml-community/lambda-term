@@ -38,11 +38,11 @@ struct
   type string_intf= Zed_utf8.t
 
   let empty_string ()= ""
-  let of_char= Zed_char_UTF8.of_t
-  let of_string= Zed_string_UTF8.of_t
+  let of_char= Zed_char.to_utf8
+  let of_string= Zed_string.to_utf8
   let to_char= Zed_char_UTF8.to_t
   let to_string= Zed_string_UTF8.to_t
   let to_char_exn= Zed_char_UTF8.to_t_exn
-  let to_string_exn= Zed_string_UTF8.to_t_exn
+  let to_string_exn= Zed_string.unsafe_of_utf8
 end
 

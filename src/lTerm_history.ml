@@ -36,13 +36,17 @@ let entry_size str =
   let zChar_newline= Zed_char.unsafe_of_char '\n'
   and zChar_slash= Zed_char.unsafe_of_char '\\' in
   let size = ref 0 in
-  for i = 0 to Zed_string.length str - 1 do
-    let ch= Zed_string.get str i in
-    if Zed_char.compare ch zChar_newline = 0 || Zed_char.compare ch zChar_slash = 0 then
-      size := !size + 2
-    else
-      size := !size + 1
-  done;
+  let eos= Zed_string.bytes str in
+  let rec calc ofs=
+    if ofs < eos then
+      let ch, ofs= Zed_string.extract_next str ofs in
+      if Zed_char.compare ch zChar_newline = 0 || Zed_char.compare ch zChar_slash = 0 then
+        size := !size + 2
+      else
+        size := !size + 1;
+      calc ofs
+  in
+  calc 0;
   !size + 1
 
 (* Check that [size1 + size2 < limit], handling overflow. *)
@@ -234,23 +238,23 @@ let escape entry =
     if ofs = len then
       Zed_string.Buf.contents buf
     else
-      let ch= Zed_string.get entry ofs in
+      let ch, ofs= Zed_string.extract_next entry ofs in
       if Zed_char.compare ch zChar_nl = 0 then
         begin
           Zed_string.Buf.add_zChar buf zChar_slash;
           Zed_string.Buf.add_zChar buf zChar_n;
-          loop (ofs + 1);
+          loop ofs;
         end
       else if Zed_char.compare ch zChar_slash = 0 then
         begin
           Zed_string.Buf.add_zChar buf zChar_slash;
           Zed_string.Buf.add_zChar buf zChar_slash;
-          loop (ofs + 1);
+          loop ofs;
         end
       else
         begin
           Zed_string.Buf.add_zChar buf ch;
-          loop (ofs + 1);
+          loop ofs;
         end
   in
   loop 0
@@ -290,34 +294,34 @@ let escape entry =
   loop 0 0*)
 
 let unescape line =
-  let len = Zed_string.length line in
-  let buf= Zed_string.Buf.create len in
+  let eos= Zed_string.bytes line in
+  let buf= Zed_string.Buf.create 0 in
   let zChar_n= Zed_char.unsafe_of_char 'n' in
   let zChar_slash= Zed_char.unsafe_of_char '\\' in
   let zChar_nl= Zed_char.unsafe_of_char '\n' in
   let rec loop ofs size =
-    if ofs = len then
+    if ofs >= eos then
       (Zed_string.Buf.contents buf, size + 1)
     else
-      let ch= Zed_string.get line ofs in
+      let ch, ofs= Zed_string.extract_next line ofs in
       if Zed_char.compare ch zChar_slash = 0 then
-        if ofs = len then
+        if ofs >= eos then
           (Zed_string.Buf.add_zChar buf zChar_slash;
           (Zed_string.Buf.contents buf, size + 3);)
         else
-          (let next= Zed_string.get line (ofs + 1) in
+          (let next, ofs_next= Zed_string.extract_next line ofs in
           if Zed_char.compare next zChar_n = 0 then
             (Zed_string.Buf.add_zChar buf zChar_nl;
-            loop (ofs + 2) (size + 2);)
+            loop ofs_next (size + 2);)
           else if Zed_char.compare next zChar_slash = 0 then
             (Zed_string.Buf.add_zChar buf zChar_slash;
-            loop (ofs + 2) (size + 2);)
+            loop ofs_next (size + 2);)
           else
             (Zed_string.Buf.add_zChar buf zChar_slash;
-            loop (ofs + 1) (size + 2);))
+            loop ofs (size + 2);))
       else
         (Zed_string.Buf.add_zChar buf ch;
-        loop (ofs + 1) (size + Zed_char.size ch);)
+        loop ofs (size + Zed_char.size ch);)
   in
   loop 0 0
 
@@ -386,7 +390,7 @@ let load history ?log ?(skip_empty=true) ?(skip_dup=true) fn =
                 | None ->
                     return ()
                 | Some line ->
-                  let line= Zed_string_UTF8.to_t_exn line in
+                  let line= Zed_string.unsafe_of_utf8 line in
                     (try
                        let entry, size = unescape line in
                        if not (skip_empty && is_empty entry) && not (skip_dup && is_dup history entry) then begin
@@ -422,7 +426,7 @@ let rec dump_entries oc marker node =
   if node == marker then
     return ()
   else begin
-    Lwt_io.write_line oc (Zed_string_UTF8.of_t node.data) >>= fun () ->
+    Lwt_io.write_line oc (Zed_string.to_utf8 node.data) >>= fun () ->
     dump_entries oc marker node.prev
   end
 
@@ -467,7 +471,7 @@ let save history ?max_size ?max_entries ?(skip_empty=true) ?(skip_dup=true) ?(ap
                   Lwt_io.close ic >>= fun () ->
                   return count
               | Some line ->
-                  let line= Zed_string_UTF8.to_t_exn line in
+                  let line= Zed_string.unsafe_of_utf8 line in
                   (* Do not bother unescaping. Tests remain the same
                      on the unescaped version. *)
                   if not (skip_empty && is_empty line) && not (skip_dup && is_dup history_save line) then

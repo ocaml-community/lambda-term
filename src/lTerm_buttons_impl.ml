@@ -24,7 +24,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
     let (bl, br)=
       match brackets with
       | Some (bl, br)-> LiteralIntf.to_string_exn bl, LiteralIntf.to_string_exn br
-      | None-> Zed_string_UTF8.to_t_exn "< ",Zed_string_UTF8.to_t_exn " >"
+      | None-> Zed_string.unsafe_of_utf8 "< ",Zed_string.unsafe_of_utf8 " >"
     in
     let brackets_size = LTerm_text.aval_width (Zed_string.width bl)
       + LTerm_text.aval_width (Zed_string.width br)
@@ -86,7 +86,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
       let { rows; cols } = LTerm_draw.size ctx in
       let width = LTerm_text.aval_width (Zed_string.width label) in
       self#apply_style ctx focused;
-      LTerm_draw.draw_string ctx (rows / 2) ((cols - width - brackets_size) / 2) 
+      LTerm_draw.draw_string ctx (rows / 2) ((cols - width - brackets_size) / 2)
         (Zed_string.append (Zed_string.append bl label) br)
   end
 
@@ -97,17 +97,17 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
 
     initializer
       self#on_event (fun ev ->
-        let update () = 
+        let update () =
           state <- not state;
           (* checkbutton changes the state when clicked, so has to be redrawn *)
           self#queue_draw;
           exec_callbacks click_callbacks ();
           true
         in
-        match ev with 
+        match ev with
           | LTerm_event.Key { control = false; meta = false; shift = false; code }
             when (code = Enter || code = space) -> update ()
-          | LTerm_event.Mouse m 
+          | LTerm_event.Mouse m
             when m.button = Button1 -> update ()
           | _ ->
               false);
@@ -117,7 +117,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
 
     method! draw ctx focused =
       let { rows; _ } = LTerm_draw.size ctx in
-      let checked = Zed_string_UTF8.to_t_exn (if state then "[x] " else "[ ] ") in
+      let checked = Zed_string.unsafe_of_utf8 (if state then "[x] " else "[ ] ") in
       self#apply_style ctx focused;
       LTerm_draw.draw_string ctx (rows / 2) 0 (Zed_string.append checked label);
 
@@ -167,7 +167,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
     initializer
       self#on_event
       (fun ev ->
-        let update () = 
+        let update () =
           if state
           (* no need to do anything if the button is on already *)
           then ()
@@ -186,7 +186,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
 
     method! draw ctx focused =
       let { rows; _ } = LTerm_draw.size ctx in
-      let checked = Zed_string_UTF8.to_t_exn (if state then "(o) " else "( ) ") in
+      let checked = Zed_string.unsafe_of_utf8 (if state then "(o) " else "( ) ") in
       self#apply_style ctx focused;
       LTerm_draw.draw_string ctx (rows / 2) 0 (Zed_string.append checked self#label_zed);
 
