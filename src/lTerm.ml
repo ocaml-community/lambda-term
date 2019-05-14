@@ -973,7 +973,7 @@ let expand term text =
       end else begin
         let ch, style = Array.unsafe_get text idx in
         if not (LTerm_style.equal style prev_style) then add_style term buf style;
-        Buffer.add_string buf (Zed_char_UTF8.of_t ch);
+        Buffer.add_string buf (Zed_char.to_utf8 ch);
         loop (idx + 1) style
       end
     in
@@ -1145,7 +1145,7 @@ let same_style p1 p2 =
 
 let unknown_uchar = UChar.of_int 0xfffd
 let unknown_char = Zed_char.unsafe_of_uChar unknown_uchar
-let unknown_utf8 = Zed_char_UTF8.of_t unknown_char
+let unknown_utf8 = Zed_char.to_utf8 unknown_char
 
 let render_style term buf old_point new_point =
   let open LTerm_draw in
@@ -1167,7 +1167,7 @@ let render_point term buf old_point new_point =
   if UChar.code (Zed_char.core new_point.LTerm_draw.char) < 32 then
     Buffer.add_string buf unknown_utf8
   else
-    Buffer.add_string buf (Zed_char_UTF8.of_t new_point.LTerm_draw.char)
+    Buffer.add_string buf (Zed_char.to_utf8 new_point.LTerm_draw.char)
 
 type render_kind = Render_screen | Render_box
 

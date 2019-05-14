@@ -14,7 +14,7 @@ open LTerm_geom
 (** Type of a element in a matrix of styled characters. *)
 type elem = {
   char : Zed_char.t;
-  (** The unicode character. *)
+  (** The Zed_char.t character. *)
   bold : bool;
   (** Whether the character is in bold or not. *)
   underline : bool;

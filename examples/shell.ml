@@ -114,7 +114,7 @@ let get_binaries () =
     String_set.empty
     (get_paths ())
   >|= String_set.elements
-  >|= List.map Zed_string_UTF8.to_t_exn
+  >|= List.map Zed_string.unsafe_of_utf8
 
 (* +-----------------------------------------------------------------+
    | Customization of the read-line engine                           |
@@ -134,7 +134,7 @@ class read_line ~term ~history ~exit_code ~binaries = object(self)
   method! completion =
     let prefix  = Zed_rope.to_string self#input_prev in
     let binaries = List.filter (fun file -> Zed_string.starts_with ~prefix file) binaries in
-    self#set_completion 0 (List.map (fun file -> (file, Zed_string_UTF8.to_t_exn " ")) binaries)
+    self#set_completion 0 (List.map (fun file -> (file, Zed_string.unsafe_of_utf8 " ")) binaries)
 
   initializer
     self#set_prompt (S.l2 (fun size time -> make_prompt size exit_code time) self#size time)
@@ -156,7 +156,7 @@ let rec loop term history exit_code =
       | exn -> Lwt.fail exn)
   >>= function
   | Some command ->
-    let command_utf8= Zed_string_UTF8.of_t command in
+    let command_utf8= Zed_string.to_utf8 command in
     Lwt.catch (fun () -> Lwt_process.exec (Lwt_process.shell command_utf8))
       (function
         | Unix.Unix_error (Unix.ENOENT, _, _) ->

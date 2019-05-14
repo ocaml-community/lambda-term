@@ -34,6 +34,9 @@ module UTF8 : Type
   with type char_intf= Zed_utf8.t
   and type string_intf= Zed_utf8.t =
 struct
+  module Zed_char_UTF8 = Zed_char.US(UTF8)
+  module Zed_string_UTF8 = Zed_string.US(UTF8)
+
   type char_intf= Zed_utf8.t
   type string_intf= Zed_utf8.t
 

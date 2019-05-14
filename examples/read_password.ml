@@ -35,6 +35,6 @@ let main () =
   >>= fun term ->
   (new read_password term)#run
   >>= fun password ->
-  Lwt_io.printlf "You typed %S" (Zed_string_UTF8.of_t password)
+  Lwt_io.printlf "You typed %S" (Zed_string.to_utf8 password)
 
 let () = Lwt_main.run (main ())

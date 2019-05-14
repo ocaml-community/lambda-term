@@ -69,7 +69,7 @@ let rec loop term history state =
       | exn -> Lwt.fail exn)
   >>= function
   | Some command ->
-    let command_utf8= Zed_string_UTF8.of_t command in 
+    let command_utf8= Zed_string.to_utf8 command in
     let state, out = Interpreter.eval state command_utf8 in
     LTerm.fprintls term (make_output state out)
     >>= fun () ->
