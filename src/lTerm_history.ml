@@ -475,7 +475,7 @@ let save history ?max_size ?max_entries ?(skip_empty=true) ?(skip_dup=true) ?(ap
                   (* Do not bother unescaping. Tests remain the same
                      on the unescaped version. *)
                   if not (skip_empty && is_empty line) && not (skip_dup && is_dup history_save line) then
-                    add_aux history_save line (Zed_string.length line + 1);
+                    add_aux history_save line (Zed_string.bytes line + 1);
                   aux (count + 1)
           in
           aux 0

@@ -43,15 +43,15 @@ let common_prefix = function
 
 let zed_common_prefix_one a b =
   let rec loop ofs =
-    if ofs = Zed_string.length a || ofs = Zed_string.length b then
-      Zed_string.sub a 0 ofs
+    if ofs = Zed_string.bytes a || ofs = Zed_string.bytes b then
+      Zed_string.unsafe_of_utf8 (String.sub (Zed_string.to_utf8 a) 0 ofs)
     else
-      let ch1= Zed_string.get a ofs
-      and ch2= Zed_string.get b ofs in
-      if ch1 = ch2 then
-        loop (ofs + 1)
+      let ch1, ofs1= Zed_string.extract_next a ofs
+      and ch2, ofs2= Zed_string.extract_next b ofs in
+      if ch1 = ch2 && ofs1 = ofs2 then
+        loop ofs1
       else
-        Zed_string.sub a 0 ofs
+        Zed_string.unsafe_of_utf8 (String.sub (Zed_string.to_utf8 a) 0 ofs)
   in
   loop 0
 
