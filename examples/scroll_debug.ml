@@ -20,7 +20,7 @@ class scroll_label scroll = object
   method! draw ctx _focused =
     LTerm_draw.fill_style ctx style;
     LTerm_draw.draw_string_aligned ctx 0 H_align_center ~style
-      (Zed_string_UTF8.to_t_exn (Printf.sprintf "%i/%i" scroll#offset scroll#range))
+      (Zed_string.of_utf8 (Printf.sprintf "%i/%i" scroll#offset scroll#range))
 
 end
 

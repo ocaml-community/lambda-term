@@ -32,7 +32,7 @@ let main () =
     [ LTerm_edit.Custom (fun () -> wakeup wakener ()) ];
 
   Zed_edit.insert editor#context
-    (Zed_rope.of_string @@ Zed_string_UTF8.to_t_exn "\
+    (Zed_rope.of_string @@ Zed_string.of_utf8 "\
 This is a simple edition widget.
 
 Type C-x C-c to exit.

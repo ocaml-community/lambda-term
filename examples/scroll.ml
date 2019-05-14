@@ -22,7 +22,7 @@ class scrollable_nums (scroll : scrollable) = object
     let { rows; _ } = LTerm_draw.size ctx in
 
     for row=0 to rows-1 do
-      LTerm_draw.draw_string ctx row 0 (Zed_string_UTF8.to_t_exn (string_of_int (row + scroll#offset)))
+      LTerm_draw.draw_string ctx row 0 (Zed_string.of_utf8 (string_of_int (row + scroll#offset)))
     done
 
 end
