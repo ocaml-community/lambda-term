@@ -336,7 +336,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
             row2 = size.rows;
             col2 = size.cols }
         in
-        (if Zed_string.length label = 0 then LTerm_draw.draw_frame ctx rect connection
+        (if Zed_string.bytes label = 0 then LTerm_draw.draw_frame ctx rect connection
         else LTerm_draw.draw_frame_labelled ctx rect ~alignment:align label connection);
         if size.rows > 2 && size.cols > 2 then
           match child with

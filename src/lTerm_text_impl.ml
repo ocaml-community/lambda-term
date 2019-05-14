@@ -21,7 +21,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
   let dummy = (Zed_char.unsafe_of_char ' ', LTerm_style.none)
 
   let of_string str=
-    Array.map (fun chr-> (chr, LTerm_style.none)) (Array.of_list (Zed_string.explode str))
+    Array.map (fun chr-> (chr, LTerm_style.none)) (Array.of_list (Zed_string.unsafe_explode str))
 
   let aval_width= function
     | Ok {Zed_string.len=_;width}-> width
@@ -51,7 +51,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
       if idx = len then
         arr
       else begin
-        let idx, ofs=
+        let ofs, idx=
           try
             let chr, ofs= Zed_string.extract_next str ofs in
             Array.unsafe_set arr idx (chr, LTerm_style.none);

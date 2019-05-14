@@ -306,7 +306,7 @@ let draw_char ctx row col ?style ch=
 let draw_string ctx row col ?style str=
   let row= ctx.ctx_row1 + row
   and col= ctx.ctx_col1 + col in
-  let len= Zed_string.length str in
+  let len= Zed_string.bytes str in
   let rec loop row col ofs=
     if ofs < len then
       let ch, ofs= Zed_string.extract_next str ofs in
@@ -347,7 +347,7 @@ let draw_string_aligned ctx row alignment ?style str=
   in
   let line_width start= actual_width (Zed_string.width_ofs ~start str) in
   let rec loop row col ofs=
-    if ofs < Zed_string.length str then begin
+    if ofs < Zed_string.bytes str then begin
       let ch, ofs= Zed_string.extract_next str ofs in
       if ch = newline then
         ofs
