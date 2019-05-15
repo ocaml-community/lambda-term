@@ -293,10 +293,8 @@ let unsafe_draw_char_raw ctx row col ?style ch=
 
 let draw_char_raw ctx row col ?style ch=
   let width= Zed_char.width ch in
-  if row >= 0 && col >= 0 then begin
-    if row < ctx.ctx_row2 && col < ctx.ctx_col2 && col + width <= ctx.ctx_col2 then
-      unsafe_draw_char_raw ctx row col ?style ch
-  end
+  if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col + width <= ctx.ctx_col2 then
+    unsafe_draw_char_raw ctx row col ?style ch
 
 let draw_char ctx row col ?style ch=
   let row= ctx.ctx_row1 + row
@@ -304,8 +302,6 @@ let draw_char ctx row col ?style ch=
   draw_char_raw ctx row col ?style ch
 
 let draw_string ctx row col ?style str=
-  let row= ctx.ctx_row1 + row
-  and col= ctx.ctx_col1 + col in
   let len= Zed_string.bytes str in
   let rec loop row col ofs=
     if ofs < len then
@@ -318,7 +314,7 @@ let draw_string ctx row col ?style str=
         loop row (col + max 0 width) ofs
       end
   in
-  loop row col 0
+  loop (ctx.ctx_row1 + row) (ctx.ctx_col1 + col) 0
 
 let draw_styled ctx row col ?style str=
   let rec loop row col idx=
@@ -328,11 +324,9 @@ let draw_styled ctx row col ?style str=
         loop (row + 1) ctx.ctx_col1 (idx + 1)
       else begin
         let width= Zed_char.width ch in
-        if row >= ctx.ctx_row1 && row < ctx.ctx_row2 && col >= ctx.ctx_col1 && col + width <= ctx.ctx_col2 then begin
-          let point= unsafe_get ctx.ctx_matrix row col in
-          draw_char_raw ctx row col ?style ch;
-          set_style point ch_style
-        end;
+        let point= unsafe_get ctx.ctx_matrix row col in
+        draw_char_raw ctx row col ?style ch;
+        set_style point ch_style;
         loop row (col + max 0 width) (idx + 1)
       end
     end
