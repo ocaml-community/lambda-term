@@ -776,7 +776,7 @@ let rec compute_position cols pos text start stop =
     else
       let width= Zed_char.width ch in
       if pos.col + width > cols then
-        compute_position cols { row = pos.row + 1; col = pos.col + width - cols + (if width > 1 then 1 else 0)} text (start + 1) stop
+        compute_position cols { row = pos.row + 1; col = width } text (start + 1) stop
       else
         compute_position cols { pos with col = pos.col + max 0 width } text (start + 1) stop
 

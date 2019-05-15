@@ -214,6 +214,7 @@ object(self)
   method bind keys actions = local_bindings <- Bindings.add keys actions local_bindings
 
   val mutable shift = 0
+  val mutable shift_width = 0
   val mutable start = 0
   val mutable start_line = 0
   val mutable size = size
@@ -225,13 +226,16 @@ object(self)
     let line_count = Zed_lines.count line_set in
     let cursor_offset = Zed_cursor.get_position cursor in
     let cursor_line = Zed_lines.line_index line_set cursor_offset in
+    let line_start= Zed_lines.line_start line_set cursor_line in
     let cursor_column = cursor_offset - Zed_lines.line_start line_set cursor_line in
+    let column_display= Zed_lines.force_width line_set (Zed_lines.line_start line_set cursor_line) cursor_column in
 
     (*** check cursor position is in view *)
 
     (* Horizontal check *)
-    if cursor_column < shift || cursor_column >= shift + size.cols then begin
-      shift <- max 0 (cursor_column - size.cols / 2);
+    if column_display < shift_width || column_display >= shift_width + size.cols then begin
+      shift <- max 0 (column_display - size.cols / 2);
+      shift_width <- Zed_lines.force_width line_set line_start shift;
     end;
 
     (* Vertical check *)
@@ -338,7 +342,7 @@ object(self)
     size <- size_of_rect rect;
     super#set_allocation rect;
     vscroll#set_page_size size.rows;
-    start <- 0; shift <- 0; start_line <- 0;
+    start <- 0; shift <- 0; shift_width <- 0; start_line <- 0;
     self#update_window_position
 
   initializer vscroll#on_offset_change (fun n ->
@@ -494,8 +498,9 @@ object(self)
     let line_set = Zed_edit.lines engine in
     let cursor_offset = Zed_cursor.get_position cursor in
     let cursor_line = Zed_lines.line_index line_set cursor_offset in
-    let cursor_column = cursor_offset - Zed_lines.line_start line_set cursor_line in
-    let column_display= Zed_lines.force_width line_set (Zed_lines.line_start line_set cursor_line) cursor_column in
+    let line_start= Zed_lines.line_start line_set cursor_line  in
     let start_line = Zed_lines.line_index line_set start in
-    Some { row = cursor_line - start_line; col = column_display - shift }
+    let col= Zed_lines.force_width line_set line_start (cursor_offset - line_start)
+        - shift_width in
+    Some { row = cursor_line - start_line; col }
 end
