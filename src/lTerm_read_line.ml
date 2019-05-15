@@ -44,14 +44,14 @@ let common_prefix = function
 let zed_common_prefix_one a b =
   let rec loop ofs =
     if ofs = Zed_string.bytes a || ofs = Zed_string.bytes b then
-      Zed_string.unsafe_of_utf8 (String.sub (Zed_string.to_utf8 a) 0 ofs)
+      Zed_string.sub_ofs ~ofs:0 ~len:ofs a
     else
       let ch1, ofs1= Zed_string.extract_next a ofs
       and ch2, ofs2= Zed_string.extract_next b ofs in
       if ch1 = ch2 && ofs1 = ofs2 then
         loop ofs1
       else
-        Zed_string.unsafe_of_utf8 (String.sub (Zed_string.to_utf8 a) 0 ofs)
+        Zed_string.sub_ofs ~ofs:0 ~len:ofs a
   in
   loop 0
 
@@ -361,8 +361,8 @@ object(self)
     | [] -> ()
     | [(completion, suffix)] ->
       Zed_edit.insert context (Zed_rope.of_string
-        (Zed_string.sub completion prefix_length
-          (Zed_string.length completion - prefix_length)));
+        (Zed_string.sub completion ~pos:prefix_length
+          ~len:(Zed_string.length completion - prefix_length)));
       Zed_edit.insert context (Zed_rope.of_string suffix)
     | (completion, _suffix) :: rest ->
       let word = List.fold_left
@@ -370,8 +370,8 @@ object(self)
         completion rest
       in
       Zed_edit.insert context (Zed_rope.of_string
-        (Zed_string.sub word prefix_length
-          (Zed_string.length word - prefix_length)))
+        (Zed_string.sub word ~pos:prefix_length
+          ~len:(Zed_string.length word - prefix_length)))
 
   (* The event which search for the string in the history. *)
   val mutable search_event = E.never
