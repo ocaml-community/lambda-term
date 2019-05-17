@@ -3,7 +3,7 @@
 
 ### Breaking
 
-* LTerm\_draw: type `point` is redefined to use `Zed_char.t` as the essential element to support wider, combined glyph
+* LTerm\_draw: type `point` is redefined to use `Zed_char.t` as the essential element to support wide, combined glyph
 * functions and methods: change parameter type from `UChar.t` or `Zed_utf8.t` to `Zed_char.t` or `Zed_string.t`
 * LTerm\_text
   * function `of_string` is renamed to `of_utf8`
@@ -14,7 +14,7 @@
 ### General
 
 * depend on zed 2
-* Lterm\_draw, LTerm\_widget, LTerm\_read\_line refactored to support wider, combined glyphs
+* Lterm\_draw, LTerm\_widget, LTerm\_read\_line refactored to support wide, combined glyphs
 * add name to dune-project (Hannes Mehnert, #70)
 * port to dune (Jérémie Dimino, #69)
 * README: Add Travis badge (Kevin Ji, #66)
