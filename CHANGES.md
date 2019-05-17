@@ -1,3 +1,26 @@
+2.0 (2019-05-17)
+----------------
+
+### Breaking
+
+* LTerm\_draw: type `point` is redefined to use `Zed_char.t` as the essential element to support wider, combined glyph
+* functions and methods: change parameter type from `UChar.t` or `Zed_utf8.t` to `Zed_char.t` or `Zed_string.t`
+* LTerm\_text
+  * function `of_string` is renamed to `of_utf8`
+  * function `of_string_maybe_invalid` is renamed to `of_utf8_maybe_invalid`
+  * the new `of_string` function is of type `Zed_string.t -> t`
+  * the new `of_string_maybe_invalid` function is of type `Zed_string.t -> t`
+
+### General
+
+* depend on zed 2
+* Lterm\_draw, LTerm\_widget, LTerm\_read\_line refactored to support wider, combined glyphs
+* add name to dune-project (Hannes Mehnert, #70)
+* port to dune (Jérémie Dimino, #69)
+* README: Add Travis badge (Kevin Ji, #66)
+* Add travis config (Anurag Soni, #65)
+* opam: update homepage, bug-reports and dev-repo fields (Jérémie Dimino)
+
 1.13 (2018-06-01)
 -----------------
 
