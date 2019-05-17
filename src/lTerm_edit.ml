@@ -230,11 +230,40 @@ object(self)
     let cursor_column = cursor_offset - Zed_lines.line_start line_set cursor_line in
     let column_display= Zed_lines.force_width line_set (Zed_lines.line_start line_set cursor_line) cursor_column in
 
+    let calc_delta width_delta=
+      let rec forward idx acc=
+        if acc < width_delta then
+          forward (idx + 1) (acc + Zed_lines.force_width line_set idx 1)
+        else
+          idx
+      in
+      let rec backward idx acc=
+        if acc > width_delta then
+          backward (idx - 1) (acc - Zed_lines.force_width line_set (idx - 1) 1)
+        else
+          idx
+      in
+      if width_delta > 0 then
+        forward (line_start + shift) 0 - (line_start + shift)
+      else if width_delta < 0 then
+        backward cursor_offset 0 - cursor_offset
+      else 0
+    in
+
     (*** check cursor position is in view *)
 
     (* Horizontal check *)
     if column_display < shift_width || column_display >= shift_width + size.cols then begin
-      shift <- max 0 (column_display - size.cols / 2);
+
+      let shift_new= max 0 (column_display - size.cols / 2) in
+      if shift_new = 0 then
+        shift <- 0
+      else
+        begin
+          let width_delta= shift_new - shift_width in
+          let shift_delta= calc_delta width_delta in
+          shift <- shift + shift_delta;
+        end;
       shift_width <- Zed_lines.force_width line_set line_start shift;
     end;
 
