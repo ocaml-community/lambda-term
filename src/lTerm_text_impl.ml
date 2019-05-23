@@ -388,7 +388,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
               (fun _ -> pop_style (); "");
             print_open_tag = (fun _ -> ());
             print_close_tag = (fun _ -> ());
-          } ;
+          }[@ocaml.warning "-3"] ;
     end ;
 
     get_content, fmt
@@ -396,10 +396,10 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
   let pp_with_style to_style =
     fun style fstr fmt ->
       let tag = to_style style in
-      Format.pp_open_tag fmt tag;
+      (Format.pp_open_tag[@ocaml.warning "-3"]) fmt tag;
       Format.kfprintf
         (fun fmt ->
-          Format.pp_close_tag fmt ())
+          Format.pp_close_tag fmt ()[@ocaml.warning "-3"])
         fmt fstr
 
   let kstyprintf ?read_color f fstr =
