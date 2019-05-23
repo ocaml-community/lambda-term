@@ -7,6 +7,8 @@
  * This file is a part of Lambda-Term.
  *)
 
+let pervasives_compare= compare
+
 open CamomileLibraryDefault.Camomile
 open Zed_edit
 open LTerm_key
@@ -49,8 +51,8 @@ let actions = [
   Add_macro_counter, "add-macro-counter";
 ]
 
-let actions_to_names = Array.of_list (List.sort (fun (a1, _) (a2, _) -> Pervasives.compare a1 a2) actions)
-let names_to_actions = Array.of_list (List.sort (fun (_, n1) (_, n2) -> Pervasives.compare n1 n2) actions)
+let actions_to_names = Array.of_list (List.sort (fun (a1, _) (a2, _) -> pervasives_compare a1 a2) actions)
+let names_to_actions = Array.of_list (List.sort (fun (_, n1) (_, n2) -> pervasives_compare n1 n2) actions)
 
 let action_of_name x =
   let rec loop a b =
@@ -59,7 +61,7 @@ let action_of_name x =
     else
       let c = (a + b) / 2 in
       let action, name = Array.unsafe_get names_to_actions c in
-      match Pervasives.compare x name with
+      match pervasives_compare x name with
         | d when d < 0 ->
             loop a c
         | d when d > 0 ->
@@ -76,7 +78,7 @@ let name_of_action x =
     else
       let c = (a + b) / 2 in
       let action, name = Array.unsafe_get actions_to_names c in
-      match Pervasives.compare x action with
+      match pervasives_compare x action with
         | d when d < 0 ->
             loop a c
         | d when d > 0 ->
