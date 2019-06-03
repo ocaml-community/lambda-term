@@ -8,7 +8,6 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDefault.Camomile
 open LTerm_geom
 open Result
 
@@ -427,7 +426,7 @@ type connection =
 type piece = { top : connection; bottom : connection; left : connection; right : connection }
 
 let piece_of_char char =
-  match UChar.code char with
+  match Uchar.to_int char with
     | 0x2500 -> Some { top = Blank; bottom = Blank; left = Light; right = Light }
     | 0x2501 -> Some { top = Blank; bottom = Blank; left = Heavy; right = Heavy }
     | 0x2502 -> Some { top = Light; bottom = Light; left = Blank; right = Blank }
@@ -511,87 +510,87 @@ let piece_of_char char =
     | _ -> None
 
 let char_of_piece = function
-  | { top = Blank; bottom = Blank; left = Blank; right = Blank } -> UChar.of_int 0x0020
-  | { top = Blank; bottom = Blank; left = Light; right = Light } -> UChar.of_int 0x2500
-  | { top = Blank; bottom = Blank; left = Heavy; right = Heavy } -> UChar.of_int 0x2501
-  | { top = Light; bottom = Light; left = Blank; right = Blank } -> UChar.of_int 0x2502
-  | { top = Heavy; bottom = Heavy; left = Blank; right = Blank } -> UChar.of_int 0x2503
-  | { top = Blank; bottom = Light; left = Blank; right = Light } -> UChar.of_int 0x250c
-  | { top = Blank; bottom = Light; left = Blank; right = Heavy } -> UChar.of_int 0x250d
-  | { top = Blank; bottom = Heavy; left = Blank; right = Light } -> UChar.of_int 0x250e
-  | { top = Blank; bottom = Heavy; left = Blank; right = Heavy } -> UChar.of_int 0x250f
-  | { top = Blank; bottom = Light; left = Light; right = Blank } -> UChar.of_int 0x2510
-  | { top = Blank; bottom = Light; left = Heavy; right = Blank } -> UChar.of_int 0x2511
-  | { top = Blank; bottom = Heavy; left = Light; right = Blank } -> UChar.of_int 0x2512
-  | { top = Blank; bottom = Heavy; left = Heavy; right = Blank } -> UChar.of_int 0x2513
-  | { top = Light; bottom = Blank; left = Blank; right = Light } -> UChar.of_int 0x2514
-  | { top = Light; bottom = Blank; left = Blank; right = Heavy } -> UChar.of_int 0x2515
-  | { top = Heavy; bottom = Blank; left = Blank; right = Light } -> UChar.of_int 0x2516
-  | { top = Heavy; bottom = Blank; left = Blank; right = Heavy } -> UChar.of_int 0x2517
-  | { top = Light; bottom = Blank; left = Light; right = Blank } -> UChar.of_int 0x2518
-  | { top = Light; bottom = Blank; left = Heavy; right = Blank } -> UChar.of_int 0x2519
-  | { top = Heavy; bottom = Blank; left = Light; right = Blank } -> UChar.of_int 0x251a
-  | { top = Heavy; bottom = Blank; left = Heavy; right = Blank } -> UChar.of_int 0x251b
-  | { top = Light; bottom = Light; left = Blank; right = Light } -> UChar.of_int 0x251c
-  | { top = Light; bottom = Light; left = Blank; right = Heavy } -> UChar.of_int 0x251d
-  | { top = Heavy; bottom = Light; left = Blank; right = Light } -> UChar.of_int 0x251e
-  | { top = Light; bottom = Heavy; left = Blank; right = Light } -> UChar.of_int 0x251f
-  | { top = Heavy; bottom = Heavy; left = Blank; right = Light } -> UChar.of_int 0x2520
-  | { top = Heavy; bottom = Light; left = Blank; right = Heavy } -> UChar.of_int 0x2521
-  | { top = Light; bottom = Heavy; left = Blank; right = Heavy } -> UChar.of_int 0x2522
-  | { top = Heavy; bottom = Heavy; left = Blank; right = Heavy } -> UChar.of_int 0x2523
-  | { top = Light; bottom = Light; left = Light; right = Blank } -> UChar.of_int 0x2524
-  | { top = Light; bottom = Light; left = Heavy; right = Blank } -> UChar.of_int 0x2525
-  | { top = Heavy; bottom = Light; left = Light; right = Blank } -> UChar.of_int 0x2526
-  | { top = Light; bottom = Heavy; left = Light; right = Blank } -> UChar.of_int 0x2527
-  | { top = Heavy; bottom = Heavy; left = Light; right = Blank } -> UChar.of_int 0x2528
-  | { top = Heavy; bottom = Light; left = Heavy; right = Blank } -> UChar.of_int 0x2529
-  | { top = Light; bottom = Heavy; left = Heavy; right = Blank } -> UChar.of_int 0x252a
-  | { top = Heavy; bottom = Heavy; left = Heavy; right = Blank } -> UChar.of_int 0x252b
-  | { top = Blank; bottom = Light; left = Light; right = Light } -> UChar.of_int 0x252c
-  | { top = Blank; bottom = Light; left = Heavy; right = Light } -> UChar.of_int 0x252d
-  | { top = Blank; bottom = Light; left = Light; right = Heavy } -> UChar.of_int 0x252e
-  | { top = Blank; bottom = Light; left = Heavy; right = Heavy } -> UChar.of_int 0x252f
-  | { top = Blank; bottom = Heavy; left = Light; right = Light } -> UChar.of_int 0x2530
-  | { top = Blank; bottom = Heavy; left = Heavy; right = Light } -> UChar.of_int 0x2531
-  | { top = Blank; bottom = Heavy; left = Light; right = Heavy } -> UChar.of_int 0x2532
-  | { top = Blank; bottom = Heavy; left = Heavy; right = Heavy } -> UChar.of_int 0x2533
-  | { top = Light; bottom = Blank; left = Light; right = Light } -> UChar.of_int 0x2534
-  | { top = Light; bottom = Blank; left = Heavy; right = Light } -> UChar.of_int 0x2535
-  | { top = Light; bottom = Blank; left = Light; right = Heavy } -> UChar.of_int 0x2536
-  | { top = Light; bottom = Blank; left = Heavy; right = Heavy } -> UChar.of_int 0x2537
-  | { top = Heavy; bottom = Blank; left = Light; right = Light } -> UChar.of_int 0x2538
-  | { top = Heavy; bottom = Blank; left = Heavy; right = Light } -> UChar.of_int 0x2539
-  | { top = Heavy; bottom = Blank; left = Light; right = Heavy } -> UChar.of_int 0x253a
-  | { top = Heavy; bottom = Blank; left = Heavy; right = Heavy } -> UChar.of_int 0x253b
-  | { top = Light; bottom = Light; left = Light; right = Light } -> UChar.of_int 0x253c
-  | { top = Light; bottom = Light; left = Heavy; right = Light } -> UChar.of_int 0x253d
-  | { top = Light; bottom = Light; left = Light; right = Heavy } -> UChar.of_int 0x253e
-  | { top = Light; bottom = Light; left = Heavy; right = Heavy } -> UChar.of_int 0x253f
-  | { top = Heavy; bottom = Light; left = Light; right = Light } -> UChar.of_int 0x2540
-  | { top = Light; bottom = Heavy; left = Light; right = Light } -> UChar.of_int 0x2541
-  | { top = Heavy; bottom = Heavy; left = Light; right = Light } -> UChar.of_int 0x2542
-  | { top = Heavy; bottom = Light; left = Heavy; right = Light } -> UChar.of_int 0x2543
-  | { top = Heavy; bottom = Light; left = Light; right = Heavy } -> UChar.of_int 0x2544
-  | { top = Light; bottom = Heavy; left = Heavy; right = Light } -> UChar.of_int 0x2545
-  | { top = Light; bottom = Heavy; left = Light; right = Heavy } -> UChar.of_int 0x2546
-  | { top = Heavy; bottom = Light; left = Heavy; right = Heavy } -> UChar.of_int 0x2547
-  | { top = Light; bottom = Heavy; left = Heavy; right = Heavy } -> UChar.of_int 0x2548
-  | { top = Heavy; bottom = Heavy; left = Heavy; right = Light } -> UChar.of_int 0x2549
-  | { top = Heavy; bottom = Heavy; left = Light; right = Heavy } -> UChar.of_int 0x254a
-  | { top = Heavy; bottom = Heavy; left = Heavy; right = Heavy } -> UChar.of_int 0x254b
-  | { top = Blank; bottom = Blank; left = Light; right = Blank } -> UChar.of_int 0x2574
-  | { top = Light; bottom = Blank; left = Blank; right = Blank } -> UChar.of_int 0x2575
-  | { top = Blank; bottom = Blank; left = Blank; right = Light } -> UChar.of_int 0x2576
-  | { top = Blank; bottom = Light; left = Blank; right = Blank } -> UChar.of_int 0x2577
-  | { top = Blank; bottom = Blank; left = Heavy; right = Blank } -> UChar.of_int 0x2578
-  | { top = Heavy; bottom = Blank; left = Blank; right = Blank } -> UChar.of_int 0x2579
-  | { top = Blank; bottom = Blank; left = Blank; right = Heavy } -> UChar.of_int 0x257a
-  | { top = Blank; bottom = Heavy; left = Blank; right = Blank } -> UChar.of_int 0x257b
-  | { top = Blank; bottom = Blank; left = Light; right = Heavy } -> UChar.of_int 0x257c
-  | { top = Light; bottom = Heavy; left = Blank; right = Blank } -> UChar.of_int 0x257d
-  | { top = Blank; bottom = Blank; left = Heavy; right = Light } -> UChar.of_int 0x257e
-  | { top = Heavy; bottom = Light; left = Blank; right = Blank } -> UChar.of_int 0x257f
+  | { top = Blank; bottom = Blank; left = Blank; right = Blank } -> Uchar.of_int 0x0020
+  | { top = Blank; bottom = Blank; left = Light; right = Light } -> Uchar.of_int 0x2500
+  | { top = Blank; bottom = Blank; left = Heavy; right = Heavy } -> Uchar.of_int 0x2501
+  | { top = Light; bottom = Light; left = Blank; right = Blank } -> Uchar.of_int 0x2502
+  | { top = Heavy; bottom = Heavy; left = Blank; right = Blank } -> Uchar.of_int 0x2503
+  | { top = Blank; bottom = Light; left = Blank; right = Light } -> Uchar.of_int 0x250c
+  | { top = Blank; bottom = Light; left = Blank; right = Heavy } -> Uchar.of_int 0x250d
+  | { top = Blank; bottom = Heavy; left = Blank; right = Light } -> Uchar.of_int 0x250e
+  | { top = Blank; bottom = Heavy; left = Blank; right = Heavy } -> Uchar.of_int 0x250f
+  | { top = Blank; bottom = Light; left = Light; right = Blank } -> Uchar.of_int 0x2510
+  | { top = Blank; bottom = Light; left = Heavy; right = Blank } -> Uchar.of_int 0x2511
+  | { top = Blank; bottom = Heavy; left = Light; right = Blank } -> Uchar.of_int 0x2512
+  | { top = Blank; bottom = Heavy; left = Heavy; right = Blank } -> Uchar.of_int 0x2513
+  | { top = Light; bottom = Blank; left = Blank; right = Light } -> Uchar.of_int 0x2514
+  | { top = Light; bottom = Blank; left = Blank; right = Heavy } -> Uchar.of_int 0x2515
+  | { top = Heavy; bottom = Blank; left = Blank; right = Light } -> Uchar.of_int 0x2516
+  | { top = Heavy; bottom = Blank; left = Blank; right = Heavy } -> Uchar.of_int 0x2517
+  | { top = Light; bottom = Blank; left = Light; right = Blank } -> Uchar.of_int 0x2518
+  | { top = Light; bottom = Blank; left = Heavy; right = Blank } -> Uchar.of_int 0x2519
+  | { top = Heavy; bottom = Blank; left = Light; right = Blank } -> Uchar.of_int 0x251a
+  | { top = Heavy; bottom = Blank; left = Heavy; right = Blank } -> Uchar.of_int 0x251b
+  | { top = Light; bottom = Light; left = Blank; right = Light } -> Uchar.of_int 0x251c
+  | { top = Light; bottom = Light; left = Blank; right = Heavy } -> Uchar.of_int 0x251d
+  | { top = Heavy; bottom = Light; left = Blank; right = Light } -> Uchar.of_int 0x251e
+  | { top = Light; bottom = Heavy; left = Blank; right = Light } -> Uchar.of_int 0x251f
+  | { top = Heavy; bottom = Heavy; left = Blank; right = Light } -> Uchar.of_int 0x2520
+  | { top = Heavy; bottom = Light; left = Blank; right = Heavy } -> Uchar.of_int 0x2521
+  | { top = Light; bottom = Heavy; left = Blank; right = Heavy } -> Uchar.of_int 0x2522
+  | { top = Heavy; bottom = Heavy; left = Blank; right = Heavy } -> Uchar.of_int 0x2523
+  | { top = Light; bottom = Light; left = Light; right = Blank } -> Uchar.of_int 0x2524
+  | { top = Light; bottom = Light; left = Heavy; right = Blank } -> Uchar.of_int 0x2525
+  | { top = Heavy; bottom = Light; left = Light; right = Blank } -> Uchar.of_int 0x2526
+  | { top = Light; bottom = Heavy; left = Light; right = Blank } -> Uchar.of_int 0x2527
+  | { top = Heavy; bottom = Heavy; left = Light; right = Blank } -> Uchar.of_int 0x2528
+  | { top = Heavy; bottom = Light; left = Heavy; right = Blank } -> Uchar.of_int 0x2529
+  | { top = Light; bottom = Heavy; left = Heavy; right = Blank } -> Uchar.of_int 0x252a
+  | { top = Heavy; bottom = Heavy; left = Heavy; right = Blank } -> Uchar.of_int 0x252b
+  | { top = Blank; bottom = Light; left = Light; right = Light } -> Uchar.of_int 0x252c
+  | { top = Blank; bottom = Light; left = Heavy; right = Light } -> Uchar.of_int 0x252d
+  | { top = Blank; bottom = Light; left = Light; right = Heavy } -> Uchar.of_int 0x252e
+  | { top = Blank; bottom = Light; left = Heavy; right = Heavy } -> Uchar.of_int 0x252f
+  | { top = Blank; bottom = Heavy; left = Light; right = Light } -> Uchar.of_int 0x2530
+  | { top = Blank; bottom = Heavy; left = Heavy; right = Light } -> Uchar.of_int 0x2531
+  | { top = Blank; bottom = Heavy; left = Light; right = Heavy } -> Uchar.of_int 0x2532
+  | { top = Blank; bottom = Heavy; left = Heavy; right = Heavy } -> Uchar.of_int 0x2533
+  | { top = Light; bottom = Blank; left = Light; right = Light } -> Uchar.of_int 0x2534
+  | { top = Light; bottom = Blank; left = Heavy; right = Light } -> Uchar.of_int 0x2535
+  | { top = Light; bottom = Blank; left = Light; right = Heavy } -> Uchar.of_int 0x2536
+  | { top = Light; bottom = Blank; left = Heavy; right = Heavy } -> Uchar.of_int 0x2537
+  | { top = Heavy; bottom = Blank; left = Light; right = Light } -> Uchar.of_int 0x2538
+  | { top = Heavy; bottom = Blank; left = Heavy; right = Light } -> Uchar.of_int 0x2539
+  | { top = Heavy; bottom = Blank; left = Light; right = Heavy } -> Uchar.of_int 0x253a
+  | { top = Heavy; bottom = Blank; left = Heavy; right = Heavy } -> Uchar.of_int 0x253b
+  | { top = Light; bottom = Light; left = Light; right = Light } -> Uchar.of_int 0x253c
+  | { top = Light; bottom = Light; left = Heavy; right = Light } -> Uchar.of_int 0x253d
+  | { top = Light; bottom = Light; left = Light; right = Heavy } -> Uchar.of_int 0x253e
+  | { top = Light; bottom = Light; left = Heavy; right = Heavy } -> Uchar.of_int 0x253f
+  | { top = Heavy; bottom = Light; left = Light; right = Light } -> Uchar.of_int 0x2540
+  | { top = Light; bottom = Heavy; left = Light; right = Light } -> Uchar.of_int 0x2541
+  | { top = Heavy; bottom = Heavy; left = Light; right = Light } -> Uchar.of_int 0x2542
+  | { top = Heavy; bottom = Light; left = Heavy; right = Light } -> Uchar.of_int 0x2543
+  | { top = Heavy; bottom = Light; left = Light; right = Heavy } -> Uchar.of_int 0x2544
+  | { top = Light; bottom = Heavy; left = Heavy; right = Light } -> Uchar.of_int 0x2545
+  | { top = Light; bottom = Heavy; left = Light; right = Heavy } -> Uchar.of_int 0x2546
+  | { top = Heavy; bottom = Light; left = Heavy; right = Heavy } -> Uchar.of_int 0x2547
+  | { top = Light; bottom = Heavy; left = Heavy; right = Heavy } -> Uchar.of_int 0x2548
+  | { top = Heavy; bottom = Heavy; left = Heavy; right = Light } -> Uchar.of_int 0x2549
+  | { top = Heavy; bottom = Heavy; left = Light; right = Heavy } -> Uchar.of_int 0x254a
+  | { top = Heavy; bottom = Heavy; left = Heavy; right = Heavy } -> Uchar.of_int 0x254b
+  | { top = Blank; bottom = Blank; left = Light; right = Blank } -> Uchar.of_int 0x2574
+  | { top = Light; bottom = Blank; left = Blank; right = Blank } -> Uchar.of_int 0x2575
+  | { top = Blank; bottom = Blank; left = Blank; right = Light } -> Uchar.of_int 0x2576
+  | { top = Blank; bottom = Light; left = Blank; right = Blank } -> Uchar.of_int 0x2577
+  | { top = Blank; bottom = Blank; left = Heavy; right = Blank } -> Uchar.of_int 0x2578
+  | { top = Heavy; bottom = Blank; left = Blank; right = Blank } -> Uchar.of_int 0x2579
+  | { top = Blank; bottom = Blank; left = Blank; right = Heavy } -> Uchar.of_int 0x257a
+  | { top = Blank; bottom = Heavy; left = Blank; right = Blank } -> Uchar.of_int 0x257b
+  | { top = Blank; bottom = Blank; left = Light; right = Heavy } -> Uchar.of_int 0x257c
+  | { top = Light; bottom = Heavy; left = Blank; right = Blank } -> Uchar.of_int 0x257d
+  | { top = Blank; bottom = Blank; left = Heavy; right = Light } -> Uchar.of_int 0x257e
+  | { top = Heavy; bottom = Light; left = Blank; right = Blank } -> Uchar.of_int 0x257f
 
 let piece_of_point point=
   match !point with

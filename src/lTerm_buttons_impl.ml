@@ -8,7 +8,6 @@
  *)
 
 module Make (LiteralIntf: LiteralIntf.Type) = struct
-  open CamomileLibraryDefault.Camomile
   open LTerm_geom
   open LTerm_key
   open LTerm_mouse
@@ -18,7 +17,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
 
   class t = LTerm_widget_base_impl.t
 
-  let space = Char(UChar.of_char ' ')
+  let space = Char(Uchar.of_char ' ')
 
   class button ?brackets initial_label =
     let (bl, br)=

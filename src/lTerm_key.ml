@@ -14,10 +14,8 @@ module String = struct
   include String
 end
 
-open CamomileLibraryDefault.Camomile
-
 type code =
-  | Char of UChar.t
+  | Char of Uchar.t
   | Enter
   | Escape
   | Tab
@@ -59,7 +57,7 @@ let meta key = key.meta
 let code key = key.code
 
 let string_of_code = function
-  | Char ch -> Printf.sprintf "Char 0x%02x" (UChar.code ch)
+  | Char ch -> Printf.sprintf "Char 0x%02x" (Uchar.to_int ch)
   | Enter -> "Enter"
   | Escape -> "Escape"
   | Tab -> "Tab"
@@ -97,7 +95,7 @@ let to_string_compact key =
   if key.shift then Buffer.add_string buffer "S-";
   (match key.code with
      | Char ch ->
-         let code = UChar.code ch in
+         let code = Uchar.to_int ch in
          if code <= 255 then
            match Char.chr code with
              | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9'

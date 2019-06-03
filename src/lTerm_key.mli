@@ -9,11 +9,9 @@
 
 (** Keys *)
 
-open CamomileLibrary
-
 (** Type of key code. *)
 type code =
-  | Char of UChar.t
+  | Char of Uchar.t
       (** A unicode character. *)
   | Enter
   | Escape

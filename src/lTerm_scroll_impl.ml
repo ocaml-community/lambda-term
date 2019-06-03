@@ -257,7 +257,7 @@ class virtual scrollbar
     let { cols; rows } = size_of_rect rect in
     if cols=1 || rows=1 || bar_style=`filled then
       let x =
-        CamomileLibrary.UChar.of_int @@
+        Uchar.of_int @@
           if bar_style=`filled then 0x2588
           else if cols=1 then vbar
           else hbar
