@@ -7,6 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
+open CamomileLibraryDefault.Camomile
 open Lwt_react
 open LTerm_geom
 
@@ -80,8 +81,8 @@ type t = {
   mutable size : size;
   (* The current size of the terminal. *)
 
-  incoming_encoding : Uutf.decoder_encoding;
-  outgoing_encoding : Uutf.encoding;
+  incoming_encoding : CharEncoding.t;
+  outgoing_encoding : CharEncoding.t;
   (* Characters encodings. *)
 
   outgoing_is_utf8 : bool;
@@ -156,16 +157,14 @@ let colors_of_term = function
 
 exception No_such_encoding of string
 
-let decoder_encoding_of_string s =
-  match Uutf.encoding_of_string s, s with
-  | Some s, _ -> s
-  | None, "CP65001" -> `UTF_8
-  | _ -> raise (No_such_encoding s)
+let char_encoding_of_name name =
+  try
+    CharEncoding.of_name name
+  with Not_found ->
+    raise (No_such_encoding name)
 
-let encoding_of_string s =
-  match decoder_encoding_of_string s with
-  | #Uutf.encoding as e -> e
-  | _ -> raise (No_such_encoding s)
+(* UTF-8 on windows. *)
+let () = CharEncoding.alias "CP65001" "UTF-8"
 
 let empty_stream = Lwt_stream.from (fun () -> return None)
 
@@ -196,29 +195,25 @@ let create
     in
     (* Encodings. *)
     let incoming_encoding =
-      match incoming_encoding with
-        | Some name ->
-            name
-        | None ->
-            let name =
-              if windows then
-                Printf.sprintf "CP%d" (LTerm_windows.get_console_cp ())
-              else
-                LTerm_unix.system_encoding
-            in
-            decoder_encoding_of_string name
+      char_encoding_of_name
+        (match incoming_encoding with
+           | Some name ->
+               name
+           | None ->
+               if windows then
+                 Printf.sprintf "CP%d" (LTerm_windows.get_console_cp ())
+               else
+                 LTerm_unix.system_encoding)
     and outgoing_encoding =
-      match outgoing_encoding with
-        | Some name ->
-            name
-        | None ->
-            let name =
-              if windows then
-                Printf.sprintf "CP%d" (LTerm_windows.get_console_output_cp ())
-              else
-                LTerm_unix.system_encoding
-            in
-            encoding_of_string name in
+      char_encoding_of_name
+        (match outgoing_encoding with
+           | Some name ->
+               name
+           | None ->
+               if windows then
+                 Printf.sprintf "CP%d" (LTerm_windows.get_console_output_cp ())
+               else
+                 LTerm_unix.system_encoding) in
     (* Check if fds are ttys. *)
     Lwt_unix.isatty incoming_fd >>= fun incoming_is_a_tty ->
     Lwt_unix.isatty outgoing_fd >>= fun outgoing_is_a_tty ->
@@ -239,7 +234,7 @@ let create
       read_event = false;
       incoming_encoding;
       outgoing_encoding;
-      outgoing_is_utf8 = outgoing_encoding = `UTF_8;
+      outgoing_is_utf8 = CharEncoding.name_of outgoing_encoding = "UTF-8";
       notify = Lwt_condition.create ();
       event = E.never;
       incoming_is_a_tty;
@@ -316,6 +311,12 @@ let set_size _ _ = Lwt.fail (Failure "LTerm.set_size is deprecated")
    | Events                                                          |
    +-----------------------------------------------------------------+ *)
 
+class output_single (cell : UChar.t option ref) = object
+  method put char = cell := Some char
+  method flush () = ()
+  method close_out () = ()
+end
+
 let read_char term =
   begin
     Lwt_stream.get term.input_stream >>= fun byte_opt ->
@@ -323,12 +324,30 @@ let read_char term =
       | Some byte -> return byte
       | None -> Lwt.fail End_of_file
   end >>= fun first_byte ->
-  LTerm_unix.parse_char term.incoming_encoding term.input_stream first_byte >>= fun char ->
+  let cell = ref None in
+  let output = new CharEncoding.convert_uchar_output term.incoming_encoding (new output_single cell) in
+  let rec loop st =
+    match !cell with
+      | Some char ->
+          return char
+      | None ->
+          Lwt_stream.next st >>= fun byte ->
+          assert (output#output (Bytes.make 1 byte) 0 1 = 1);
+          output#flush ();
+          loop st
+  in
+  Lwt.catch (fun () ->
+      assert (output#output (Bytes.make 1 first_byte) 0 1 = 1);
+      Lwt_stream.parse term.input_stream loop)
+    (function
+    | CharEncoding.Malformed_code | Lwt_stream.Empty ->
+      return (UChar.of_char first_byte)
+    | exn -> Lwt.fail exn) >>= fun char ->
   return (LTerm_event.Key {
             LTerm_key.control = false;
             LTerm_key.meta = false;
             LTerm_key.shift = false;
-            LTerm_key.code = LTerm_key.Char char;
+            LTerm_key.code = LTerm_key.Char (Uchar.of_int (UChar.code char));
           })
 
 let rec next_event term =
@@ -697,23 +716,23 @@ let load_state term =
    | String recoding                                                 |
    +-----------------------------------------------------------------+ *)
 
-(*
-let vline = Uchar.of_char '|'
-let vlline = Uchar.of_char '+'
-let dlcorner = Uchar.of_char '+'
-let urcorner = Uchar.of_char '+'
-let huline = Uchar.of_char '+'
-let hdline = Uchar.of_char '+'
-let vrline = Uchar.of_char '+'
-let hline = Uchar.of_char '-'
-let cross = Uchar.of_char '+'
-let ulcorner = Uchar.of_char '+'
-let drcorner = Uchar.of_char '+'
-let question = Uchar.of_char '?'
-*)
+let vline = UChar.of_char '|'
+let vlline = UChar.of_char '+'
+let dlcorner = UChar.of_char '+'
+let urcorner = UChar.of_char '+'
+let huline = UChar.of_char '+'
+let hdline = UChar.of_char '+'
+let vrline = UChar.of_char '+'
+let hline = UChar.of_char '-'
+let cross = UChar.of_char '+'
+let ulcorner = UChar.of_char '+'
+let drcorner = UChar.of_char '+'
+let question = UChar.of_char '?'
+
+module UNF = UNF.Make (UText)
 
 (* Map characters that cannot be encoded to ASCII ones. *)
-(* let map_char char =
+let map_char char =
   match Uchar.to_int char with
     | 0x2500 -> hline
     | 0x2501 -> hline
@@ -798,6 +817,7 @@ let question = Uchar.of_char '?'
     | 0x2550 -> hline
     | 0x2551 -> vline
     | _ ->
+        let char = UChar.chr (Uchar.to_int char) in
         match UNF.nfd_decompose char with
           | char :: _ ->
               if UChar.code char <= 127 then
@@ -806,7 +826,15 @@ let question = Uchar.of_char '?'
                 question
           | [] ->
               question
-*)
+
+class output_to_buffer buf res = object
+  method output str ofs len =
+    Buffer.add_subbytes buf str ofs len;
+    len
+  method flush () = ()
+  method close_out () =
+    res := Buffer.contents buf
+end
 
 let encode_string term str =
   if term.outgoing_is_utf8 then
@@ -814,14 +842,18 @@ let encode_string term str =
     str
   else
     let buf = Buffer.create (String.length str) in
-    let e = Uutf.encoder term.outgoing_encoding (`Buffer buf) in
+    let res = ref "" in
+    let output = new CharEncoding.uchar_output_channel_of term.outgoing_encoding (new output_to_buffer buf res) in
     let rec loop ofs =
       if ofs = String.length str then begin
-        assert (Uutf.encode e `End = `Ok);
-        Buffer.contents buf
+        output#close_out ();
+        !res
       end else begin
         let ch, ofs = Zed_utf8.unsafe_extract_next str ofs in
-        assert (Uutf.encode e (`Uchar ch) = `Ok);
+        (try
+           output#put (UChar.chr (Uchar.to_int ch))
+         with CharEncoding.Out_of_range | UChar.Out_of_range ->
+           output#put (map_char ch));
         loop ofs
       end
     in
@@ -831,11 +863,14 @@ let encode_char term ch =
   if term.outgoing_is_utf8 then
     Zed_utf8.singleton ch
   else begin
-    let buf = Buffer.create 8 in
-    let e = Uutf.encoder term.outgoing_encoding (`Buffer buf) in
-    assert (Uutf.encode e (`Uchar ch) = `Ok);
-    assert (Uutf.encode e `End = `Ok);
-    Buffer.contents buf
+    let res = ref "" in
+    let output = new CharEncoding.uchar_output_channel_of term.outgoing_encoding (new output_to_buffer (Buffer.create 8) res) in
+    (try
+       output#put (UChar.chr (Uchar.to_int ch))
+     with CharEncoding.Out_of_range | UChar.Out_of_range ->
+       output#put (map_char ch));
+    output#close_out ();
+    !res
   end
 
 (* +-----------------------------------------------------------------+

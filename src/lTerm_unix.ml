@@ -7,6 +7,7 @@
  * This file is a part of Lambda-Term.
  *)
 
+open CamomileLibraryDefault.Camomile
 open LTerm_key
 
 let return, (>>=), (>|=) = Lwt.return, Lwt.(>>=), Lwt.(>|=)
@@ -323,25 +324,32 @@ let system_encoding =
    | Parsing of encoded characters                                   |
    +-----------------------------------------------------------------+ *)
 
+class output_single (cell : UChar.t option ref) = object
+  method put char = cell := Some char
+  method flush () = ()
+  method close_out () = ()
+end
+
 let parse_char encoding st first_byte =
-  let d = Uutf.decoder ~encoding `Manual in
+  let cell = ref None in
+  let output = new CharEncoding.convert_uchar_output encoding (new output_single cell) in
   let rec loop st =
-    match Uutf.decode d with
-    | `Uchar u -> return u
-    | `End -> assert false
-    | `Malformed _ -> raise Exit
-    | `Await ->
-        Lwt_stream.next st >>= fun byte ->
-        Uutf.Manual.src d (Bytes.make 1 byte) 0 1;
-        loop st
+    match !cell with
+      | Some char ->
+          return char
+      | None ->
+          Lwt_stream.next st >>= fun byte ->
+          assert (output#output (Bytes.make 1 byte) 0 1 = 1);
+          output#flush ();
+          loop st
   in
   Lwt.catch
     (fun () ->
-      Uutf.Manual.src d (Bytes.make 1 first_byte) 0 1;
+      assert (output#output (Bytes.make 1 first_byte) 0 1 = 1);
       Lwt_stream.parse st loop)
     (function
-    | Exit | Lwt_stream.Empty ->
-        return (Uchar.of_char first_byte)
+    | CharEncoding.Malformed_code | Lwt_stream.Empty ->
+        return (UChar.of_char first_byte)
     | exn -> Lwt.fail exn)
 
 (* +-----------------------------------------------------------------+
@@ -939,7 +947,7 @@ let rec parse_event ?(escape_time = 0.1) encoding stream =
                           Lwt_stream.junk stream >>= fun () ->
                           parse_char encoding stream byte' >>= fun code ->
                           return (LTerm_event.Key { control = false; meta = true;
-                                                    shift = false; code = Char code })
+                                                    shift = false; code = Char (Uchar.of_int (UChar.code code)) })
                     end
             end
           | exn -> Lwt.fail exn)
@@ -960,4 +968,4 @@ let rec parse_event ?(escape_time = 0.1) encoding stream =
         (* Encoded characters *)
         parse_char encoding stream byte >>= fun code ->
         return (LTerm_event.Key { control = false; meta = false;
-                                  shift = false; code = Char code })
+                                  shift = false; code = Char (Uchar.of_int (UChar.code code)) })

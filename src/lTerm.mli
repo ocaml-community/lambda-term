@@ -20,8 +20,8 @@ exception No_such_encoding of string
 val create :
   ?windows : bool ->
   ?model : string ->
-  ?incoming_encoding : Uutf.decoder_encoding ->
-  ?outgoing_encoding : Uutf.encoding ->
+  ?incoming_encoding : string ->
+  ?outgoing_encoding : string ->
   Lwt_unix.file_descr -> Lwt_io.input_channel ->
   Lwt_unix.file_descr -> Lwt_io.output_channel -> t Lwt.t
   (** [create ?windows ?model ?incoming_encoding ?outgoing_encoding
@@ -47,6 +47,9 @@ val create :
       [true] and [LTerm_unix.system_encoding] otherwise. Note that
       transliteration is used so printing unicode character on the
       terminal will never fail.
+
+      If one of the two given encodings does not exist, it raises
+      [No_such_encoding].
 
       Note about terminal resize: in the windows console resizes are
       not automatically detected. Lambda-term will only check for
