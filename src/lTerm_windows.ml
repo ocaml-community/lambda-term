@@ -138,7 +138,26 @@ type char_info = {
   ci_background : int;
 }
 
-external write_console_output : Unix.file_descr -> char_info array array -> LTerm_geom.size -> LTerm_geom.coord -> LTerm_geom.rect -> LTerm_geom.rect = "lt_windows_write_console_output"
+type char_info_raw = {
+  cir_char : UChar.t;
+  cir_foreground : int;
+  cir_background : int;
+}
+
+let char_info_to_raw ci=
+  Zed_char.to_array ci.ci_char
+  |> Array.map (fun char->
+    { cir_char= char;
+      cir_foreground= ci.ci_foreground;
+      cir_background= ci.ci_background
+    })
+
+external write_console_output : Unix.file_descr -> char_info_raw array array -> LTerm_geom.size -> LTerm_geom.coord -> LTerm_geom.rect -> LTerm_geom.rect = "lt_windows_write_console_output"
+
+let chars_to_raw chars=
+  Array.map
+    (fun line-> List.map (fun ci-> char_info_to_raw ci) (Array.to_list line) |> Array.concat)
+    chars
 
 let write_console_output fd chars size coord rect =
   Lwt_unix.check_descriptor fd;
@@ -147,6 +166,7 @@ let write_console_output fd chars size coord rect =
     (fun line ->
        if Array.length line <> size.LTerm_geom.cols then invalid_arg "LTerm_windows.write_console_output")
     chars;
+  let chars= chars_to_raw chars in
   write_console_output (Lwt_unix.unix_file_descr fd) chars size coord rect
 
 external fill_console_output_character : Unix.file_descr -> UChar.t -> int -> LTerm_geom.coord -> int = "lt_windows_fill_console_output_character"
