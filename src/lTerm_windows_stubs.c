@@ -16,7 +16,6 @@
 
 #if defined(_WIN32) || defined(_WIN64)
 
-#include <windows.h>
 #include <lwt_unix.h>
 
 /* +-----------------------------------------------------------------+
@@ -140,24 +139,16 @@ static void worker_read_console_input(struct job_read_console_input *job)
   }
 }
 
-CAMLprim value lt_windows_read_console_input_job(value val_fd)
+static value result_read_console_input(struct job_read_console_input *job)
 {
-  LWT_UNIX_INIT_JOB(job, read_console_input, 0);
-  job->handle = Handle_val(val_fd);
-  job->error_code = 0;
-  CAMLreturn(lwt_unix_alloc_job(&(job->job)));
-}
-
-static value result_read_console_input_result(struct job_read_console_input *job)
-{
-  INPUT_RECORD input;
+  INPUT_RECORD * input;
   DWORD cks, bs;
   WORD code;
   int i;
   CAMLparam0();
   CAMLlocal3(result, x, y);
   int error_code = job->error_code;
-  input = job->input;
+  input = &(job->input);
   lwt_unix_free_job(&job->job);
   if (error_code) {
     win32_maperr(error_code);
@@ -210,6 +201,16 @@ static value result_read_console_input_result(struct job_read_console_input *job
     CAMLreturn(Val_int(0));
   }
   CAMLreturn(Val_int(0));
+}
+
+CAMLprim value lt_windows_read_console_input_job(value val_fd)
+{
+  CAMLparam0();
+  LWT_UNIX_INIT_JOB(job, read_console_input, 0);
+  job->handle = Handle_val(val_fd);
+  job->error_code = 0;
+  return lwt_unix_alloc_job(&(job->job));
+  CAMLreturn(lwt_unix_alloc_job(&(job->job)));
 }
 
 /* +-----------------------------------------------------------------+
