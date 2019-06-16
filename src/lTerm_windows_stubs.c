@@ -205,11 +205,10 @@ static value result_read_console_input(struct job_read_console_input *job)
 
 CAMLprim value lt_windows_read_console_input_job(value val_fd)
 {
-  CAMLparam0();
+  CAMLparam1(val_fd);
   LWT_UNIX_INIT_JOB(job, read_console_input, 0);
   job->handle = Handle_val(val_fd);
   job->error_code = 0;
-  return lwt_unix_alloc_job(&(job->job));
   CAMLreturn(lwt_unix_alloc_job(&(job->job)));
 }
 
