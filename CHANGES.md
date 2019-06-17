@@ -1,3 +1,9 @@
+2.0.1 (2019-06-17)
+------------------
+
+* fix windows build (@db4, #72)
+* expand zchar before writing to windows console (@kandu, #75)
+
 2.0 (2019-05-17)
 ----------------
 
