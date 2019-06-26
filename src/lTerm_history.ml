@@ -390,15 +390,17 @@ let load history ?log ?(skip_empty=true) ?(skip_dup=true) fn =
                 | None ->
                     return ()
                 | Some line ->
-                  let line= Zed_string.unsafe_of_utf8 line in
-                    (try
+                  (try
+                    let line= Zed_string.of_utf8 line in
                        let entry, size = unescape line in
                        if not (skip_empty && is_empty entry) && not (skip_dup && is_dup history entry) then begin
                          add_aux history entry size;
                          history.old_count <- history.length
                        end
-                     with Zed_utf8.Invalid (msg, _) ->
-                       log num msg);
+                    with
+                      | Zed_string.Invalid (msg, _)-> log num msg
+                      | Zed_utf8.Invalid (msg, _)-> log num msg
+                   );
                     aux (num + 1)
             in
             aux 1)
