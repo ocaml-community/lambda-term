@@ -1,3 +1,8 @@
+2.0.2 (2019-08-09)
+------------------
+
+LTerm\_history: catch and log `Zed_string.Invalid` exception
+
 2.0.1 (2019-06-17)
 ------------------
 
