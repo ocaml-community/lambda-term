@@ -56,6 +56,8 @@ CAMLprim value lt_unix_get_system_encoding()
   /* Get the codeset used by current locale: */
 #if defined(SYS_openbsd)
   const char *codeset = locale_charset();
+#elif defined(__ANDROID__) && __ANDROID_API__ < 26
+  const char *codeset = NULL;
 #else
   const char *codeset = nl_langinfo(CODESET);
 #endif
