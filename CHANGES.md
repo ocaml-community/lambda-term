@@ -1,3 +1,8 @@
+2.0.3 (2019-12-31)
+------------------
+
+LTerm\_edit: add horizontal scrolling support for wide width character
+
 2.0.2 (2019-08-09)
 ------------------
 
