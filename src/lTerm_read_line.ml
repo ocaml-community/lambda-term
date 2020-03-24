@@ -858,6 +858,7 @@ let styled_newline = [|(newline, LTerm_style.none)|]
 class virtual ['a] term term =
   let size, set_size = S.create (LTerm.size term) in
   let event, set_prompt = E.create () in
+  let editor_mode, set_editor_mode = S.create LTerm_editor.Default in
   let prompt = S.switch (S.hold ~eq:( == ) (S.const default_prompt) event) in
   let key_sequence, set_key_sequence = S.create [] in
 object(self)
@@ -865,6 +866,9 @@ object(self)
   method size = size
   method prompt = prompt
   method set_prompt prompt = set_prompt prompt
+
+  val mutable current_editor_mode = LTerm_editor.Default
+    (* The current editor mode. *)
 
   val mutable visible = true
     (* Whether the read-line instance is currently visible. *)
@@ -913,6 +917,10 @@ object(self)
               self#completion_index
               size))
     )
+
+  method editor_mode = editor_mode
+
+  method set_editor_mode mode = set_editor_mode mode
 
   method key_sequence = key_sequence
 
@@ -1160,6 +1168,46 @@ object(self)
   val mutable local_bindings = Bindings.empty
   method bind keys actions = local_bindings <- Bindings.add keys actions local_bindings
 
+  method private keyseq keys=
+    match keys with
+    | []-> self#loop
+    | key::tl->
+      let res =
+        match resolver with
+          | Some res -> res
+          | None ->
+            Bindings.resolver
+              [ Bindings.pack (fun x -> x) local_bindings
+              ; Bindings.pack (fun x -> x) !bindings
+              ; Bindings.pack (List.map (fun x -> Edit x)) !LTerm_edit.bindings
+              ]
+      in
+      match Bindings.resolve key res with
+        | Bindings.Accepted actions ->
+            resolver <- None;
+            set_key_sequence [];
+            self#exec ~keys:tl actions;
+        | Bindings.Continue res ->
+            resolver <- Some res;
+            set_key_sequence (S.value key_sequence @ [key]);
+            self#keyseq tl
+        | Bindings.Rejected ->
+            set_key_sequence [];
+            if resolver = None then
+              match key with
+                | { control = false; meta = false; shift = false; code = Char ch } ->
+                    Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert (Zed_char.unsafe_of_uChar ch))));
+                    self#insert ch
+                | { code = Char ch; _ } when LTerm.windows term && UChar.code ch >= 32 ->
+                    (* Windows reports Shift+A for A, ... *)
+                    Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert (Zed_char.unsafe_of_uChar ch))));
+                    self#insert ch
+                | _ ->
+                    ()
+            else
+              resolver <- None;
+            self#keyseq tl
+
   (* The main loop. *)
   method private loop =
     LTerm.read_event term >>= fun ev ->
@@ -1167,43 +1215,8 @@ object(self)
       | LTerm_event.Resize size ->
           set_size size;
           self#loop
-      | LTerm_event.Key key -> begin
-          let res =
-            match resolver with
-              | Some res -> res
-              | None ->
-                Bindings.resolver
-                  [ Bindings.pack (fun x -> x) local_bindings
-                  ; Bindings.pack (fun x -> x) !bindings
-                  ; Bindings.pack (List.map (fun x -> Edit x)) !LTerm_edit.bindings
-                  ]
-          in
-          match Bindings.resolve key res with
-            | Bindings.Accepted actions ->
-                resolver <- None;
-                set_key_sequence [];
-                self#exec actions
-            | Bindings.Continue res ->
-                resolver <- Some res;
-                set_key_sequence (S.value key_sequence @ [key]);
-                self#loop
-            | Bindings.Rejected ->
-                set_key_sequence [];
-                if resolver = None then
-                  match key with
-                    | { control = false; meta = false; shift = false; code = Char ch } ->
-                        Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert (Zed_char.unsafe_of_uChar ch))));
-                        self#insert ch
-                    | { code = Char ch; _ } when LTerm.windows term && UChar.code ch >= 32 ->
-                        (* Windows reports Shift+A for A, ... *)
-                        Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert (Zed_char.unsafe_of_uChar ch))));
-                        self#insert ch
-                    | _ ->
-                        ()
-                else
-                  resolver <- None;
-                self#loop
-        end
+      | LTerm_event.Key key ->
+        self#keyseq [key]
       | _ ->
           self#loop
 
@@ -1215,7 +1228,8 @@ object(self)
       Sys.getenv "EDITOR"
     with Not_found -> "vi"
 
-  method private exec = function
+  method private exec ?keys actions=
+    match actions with
     | Accept :: _ when S.value self#mode = Edition ->
         Zed_macro.add self#macro Accept;
         return self#eval
@@ -1225,13 +1239,13 @@ object(self)
         LTerm.goto term { row = 0; col = 0 } >>= fun () ->
         displayed <- false;
         self#queue_draw_update >>= fun () ->
-        self#exec actions
+        self#exec ?keys actions
     | Edit LTerm_edit.Play_macro :: actions ->
         Zed_macro.cancel self#macro;
-        self#exec (Zed_macro.contents macro @ actions)
+        self#exec ?keys (Zed_macro.contents macro @ actions)
     | Suspend :: actions ->
         if Sys.win32 then
-          self#exec actions
+          self#exec ?keys actions
         else begin
           let is_visible = visible in
           self#hide >>= fun () ->
@@ -1254,7 +1268,7 @@ object(self)
                   return ()
           end >>= fun () ->
           (if is_visible then self#show else return ()) >>= fun () ->
-          self#exec actions
+          self#exec ?keys actions
         end
     | Edit_with_external_editor :: actions -> begin
         let is_visible = visible in
@@ -1307,13 +1321,15 @@ object(self)
         >>= fun () ->
         (if is_visible then self#show else return ())
         >>= fun () ->
-        self#exec actions
+        self#exec ?keys actions
       end
     | action :: actions ->
         self#send_action action;
-        self#exec actions
+        self#exec ?keys actions
     | [] ->
-        self#loop
+      match keys with
+      | None-> self#loop
+      | Some keys-> self#keyseq keys
 
   method run =
     (* Update the size with the current size. *)
