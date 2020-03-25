@@ -867,9 +867,6 @@ object(self)
   method prompt = prompt
   method set_prompt prompt = set_prompt prompt
 
-  val mutable current_editor_mode = LTerm_editor.Default
-    (* The current editor mode. *)
-
   val mutable visible = true
     (* Whether the read-line instance is currently visible. *)
 
@@ -920,7 +917,8 @@ object(self)
 
   method editor_mode = editor_mode
 
-  method set_editor_mode mode = set_editor_mode mode
+  method set_editor_mode mode =
+    set_editor_mode mode
 
   method key_sequence = key_sequence
 
@@ -1216,7 +1214,10 @@ object(self)
           set_size size;
           self#loop
       | LTerm_event.Key key ->
-        self#keyseq [key]
+        (match S.value editor_mode with
+        | LTerm_editor.Default->
+          self#keyseq [key]
+        | LTerm_editor.Vi-> self#loop)
       | _ ->
           self#loop
 
