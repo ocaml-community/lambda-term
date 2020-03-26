@@ -1186,7 +1186,7 @@ object(self)
 
   method private keyseq keys=
     match keys with
-    | []-> self#loop
+    | []-> return (Error [])
     | key::tl->
       let res =
         match resolver with
@@ -1202,13 +1202,11 @@ object(self)
         | Bindings.Accepted actions ->
             resolver <- None;
             set_key_sequence [];
-            self#exec ~keys:tl actions >>= (function
-            | Ok r-> return r;
-            | Error keys-> self#keyseq keys)
+            self#exec ~keys:tl actions
         | Bindings.Continue res ->
             resolver <- Some res;
             set_key_sequence (S.value key_sequence @ [key]);
-            self#keyseq tl
+            return (Error tl)
         | Bindings.Rejected ->
             set_key_sequence [];
             if resolver = None then
@@ -1224,7 +1222,7 @@ object(self)
                     ()
             else
               resolver <- None;
-            self#keyseq tl
+            return (Error tl)
 
   method private listen_vi msgBox=
     let rec listen ()=
@@ -1233,6 +1231,14 @@ object(self)
       listen ()
     in
     vi_thread <- Some (listen ())
+
+  method private process_keys keys=
+    self#keyseq keys >>= function
+    | Ok r-> return (Ok r)
+    | Error keys->
+      match keys with
+      | []-> return (Error [])
+      | _-> self#process_keys keys
 
   (* The main loop. *)
   method private loop =
@@ -1244,7 +1250,9 @@ object(self)
       | LTerm_event.Key key ->
         (match S.value editor_mode with
         | LTerm_editor.Default->
-          self#keyseq [key]
+          self#process_keys [key] >>= (function
+            | Ok r-> return r
+            | Error _-> self#loop)
         | LTerm_editor.Vi->
           match vi_edit with
           | Some vi_edit->
@@ -1252,7 +1260,9 @@ object(self)
             LTerm_vi.Concurrent.MsgBox.put vi_edit#i (LTerm_vi.of_key key) >>= fun ()->
             self#loop
           | None->
-            self#keyseq [key]  (* falllback to the default mode *))
+            self#process_keys [key] >>= (function
+              | Ok r-> return r
+              | Error _-> self#loop ) (* falllback to the default mode *))
       | _ ->
           self#loop
 
@@ -1397,8 +1407,10 @@ object(self)
     end >>= fun () ->
 
     begin
-      Lwt.finalize (fun () ->
-          Lwt.catch (fun () ->
+      Lwt.finalize
+        (fun () ->
+          Lwt.catch
+            (fun () ->
               (* Go to the beginning of line otherwise all offset
                  calculation will be false. *)
               LTerm.fprint term "\r" >>= fun () ->
