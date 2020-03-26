@@ -297,7 +297,7 @@ class virtual ['a] term : LTerm.t -> object
   method run : 'a Lwt.t
     (** Run this read-line instance. *)
 
-  method private exec : ?keys : LTerm_key.t list -> action list -> 'a Lwt.t
+  method private exec : ?keys : LTerm_key.t list -> action list -> ('a, LTerm_key.t list) result Lwt.t
     (** Executes a list of actions. Rememver to call [Zed_macro.add
         self#macro action] if you overload this method. *)
 
