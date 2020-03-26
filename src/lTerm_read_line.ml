@@ -892,6 +892,10 @@ object(self)
 
   val mutable running = true
 
+  val vi_state= new LTerm_vi.state
+
+  val mutable vi_edit= None
+
   initializer
     completion_start <- (
       S.fold
@@ -917,8 +921,22 @@ object(self)
 
   method editor_mode = editor_mode
 
+  val mutable vi_thread= None
+
   method set_editor_mode mode =
-    set_editor_mode mode
+    set_editor_mode mode;
+    match mode with
+    | LTerm_editor.Default->
+      vi_edit <- None;
+      (match vi_thread with
+      | Some thread->
+        LTerm_vi.Concurrent.Thread.cancel thread;
+        vi_thread <- None;
+      | None-> ());
+    | LTerm_editor.Vi->
+      let _vi_edit= vi_state#edit in
+      vi_edit <- Some _vi_edit;
+      self#listen_vi _vi_edit#i
 
   method key_sequence = key_sequence
 
@@ -1184,7 +1202,9 @@ object(self)
         | Bindings.Accepted actions ->
             resolver <- None;
             set_key_sequence [];
-            self#exec ~keys:tl actions;
+            self#exec ~keys:tl actions >>= (function
+            | Ok r-> return r;
+            | Error keys-> self#keyseq keys)
         | Bindings.Continue res ->
             resolver <- Some res;
             set_key_sequence (S.value key_sequence @ [key]);
@@ -1206,6 +1226,14 @@ object(self)
               resolver <- None;
             self#keyseq tl
 
+  method private listen_vi msgBox=
+    let rec listen ()=
+      LTerm_vi.Concurrent.MsgBox.get msgBox >>= fun vi_action->
+      ignore vi_action;
+      listen ()
+    in
+    vi_thread <- Some (listen ())
+
   (* The main loop. *)
   method private loop =
     LTerm.read_event term >>= fun ev ->
@@ -1217,7 +1245,14 @@ object(self)
         (match S.value editor_mode with
         | LTerm_editor.Default->
           self#keyseq [key]
-        | LTerm_editor.Vi-> self#loop)
+        | LTerm_editor.Vi->
+          match vi_edit with
+          | Some vi_edit->
+            set_key_sequence (S.value key_sequence @ [key]);
+            LTerm_vi.Concurrent.MsgBox.put vi_edit#i (LTerm_vi.of_key key) >>= fun ()->
+            self#loop
+          | None->
+            self#keyseq [key]  (* falllback to the default mode *))
       | _ ->
           self#loop
 
@@ -1229,24 +1264,24 @@ object(self)
       Sys.getenv "EDITOR"
     with Not_found -> "vi"
 
-  method private exec ?keys actions=
+  method private exec ?(keys= []) actions=
     match actions with
     | Accept :: _ when S.value self#mode = Edition ->
         Zed_macro.add self#macro Accept;
-        return self#eval
+        return (Ok self#eval)
     | Clear_screen :: actions ->
         Zed_macro.add self#macro Clear_screen;
         LTerm.clear_screen term >>= fun () ->
         LTerm.goto term { row = 0; col = 0 } >>= fun () ->
         displayed <- false;
         self#queue_draw_update >>= fun () ->
-        self#exec ?keys actions
+        self#exec ~keys actions
     | Edit LTerm_edit.Play_macro :: actions ->
         Zed_macro.cancel self#macro;
-        self#exec ?keys (Zed_macro.contents macro @ actions)
+        self#exec ~keys (Zed_macro.contents macro @ actions)
     | Suspend :: actions ->
         if Sys.win32 then
-          self#exec ?keys actions
+          self#exec ~keys actions
         else begin
           let is_visible = visible in
           self#hide >>= fun () ->
@@ -1269,7 +1304,7 @@ object(self)
                   return ()
           end >>= fun () ->
           (if is_visible then self#show else return ()) >>= fun () ->
-          self#exec ?keys actions
+          self#exec ~keys actions
         end
     | Edit_with_external_editor :: actions -> begin
         let is_visible = visible in
@@ -1322,15 +1357,13 @@ object(self)
         >>= fun () ->
         (if is_visible then self#show else return ())
         >>= fun () ->
-        self#exec ?keys actions
+        self#exec ~keys actions
       end
     | action :: actions ->
         self#send_action action;
-        self#exec ?keys actions
+        self#exec ~keys actions
     | [] ->
-      match keys with
-      | None-> self#loop
-      | Some keys-> self#keyseq keys
+      return (Error keys)
 
   method run =
     (* Update the size with the current size. *)
