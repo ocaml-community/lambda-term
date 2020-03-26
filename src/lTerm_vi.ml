@@ -20,5 +20,43 @@ module Concurrent = struct
     end
 end
 
-include Mew_vi.Core.Make (Concurrent)
+module Vi = Mew_vi.Core.Make (Concurrent)
+include Vi
+
+let of_code : LTerm_key.code -> Mew_vi.Key.code= function
+  | Char char -> Char char
+  | Enter     -> Enter
+  | Escape    -> Escape
+  | Tab       -> Tab
+  | Up        -> Up
+  | Down      -> Down
+  | Left      -> Left
+  | Right     -> Right
+  | F1        -> F1
+  | F2        -> F2
+  | F3        -> F3
+  | F4        -> F4
+  | F5        -> F5
+  | F6        -> F6
+  | F7        -> F7
+  | F8        -> F8
+  | F9        -> F9
+  | F10       -> F10
+  | F11       -> F11
+  | F12       -> F12
+  | Next_page -> Next_page
+  | Prev_page -> Prev_page
+  | Home      -> Home
+  | End       -> End
+  | Insert    -> Insert
+  | Delete    -> Delete
+  | Backspace -> Backspace
+
+let of_key lterm_key=
+  {
+    Mew_vi.Key.control= lterm_key.LTerm_key.control;
+    meta= lterm_key.meta;
+    shift= lterm_key.shift;
+    code= of_code lterm_key.code;
+  }
 
