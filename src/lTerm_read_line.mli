@@ -187,6 +187,9 @@ class virtual ['a] engine : ?history : history -> ?clipboard : Zed_edit.clipboar
         completion should be displayed, and when [Some msg] [msg]
         should be displayed. *)
 
+  method interrupt : unit Lwt_mvar.t
+    (** To notify an interrupt singal *)
+
   (** {6 Completion} *)
 
   method completion_words : (Zed_string.t * Zed_string.t) list signal
@@ -238,6 +241,7 @@ class virtual ['a] abstract : object
   method virtual complete : unit
   method virtual show_box : bool
   method virtual mode : mode signal
+  method virtual interrupt : unit Lwt_mvar.t
 end
 
 (** {6 Predefined classes} *)

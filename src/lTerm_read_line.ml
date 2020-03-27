@@ -320,6 +320,9 @@ object(self)
   method clipboard = clipboard
   method macro = macro
 
+  val interrupt: unit Lwt_mvar.t= Lwt_mvar.create_empty ()
+  method interrupt= interrupt
+
   (* The event which occurs when completion need to be recomputed. *)
   val mutable completion_event = E.never
 
@@ -483,7 +486,8 @@ object(self)
 
       | Interrupt_or_delete_next_char ->
           if Zed_rope.is_empty (Zed_edit.text edit) then
-            raise Interrupt
+            (Lwt.async @@ Lwt_mvar.put interrupt;
+            raise Interrupt)
           else
             Zed_edit.delete_next_char context
 
@@ -693,6 +697,7 @@ class virtual ['a] abstract = object
   method virtual complete : unit
   method virtual show_box : bool
   method virtual mode : mode signal
+  method virtual interrupt : unit Lwt_mvar.t
 end
 
 (* +-----------------------------------------------------------------+
@@ -855,6 +860,11 @@ let draw_styled_with_newlines matrix cols row col str =
 
 let styled_newline = [|(newline, LTerm_style.none)|]
 
+type 'a loop_status=
+  | Ev of LTerm_event.t
+  | A of 'a
+  | Interrupt
+
 class virtual ['a] term term =
   let size, set_size = S.create (LTerm.size term) in
   let event, set_prompt = E.create () in
@@ -934,9 +944,9 @@ object(self)
         vi_thread <- None;
       | None-> ());
     | LTerm_editor.Vi->
-      let _vi_edit= vi_state#edit in
+      let _vi_edit= vi_state#vi_edit in
       vi_edit <- Some _vi_edit;
-      self#listen_vi _vi_edit#i
+      self#listen_vi _vi_edit#action_output
 
   method key_sequence = key_sequence
 
@@ -1224,11 +1234,27 @@ object(self)
               resolver <- None;
             return (Error tl)
 
+  val result= Lwt_mvar.create_empty ()
+
   method private listen_vi msgBox=
     let rec listen ()=
-      LTerm_vi.Concurrent.MsgBox.get msgBox >>= fun vi_action->
-      ignore vi_action;
-      listen ()
+      LTerm_vi.Concurrent.MsgBox.get msgBox >>= (function
+        | Bypass key-> self#process_keys [LTerm_vi.of_vi_key key] >>= (function
+            | Ok r-> Lwt_mvar.put result r
+            | Error _-> listen ()
+            )
+        | Dummy-> listen ()
+        | Move vi_obj->
+          (match vi_obj with
+          | Down _-> self#exec [History_next] >>= (function
+              | Ok r-> Lwt_mvar.put result r
+              | Error _-> listen ()
+             )
+          | Up _-> self#exec [History_prev] >>= (function
+              | Ok r-> Lwt_mvar.put result r
+              | Error _-> listen ())
+          | _-> listen ())
+        | Delete _-> listen ())
     in
     vi_thread <- Some (listen ())
 
@@ -1242,7 +1268,15 @@ object(self)
 
   (* The main loop. *)
   method private loop =
-    LTerm.read_event term >>= fun ev ->
+    Lwt.pick [
+      Lwt.(>|=) (LTerm.read_event term) (fun ev-> Ev ev);
+      Lwt.(>|=) (Lwt_mvar.take result) (fun r-> A r);
+      Lwt.(>|=) (Lwt_mvar.take self#interrupt) (fun ()-> Interrupt);
+      ]
+    >>= function
+    | A r-> return r
+    | Interrupt-> raise Interrupt
+    | Ev ev->
     match ev with
       | LTerm_event.Resize size ->
           set_size size;
@@ -1257,7 +1291,7 @@ object(self)
           match vi_edit with
           | Some vi_edit->
             set_key_sequence (S.value key_sequence @ [key]);
-            LTerm_vi.Concurrent.MsgBox.put vi_edit#i (LTerm_vi.of_key key) >>= fun ()->
+            LTerm_vi.Concurrent.MsgBox.put vi_edit#i (LTerm_vi.of_lterm_key key) >>= fun ()->
             self#loop
           | None->
             self#process_keys [key] >>= (function
@@ -1432,4 +1466,7 @@ object(self)
     E.stop event;
     Lwt_mutex.with_lock draw_mutex (fun () -> self#draw_success) >>= fun () ->
     return result
+
+  initializer
+    self#set_editor_mode LTerm_editor.Vi
 end
