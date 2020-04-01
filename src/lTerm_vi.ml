@@ -24,7 +24,7 @@ module Vi = Mew_vi.Core.Make (Concurrent)
 include Vi
 
 let of_lterm_code : LTerm_key.code -> Mew_vi.Key.code= function
-  | Char char -> Char char
+  | Char chr-> Char (Zed_utf8.escaped_char chr)
   | Enter     -> Enter
   | Escape    -> Escape
   | Tab       -> Tab
@@ -53,7 +53,7 @@ let of_lterm_code : LTerm_key.code -> Mew_vi.Key.code= function
   | Backspace -> Backspace
 
 let of_vi_code : Mew_vi.Key.code -> LTerm_key.code= function
-  | Char char -> Char char
+  | Char bin -> Char (Zed_utf8.extract bin 0)
   | Enter     -> Enter
   | Escape    -> Escape
   | Tab       -> Tab
