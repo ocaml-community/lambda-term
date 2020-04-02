@@ -1237,15 +1237,70 @@ object(self)
   val result= Lwt_mvar.create_empty ()
 
   method private listen_vi msgBox=
+    let list_make elm n=
+      let rec create acc n=
+        if n > 0 then
+          create (elm::acc) (n-1)
+        else
+          acc
+      in
+      create [] n
+    in
+    let rec do_actions= function
+      | []-> return ()
+      | action::tl->
+        match action with
+        | LTerm_vi.Vi_action.Insert (_insert, _count)-> do_actions tl
+        | Motion (motion, count)->
+          (match motion with
+          | Left n->
+            self#exec
+              (list_make
+                (Edit (Zed Zed_edit.Prev_char))
+                (count*n)) >>=
+            (function
+              | Ok r-> Lwt_mvar.put result r
+              | Error _-> do_actions tl)
+          | Right n->
+            self#exec
+              (list_make
+                (Edit (Zed Zed_edit.Next_char))
+                (count*n)) >>=
+            (function
+              | Ok r-> Lwt_mvar.put result r
+              | Error _-> do_actions tl)
+          | Line_FirstNonBlank n->
+            self#exec
+              (list_make
+                (Edit (Zed Zed_edit.Goto_bol))
+                (count*n)) >>=
+            (function
+              | Ok r-> Lwt_mvar.put result r
+              | Error _-> do_actions tl)
+          | Line_LastChar n->
+            self#exec
+              (list_make
+                (Edit (Zed Zed_edit.Goto_eol))
+                (count*n)) >>=
+            (function
+              | Ok r-> Lwt_mvar.put result r
+              | Error _-> do_actions tl)
+          | _-> do_actions tl)
+        | Delete (_motion, _count)-> do_actions tl
+        | ChangeMode _mode-> do_actions tl
+    in
     let rec listen ()=
       LTerm_vi.Concurrent.MsgBox.get msgBox >>= (function
-        | Bypass key-> self#process_keys [LTerm_vi.of_vi_key key] >>= (function
+        | Bypass keyseq->
+          let keyseq= List.map LTerm_vi.of_vi_key keyseq in
+          self#process_keys keyseq >>= (function
             | Ok r-> Lwt_mvar.put result r
             | Error _-> listen ()
             )
         | Dummy-> listen ()
-        | Move vi_obj->
-          (match vi_obj with
+        | Vi actions->
+          (*
+          (match actions with
           | Down _-> self#exec [History_next] >>= (function
               | Ok r-> Lwt_mvar.put result r
               | Error _-> listen ()
@@ -1254,7 +1309,10 @@ object(self)
               | Ok r-> Lwt_mvar.put result r
               | Error _-> listen ())
           | _-> listen ())
-        | Delete _-> listen ())
+             *)
+          do_actions actions >>=
+          listen
+        )
     in
     vi_thread <- Some (listen ())
 
