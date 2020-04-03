@@ -1269,11 +1269,73 @@ object(self)
             (function
               | Ok r-> Lwt_mvar.put result r
               | Error _-> do_actions tl)
-          | Line_FirstNonBlank n->
+          | Word n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let text= Zed_edit.text edit in
+            let _start, stop= LTerm_vi.Query.get_boundary true ctx in
+            let rec next_word n=
+              let pos= Zed_edit.position ctx in
+              if n > 0 && pos < stop then
+                let next=
+                  min (stop - 1) (LTerm_vi.Query.next_word ~pos ~stop text)
+                in
+                self#exec
+                  (list_make
+                    (Edit (Zed (Zed_edit.Goto next))) 1) >>=
+                (function
+                  | Ok r-> Lwt_mvar.put result r
+                  | Error _-> next_word (n-1))
+              else
+                return ()
+            in
+            next_word (count*n) >>= fun ()->
+            do_actions tl
+          | Word_back n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let text= Zed_edit.text edit in
+            let start, stop= LTerm_vi.Query.get_boundary true ctx in
+            let rec prev_word n=
+              let pos= min (stop - 1) (Zed_edit.position ctx) in
+              if n > 0 && pos > start then
+                let prev=
+                  max start (LTerm_vi.Query.prev_word ~pos ~start text)
+                in
+                self#exec
+                  (list_make
+                    (Edit (Zed (Zed_edit.Goto prev))) 1) >>=
+                (function
+                  | Ok r-> Lwt_mvar.put result r
+                  | Error _-> prev_word (n-1))
+              else
+                return ()
+            in
+            prev_word (count*n) >>= fun ()->
+            do_actions tl
+          | Line_FirstChar n->
             self#exec
               (list_make
                 (Edit (Zed Zed_edit.Goto_bol))
                 (count*n)) >>=
+            (function
+              | Ok r-> Lwt_mvar.put result r
+              | Error _-> do_actions tl)
+          | Line_FirstNonBlank _n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let start, stop= LTerm_vi.Query.get_boundary false ctx in
+            let text= Zed_edit.text edit in
+            let chr_fst= (Zed_char.core (Zed_rope.get text start)) in
+            let nonblank=
+              match LTerm_vi.Query.get_category chr_fst with
+              | `Zs-> LTerm_vi.Query.next_word ~pos:start ~stop text
+              | _-> start
+            in
+            self#exec
+              (list_make
+                (Edit (Zed (Zed_edit.Goto nonblank)))
+                1) >>=
             (function
               | Ok r-> Lwt_mvar.put result r
               | Error _-> do_actions tl)
