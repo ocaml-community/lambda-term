@@ -161,12 +161,8 @@ module Query = struct
     in
     (skip_curr zip pos) - 1
 
-  let next_word ?(multi_line=true) ctx=
+  let next_word ?(multi_line=true) ~pos ~stop text=
     let nl_as_sp= multi_line in
-    let edit= Zed_edit.edit ctx in
-    let text= Zed_edit.text edit in
-    let pos= Zed_edit.position ctx in
-    let _start, stop= get_boundary multi_line ctx in
     let start_category=
       let zchar= Zed_rope.get text pos in
       let core= Zed_char.core zchar in
@@ -178,15 +174,43 @@ module Query = struct
     else
     if next < stop then
       (* skip potential subsequent spaces after skip current word*)
-      let zchar= Zed_rope.get text pos in
+      let zchar= Zed_rope.get text next in
       let core= Zed_char.core zchar in
       if get_category ~nl_as_sp core = `Zs then
         (* skip subsequent spaces *)
-        next_category ~nl_as_sp ~pos ~stop text
+        next_category ~nl_as_sp ~pos:next ~stop text
       else
         next
     else
       next
+
+  let prev_word ?(multi_line=true) ~pos ~start text=
+    if pos <= start then start else
+    let nl_as_sp= multi_line in
+    let start_category=
+      let zchar= Zed_rope.get text pos in
+      let core= Zed_char.core zchar in
+      get_category ~nl_as_sp core
+    and before_start=
+      let zchar= Zed_rope.get text (pos - 1) in
+      let core= Zed_char.core zchar in
+      get_category ~nl_as_sp core
+    in
+    let prev= prev_category ~nl_as_sp ~pos ~start text in
+    1 +
+      if prev <= start then prev else
+      if start_category = before_start then
+        if start_category <> `Zs then
+          prev
+        else
+          prev_category ~nl_as_sp ~pos:prev ~start text
+      else if before_start = `Zs then
+        let prev= prev_category ~nl_as_sp ~pos:prev ~start text in
+        if prev <= start then prev else
+        prev_category ~nl_as_sp ~pos:prev ~start text
+      else
+        prev_category ~nl_as_sp ~pos:prev ~start text
+
 end
 
 module Vi = Mew_vi.Core.Make (Concurrent)
