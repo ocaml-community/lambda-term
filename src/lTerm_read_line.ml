@@ -860,6 +860,10 @@ let draw_styled_with_newlines matrix cols row col str =
 
 let styled_newline = [|(newline, LTerm_style.none)|]
 
+type 'a loop_result=
+  | Result of 'a
+  | ContinueLoop of LTerm_key.t list
+
 type 'a loop_status=
   | Ev of LTerm_event.t
   | A of 'a
@@ -1196,7 +1200,7 @@ object(self)
 
   method private keyseq keys=
     match keys with
-    | []-> return (Error [])
+    | []-> return (ContinueLoop [])
     | key::tl->
       let res =
         match resolver with
@@ -1216,7 +1220,7 @@ object(self)
         | Bindings.Continue res ->
             resolver <- Some res;
             set_key_sequence (S.value key_sequence @ [key]);
-            return (Error tl)
+            return (ContinueLoop tl)
         | Bindings.Rejected ->
             set_key_sequence [];
             if resolver = None then
@@ -1232,7 +1236,7 @@ object(self)
                     ()
             else
               resolver <- None;
-            return (Error tl)
+            return (ContinueLoop tl)
 
   val result= Lwt_mvar.create_empty ()
 
@@ -1259,16 +1263,16 @@ object(self)
                 (Edit (Zed Zed_edit.Prev_char))
                 (count*n)) >>=
             (function
-              | Ok r-> Lwt_mvar.put result r
-              | Error _-> do_actions tl)
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> do_actions tl)
           | Right n->
             self#exec
               (list_make
                 (Edit (Zed Zed_edit.Next_char))
                 (count*n)) >>=
             (function
-              | Ok r-> Lwt_mvar.put result r
-              | Error _-> do_actions tl)
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> do_actions tl)
           | Word n->
             let ctx= self#context in
             let edit= self#edit in
@@ -1284,8 +1288,8 @@ object(self)
                   (list_make
                     (Edit (Zed (Zed_edit.Goto next))) 1) >>=
                 (function
-                  | Ok r-> Lwt_mvar.put result r
-                  | Error _-> next_word (n-1))
+                  | Result r-> Lwt_mvar.put result r
+                  | ContinueLoop _-> next_word (n-1))
               else
                 return ()
             in
@@ -1306,8 +1310,8 @@ object(self)
                   (list_make
                     (Edit (Zed (Zed_edit.Goto prev))) 1) >>=
                 (function
-                  | Ok r-> Lwt_mvar.put result r
-                  | Error _-> prev_word (n-1))
+                  | Result r-> Lwt_mvar.put result r
+                  | ContinueLoop _-> prev_word (n-1))
               else
                 return ()
             in
@@ -1319,8 +1323,8 @@ object(self)
                 (Edit (Zed Zed_edit.Goto_bol))
                 (count*n)) >>=
             (function
-              | Ok r-> Lwt_mvar.put result r
-              | Error _-> do_actions tl)
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> do_actions tl)
           | Line_FirstNonBlank _n->
             let ctx= self#context in
             let edit= self#edit in
@@ -1337,16 +1341,16 @@ object(self)
                 (Edit (Zed (Zed_edit.Goto nonblank)))
                 1) >>=
             (function
-              | Ok r-> Lwt_mvar.put result r
-              | Error _-> do_actions tl)
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> do_actions tl)
           | Line_LastChar n->
             self#exec
               (list_make
                 (Edit (Zed Zed_edit.Goto_eol))
                 (count*n)) >>=
             (function
-              | Ok r-> Lwt_mvar.put result r
-              | Error _-> do_actions tl)
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> do_actions tl)
           | _-> do_actions tl)
         | Delete (_motion, _count)-> do_actions tl
         | ChangeMode _mode-> do_actions tl
@@ -1356,8 +1360,8 @@ object(self)
         | Bypass keyseq->
           let keyseq= List.map LTerm_vi.of_vi_key keyseq in
           self#process_keys keyseq >>= (function
-            | Ok r-> Lwt_mvar.put result r
-            | Error _-> listen ()
+            | Result r-> Lwt_mvar.put result r
+            | ContinueLoop _-> listen ()
             )
         | Dummy-> listen ()
         | Vi actions->
@@ -1380,10 +1384,10 @@ object(self)
 
   method private process_keys keys=
     self#keyseq keys >>= function
-    | Ok r-> return (Ok r)
-    | Error keys->
+    | Result r-> return (Result r)
+    | ContinueLoop keys->
       match keys with
-      | []-> return (Error [])
+      | []-> return (ContinueLoop [])
       | _-> self#process_keys keys
 
   (* The main loop. *)
@@ -1405,8 +1409,8 @@ object(self)
         (match S.value editor_mode with
         | LTerm_editor.Default->
           self#process_keys [key] >>= (function
-            | Ok r-> return r
-            | Error _-> self#loop)
+            | Result r-> return r
+            | ContinueLoop _-> self#loop)
         | LTerm_editor.Vi->
           match vi_edit with
           | Some vi_edit->
@@ -1415,8 +1419,8 @@ object(self)
             self#loop
           | None->
             self#process_keys [key] >>= (function
-              | Ok r-> return r
-              | Error _-> self#loop ) (* falllback to the default mode *))
+              | Result r-> return r
+              | ContinueLoop _-> self#loop ) (* falllback to the default mode *))
       | _ ->
           self#loop
 
@@ -1432,7 +1436,7 @@ object(self)
     match actions with
     | Accept :: _ when S.value self#mode = Edition ->
         Zed_macro.add self#macro Accept;
-        return (Ok self#eval)
+        return (Result self#eval)
     | Clear_screen :: actions ->
         Zed_macro.add self#macro Clear_screen;
         LTerm.clear_screen term >>= fun () ->
@@ -1527,7 +1531,7 @@ object(self)
         self#send_action action;
         self#exec ~keys actions
     | [] ->
-      return (Error keys)
+      return (ContinueLoop keys)
 
   method run =
     (* Update the size with the current size. *)

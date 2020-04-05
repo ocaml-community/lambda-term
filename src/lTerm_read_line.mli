@@ -294,6 +294,10 @@ end
 
 (** {6 Running in a terminal} *)
 
+type 'a loop_result=
+  | Result of 'a
+  | ContinueLoop of LTerm_key.t list
+
 (** Class for read-line instances running in a terminal. *)
 class virtual ['a] term : LTerm.t -> object
   inherit ['a] abstract
@@ -301,7 +305,7 @@ class virtual ['a] term : LTerm.t -> object
   method run : 'a Lwt.t
     (** Run this read-line instance. *)
 
-  method private exec : ?keys : LTerm_key.t list -> action list -> ('a, LTerm_key.t list) result Lwt.t
+  method private exec : ?keys : LTerm_key.t list -> action list -> 'a loop_result Lwt.t
     (** Executes a list of actions. Rememver to call [Zed_macro.add
         self#macro action] if you overload this method. *)
 
