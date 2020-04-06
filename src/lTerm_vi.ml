@@ -72,7 +72,8 @@ module Query = struct
     let column= Zed_edit.column ctx in
     let dest= (column - n) |> max 0 |> min line_len in
     let positon= Zed_edit.position ctx in
-    (positon, column - dest)
+    let delta= column - dest in
+    (positon - delta, delta)
 
   let right n ctx= (* l *)
     let n= max 0 n in
@@ -90,7 +91,8 @@ module Query = struct
     let column= Zed_edit.column ctx in
     let dest= (column + n) |> max 0 |> min line_len in
     let positon= Zed_edit.position ctx in
-    (positon, dest - column)
+    let delta= dest - column in
+    (positon + delta, delta)
 
   let line_FirstChar _n ctx= (* 0 *)
     let edit= Zed_edit.edit ctx in
