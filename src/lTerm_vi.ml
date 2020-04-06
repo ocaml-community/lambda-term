@@ -75,18 +75,16 @@ module Query = struct
     let delta= column - dest in
     (positon - delta, delta)
 
-  let right n ctx= (* l *)
+  let right ?(newline=false) n ctx= (* l *)
     let n= max 0 n in
     let edit= Zed_edit.edit ctx in
     let lines= Zed_edit.lines edit
     and line_idx= Zed_edit.line ctx in
-    let line_count= Zed_lines.count lines in
     let line_len=
+      max 0 @@
       let len= Zed_lines.line_length lines line_idx in
-      if line_idx = line_count then
-        len
-      else
-        len - 1
+      if newline then len
+      else len - 1
     in
     let column= Zed_edit.column ctx in
     let dest= (column + n) |> max 0 |> min line_len in
@@ -109,6 +107,24 @@ module Query = struct
     let start= Zed_lines.line_start lines line_idx in
     let line_len= Zed_lines.line_length lines line_idx in
     start, line_len
+
+  let line_LastChar ?(newline=false) n ctx= (* ^ *)
+    let edit= Zed_edit.edit ctx in
+    let lines= Zed_edit.lines edit
+    and line_idx= Zed_edit.line ctx in
+    let count= Zed_lines.count lines in
+    let line_idx=
+      if n > 1 then
+        min count @@
+        line_idx + (n - 1)
+      else
+        line_idx
+    in
+    let stop= Zed_lines.line_stop lines line_idx in
+    if newline then
+      stop
+    else
+      max 0 (stop - 1)
 
   open CamomileLibraryDefault.Camomile
 
