@@ -210,7 +210,7 @@ module Query = struct
       else
         next
     else
-      next
+      stop
 
   let prev_word ?(multi_line=true) ~pos ~start text=
     if pos <= start then start else
@@ -226,7 +226,7 @@ module Query = struct
     in
     let prev= prev_category ~nl_as_sp ~pos ~start text in
     1 +
-      if prev <= start then prev else
+      if prev <= start then start else
       if category_equal start_category before_start then
         if start_category <> `Zs then
           prev
