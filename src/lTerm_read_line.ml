@@ -1366,6 +1366,51 @@ object(self)
             in
             prev_word (count*n) >>= fun ()->
             do_actions tl
+          | Word_end n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let text= Zed_edit.text edit in
+            let _start, stop= LTerm_vi.Query.get_boundary true ctx in
+            let rec next_word n=
+              let pos= Zed_edit.position ctx in
+              if n > 0 && pos < stop then
+                let next= min
+                  (stop - 1)
+                  (LTerm_vi.Query.next_word_end ~pos ~stop text)
+                in
+                self#exec
+                  (list_make
+                    (Edit (Zed (Zed_edit.Goto next))) 1) >>=
+                (function
+                  | Result r-> Lwt_mvar.put result r
+                  | ContinueLoop _-> next_word (n-1))
+              else
+                return ()
+            in
+            next_word (count*n) >>= fun ()->
+            do_actions tl
+          | Word_back_end n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let text= Zed_edit.text edit in
+            let start, stop= LTerm_vi.Query.get_boundary true ctx in
+            let rec prev_word n=
+              let pos= min (stop - 1) (Zed_edit.position ctx) in
+              if n > 0 && pos > start then
+                let prev=
+                  max start (LTerm_vi.Query.prev_word_end ~pos ~start text)
+                in
+                self#exec
+                  (list_make
+                    (Edit (Zed (Zed_edit.Goto prev))) 1) >>=
+                (function
+                  | Result r-> Lwt_mvar.put result r
+                  | ContinueLoop _-> prev_word (n-1))
+              else
+                return ()
+            in
+            prev_word (count*n) >>= fun ()->
+            do_actions tl
           | Line_FirstChar n->
             self#exec
               (list_make

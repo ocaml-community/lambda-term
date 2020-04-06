@@ -239,6 +239,49 @@ module Query = struct
       else
         prev_category ~nl_as_sp ~pos:prev ~start text
 
+  let next_word_end ?(multi_line=true) ~pos ~stop text=
+    let pos=
+      if pos >= (stop-1) then stop else
+      let nl_as_sp= multi_line in
+      let start_category=
+        let zchar= Zed_rope.get text pos in
+        let core= Zed_char.core zchar in
+        get_category ~nl_as_sp core
+      and after_start=
+        let zchar= Zed_rope.get text (pos + 1) in
+        let core= Zed_char.core zchar in
+        get_category ~nl_as_sp core
+      in
+      let next= next_category ~nl_as_sp ~pos ~stop text in
+      if next >= stop then stop else
+      if category_equal start_category after_start
+        && start_category <> `Zs
+      then
+        next
+      else
+        let next= next_category ~nl_as_sp ~pos:next ~stop text in
+        if next >= stop then stop else
+        if start_category = `Zs then
+          next
+        else
+          next_category ~nl_as_sp ~pos:next ~stop text
+    in
+    max 0 @@ pos - 1
+
+  let prev_word_end ?(multi_line=true) ~pos ~start text=
+    if pos <= start then start else
+    let nl_as_sp= multi_line in
+    let start_category=
+      let zchar= Zed_rope.get text pos in
+      let core= Zed_char.core zchar in
+      get_category ~nl_as_sp core
+    in
+    let prev= prev_category ~nl_as_sp ~pos ~start text in
+    if prev <= start then start else
+    if start_category = `Zs then
+      prev
+    else
+      prev_category ~nl_as_sp ~pos:prev ~start text
 end
 
 module Vi = Mew_vi.Core.Make (Concurrent)
