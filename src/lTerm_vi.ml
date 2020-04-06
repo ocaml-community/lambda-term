@@ -64,28 +64,33 @@ module Query = struct
   | Paragraph_inner of int (* ip *)
   *)
   let left n ctx= (* h *)
+    let n= max 0 n in
     let edit= Zed_edit.edit ctx in
     let lines= Zed_edit.lines edit
     and line_idx= Zed_edit.line ctx in
     let line_len= Zed_lines.line_length lines line_idx in
     let column= Zed_edit.column ctx in
     let dest= (column - n) |> max 0 |> min line_len in
-    if dest > column then
-      (column, dest - column)
-    else
-      (dest, column - dest)
+    let positon= Zed_edit.position ctx in
+    (positon, column - dest)
 
   let right n ctx= (* l *)
+    let n= max 0 n in
     let edit= Zed_edit.edit ctx in
     let lines= Zed_edit.lines edit
     and line_idx= Zed_edit.line ctx in
-    let line_len= Zed_lines.line_length lines line_idx in
+    let line_count= Zed_lines.count lines in
+    let line_len=
+      let len= Zed_lines.line_length lines line_idx in
+      if line_idx = line_count then
+        len
+      else
+        len - 1
+    in
     let column= Zed_edit.column ctx in
     let dest= (column + n) |> max 0 |> min line_len in
-    if dest > column then
-      (column, dest - column)
-    else
-      (dest, column - dest)
+    let positon= Zed_edit.position ctx in
+    (positon, dest - column)
 
   let line_FirstChar _n ctx= (* 0 *)
     let edit= Zed_edit.edit ctx in
