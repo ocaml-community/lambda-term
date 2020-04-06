@@ -1266,13 +1266,38 @@ object(self)
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> do_actions tl)
           | Right n->
-            self#exec
-              (list_make
-                (Edit (Zed Zed_edit.Next_char))
-                (count*n)) >>=
-            (function
-              | Result r-> Lwt_mvar.put result r
-              | ContinueLoop _-> do_actions tl)
+            let ctx= self#context in
+            let rec right n=
+              if n > 0 then
+                let pos, _delta= LTerm_vi.Query.right n ctx in
+                self#exec
+                  (list_make
+                    (Edit (Zed (Zed_edit.Goto pos))) 1) >>=
+                (function
+                  | Result r-> Lwt_mvar.put result r
+                  | ContinueLoop _-> right (n-1))
+              else
+                return ()
+            in
+            right (count*n) >>= fun ()->
+            do_actions tl
+          | Right_nl n->
+            let newline= true in
+            let ctx= self#context in
+            let rec right n=
+              if n > 0 then
+                let pos, _delta= LTerm_vi.Query.right ~newline n ctx in
+                self#exec
+                  (list_make
+                    (Edit (Zed (Zed_edit.Goto pos))) 1) >>=
+                (function
+                  | Result r-> Lwt_mvar.put result r
+                  | ContinueLoop _-> right (n-1))
+              else
+                return ()
+            in
+            right (count*n) >>= fun ()->
+            do_actions tl
           | Word n->
             let ctx= self#context in
             let edit= self#edit in
@@ -1344,13 +1369,38 @@ object(self)
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> do_actions tl)
           | Line_LastChar n->
-            self#exec
-              (list_make
-                (Edit (Zed Zed_edit.Goto_eol))
-                (count*n)) >>=
-            (function
-              | Result r-> Lwt_mvar.put result r
-              | ContinueLoop _-> do_actions tl)
+            let ctx= self#context in
+            let rec lastChar n=
+              if n > 0 then
+                let pos= LTerm_vi.Query.line_LastChar n ctx in
+                self#exec
+                  (list_make
+                    (Edit (Zed (Zed_edit.Goto pos))) 1) >>=
+                (function
+                  | Result r-> Lwt_mvar.put result r
+                  | ContinueLoop _-> lastChar (n-1))
+              else
+                return ()
+            in
+            lastChar (count*n) >>= fun ()->
+            do_actions tl
+          | Line_LastChar_nl n->
+            let newline= true in
+            let ctx= self#context in
+            let rec lastChar n=
+              if n > 0 then
+                let pos= LTerm_vi.Query.line_LastChar ~newline n ctx in
+                self#exec
+                  (list_make
+                    (Edit (Zed (Zed_edit.Goto pos))) 1) >>=
+                (function
+                  | Result r-> Lwt_mvar.put result r
+                  | ContinueLoop _-> lastChar (n-1))
+              else
+                return ()
+            in
+            lastChar (count*n) >>= fun ()->
+            do_actions tl
           | _-> do_actions tl)
         | Delete (_motion, _count)-> do_actions tl
         | ChangeMode _mode-> do_actions tl
