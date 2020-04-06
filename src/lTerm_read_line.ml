@@ -1258,13 +1258,21 @@ object(self)
         | Motion (motion, count)->
           (match motion with
           | Left n->
-            self#exec
-              (list_make
-                (Edit (Zed Zed_edit.Prev_char))
-                (count*n)) >>=
-            (function
-              | Result r-> Lwt_mvar.put result r
-              | ContinueLoop _-> do_actions tl)
+            let ctx= self#context in
+            let rec left n=
+              if n > 0 then
+                let pos, _delta= LTerm_vi.Query.left n ctx in
+                self#exec
+                  (list_make
+                    (Edit (Zed (Zed_edit.Goto pos))) 1) >>=
+                (function
+                  | Result r-> Lwt_mvar.put result r
+                  | ContinueLoop _-> left (n-1))
+              else
+                return ()
+            in
+            left (count*n) >>= fun ()->
+            do_actions tl
           | Right n->
             let ctx= self#context in
             let rec right n=
@@ -1298,6 +1306,22 @@ object(self)
             in
             right (count*n) >>= fun ()->
             do_actions tl
+          | Upward n->
+            self#exec
+              (list_make
+                (Edit (Zed Zed_edit.Prev_line))
+                (count*n)) >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> do_actions tl)
+          | Downward n->
+            self#exec
+              (list_make
+                (Edit (Zed Zed_edit.Next_line))
+                (count*n)) >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> do_actions tl)
           | Word n->
             let ctx= self#context in
             let edit= self#edit in
