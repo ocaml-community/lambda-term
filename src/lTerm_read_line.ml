@@ -1728,7 +1728,7 @@ object(self)
             in
             let prev_pos= prev_word pos (count*n) in
             let delta= pos - prev_pos in
-            delete pos delta >>=
+            delete prev_pos delta >>=
             (function
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> return ())
@@ -1950,7 +1950,7 @@ object(self)
             in
             let prev_pos= prev_word pos (count*n) in
             let delta= pos - prev_pos in
-            change pos delta >>=
+            change prev_pos delta >>=
             (function
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> return ())
