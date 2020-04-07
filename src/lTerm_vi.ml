@@ -226,7 +226,6 @@ module Query = struct
     in
     let prev= prev_category ~nl_as_sp ~pos ~start text in
     1 +
-      if prev <= start then start else
       if category_equal start_category before_start then
         if start_category <> `Zs then
           prev
