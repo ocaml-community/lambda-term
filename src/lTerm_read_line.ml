@@ -1641,6 +1641,45 @@ object(self)
               | ContinueLoop _-> return ())
             >>= fun ()->
             do_actions tl
+          | Word_back_end n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let text= Zed_edit.text edit in
+            if Zed_rope.length text <= 0 then do_actions tl else
+            let start, stop= LTerm_vi.Query.get_boundary true ctx in
+            let pos= min (stop - 1) (Zed_edit.position ctx) in
+            let rec prev_word pos n=
+              if n > 0 && pos > start then
+                let prev= max
+                  start
+                  (LTerm_vi.Query.prev_word_end ~pos ~start text)
+                in
+                prev_word prev (n-1)
+              else
+                pos
+            in
+            let dest= prev_word pos (count*n) in
+            let delta= pos - dest + 1 in
+            let step_back=
+              (||)
+              (pos >= Zed_rope.length text - 1)
+              ((=)
+                (Zed_char.core (Zed_rope.get text (pos+1)))
+                (Zed_utf8.extract "\n" 0))
+            in
+            self#exec
+              (Edit (Zed (Zed_edit.Goto dest)) ::
+              Edit (Zed (Zed_edit.Delete_next_chars delta)) ::
+              if step_back then
+                [Edit (Zed (Zed_edit.Prev_char))]
+              else
+                [])
+              >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+             >>= fun ()->
+            do_actions tl
           | _-> do_actions tl)
         | ChangeMode _mode-> do_actions tl
     in
