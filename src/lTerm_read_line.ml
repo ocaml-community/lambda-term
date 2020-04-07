@@ -1553,6 +1553,32 @@ object(self)
                 | ContinueLoop _-> do_actions tl)
             else
               do_actions tl
+          | Word n->
+            let ctx= self#context in
+            let pos= Zed_edit.position ctx in
+            let edit= self#edit in
+            let text= Zed_edit.text edit in
+            let _start, stop= LTerm_vi.Query.get_boundary true ctx in
+            let rec next_word pos n=
+              if n > 0 && pos < stop then
+                let next= min
+                  (stop - 1)
+                  (LTerm_vi.Query.next_word ~pos ~stop text)
+                in
+                next_word next (n-1)
+              else
+                pos
+            in
+            let next_pos = next_word pos (count*n) in
+            let delta= next_pos - pos in
+            self#exec [
+              Edit (Zed (Zed_edit.Delete_next_chars delta));
+              ] >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> do_actions tl)
+            >>= fun ()->
+            do_actions tl
           | _-> do_actions tl)
         | ChangeMode _mode-> do_actions tl
     in
