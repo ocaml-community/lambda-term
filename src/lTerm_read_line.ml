@@ -1250,6 +1250,52 @@ object(self)
       in
       create [] n
     in
+    let delete ?boundary start len=
+      let edit= self#edit in
+      let text= Zed_edit.text edit in
+      let eot= Zed_rope.length text in
+      let boundary_start, boundary_end=
+        match boundary with
+        | Some (b, e)-> b, e
+        | None-> 0, eot
+      in
+      let _ori_start, _ori_len, _ori_stop= start, len, start+len in
+      let start, len, stop=
+        let start= max boundary_start _ori_start in
+        let stop= min boundary_end _ori_stop in
+        let len= stop - start in
+        start, len, stop
+      in
+      if len > 0 then
+        let end_pos=
+          if stop >= eot then
+            let end_pos= max 0 @@ start - 1 in
+            if eot > 0 then
+              if (=)
+                (Zed_char.core (Zed_rope.get text end_pos))
+                (Zed_utf8.extract "\n" 0)
+              then
+                max 0 @@ end_pos - 1
+              else
+                end_pos
+            else end_pos
+          else
+            if (=)
+              (Zed_char.core (Zed_rope.get text stop))
+              (Zed_utf8.extract "\n" 0)
+            then
+              max 0 @@ start - 1
+            else
+              start
+        in
+        self#exec [
+          Edit (Zed (Zed_edit.Goto start));
+          Edit (Zed (Zed_edit.Delete_next_chars len));
+          Edit (Zed (Zed_edit.Goto end_pos))
+          ]
+      else
+        return (ContinueLoop [])
+    in
     let rec do_actions= function
       | []-> return ()
       | action::tl->
@@ -1523,10 +1569,7 @@ object(self)
               let pos_start= Zed_lines.line_start lines dest
               and pos_end= Zed_lines.line_stop lines line in
               let pos_delta= pos_end - pos_start in
-              self#exec [
-                Edit (Zed (Zed_edit.Goto pos_start));
-                Edit (Zed (Zed_edit.Delete_next_chars pos_delta));
-                ] >>=
+              delete pos_start pos_delta >>=
               (function
                 | Result r-> Lwt_mvar.put result r
                 | ContinueLoop _-> return ())
@@ -1543,11 +1586,12 @@ object(self)
             if line_delta > 0 then
               let pos_start= Zed_lines.line_start lines line
               and pos_end= Zed_lines.line_stop lines dest in
+              let pos_end=
+                if dest < line_count
+                then pos_end + 1
+                else pos_end in
               let pos_delta= pos_end - pos_start in
-              self#exec [
-                Edit (Zed (Zed_edit.Goto pos_start));
-                Edit (Zed (Zed_edit.Delete_next_chars pos_delta));
-                ] >>=
+              delete pos_start pos_delta >>=
               (function
                 | Result r-> Lwt_mvar.put result r
                 | ContinueLoop _-> return ())
@@ -1561,8 +1605,7 @@ object(self)
             let _start, stop= LTerm_vi.Query.get_boundary true ctx in
             let rec next_word pos n=
               if n > 0 && pos < stop then
-                let next= min
-                  (stop - 1)
+                let next=
                   (LTerm_vi.Query.next_word ~pos ~stop text)
                 in
                 next_word next (n-1)
@@ -1571,9 +1614,7 @@ object(self)
             in
             let next_pos = next_word pos (count*n) in
             let delta= next_pos - pos in
-            self#exec [
-              Edit (Zed (Zed_edit.Delete_next_chars delta));
-              ] >>=
+            delete pos delta >>=
             (function
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> return ())
@@ -1597,9 +1638,7 @@ object(self)
             in
             let prev_pos= prev_word pos (count*n) in
             let delta= pos - prev_pos in
-            self#exec [
-              Edit (Zed (Zed_edit.Delete_prev_chars delta));
-              ] >>=
+            delete pos delta >>=
             (function
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> return ())
@@ -1613,8 +1652,7 @@ object(self)
             let pos= Zed_edit.position ctx in
             let rec next_word pos n=
               if n > 0 && pos < stop then
-                let next= min
-                  (stop - 1)
+                let next=
                   (LTerm_vi.Query.next_word_end ~pos ~stop text)
                 in
                 next_word next (n-1)
@@ -1622,20 +1660,8 @@ object(self)
                 pos
             in
             let next_pos= next_word pos (count*n) in
-            let step_back= (||)
-              (next_pos >= Zed_rope.length text - 1)
-              ((=)
-                (Zed_char.core (Zed_rope.get text (next_pos+1)))
-                (Zed_utf8.extract "\n" 0))
-            in
             let delta= next_pos + 1 - pos in
-            self#exec
-              (Edit (Zed (Zed_edit.Delete_next_chars delta)) ::
-              if step_back then
-                [Edit (Zed (Zed_edit.Prev_char))]
-              else
-                [])
-            >>=
+            delete pos delta >>=
             (function
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> return ())
@@ -1650,8 +1676,7 @@ object(self)
             let pos= min (stop - 1) (Zed_edit.position ctx) in
             let rec prev_word pos n=
               if n > 0 && pos > start then
-                let prev= max
-                  start
+                let prev=
                   (LTerm_vi.Query.prev_word_end ~pos ~start text)
                 in
                 prev_word prev (n-1)
@@ -1660,21 +1685,7 @@ object(self)
             in
             let dest= prev_word pos (count*n) in
             let delta= pos - dest + 1 in
-            let step_back=
-              (||)
-              (pos >= Zed_rope.length text - 1)
-              ((=)
-                (Zed_char.core (Zed_rope.get text (pos+1)))
-                (Zed_utf8.extract "\n" 0))
-            in
-            self#exec
-              (Edit (Zed (Zed_edit.Goto dest)) ::
-              Edit (Zed (Zed_edit.Delete_next_chars delta)) ::
-              if step_back then
-                [Edit (Zed (Zed_edit.Prev_char))]
-              else
-                [])
-              >>=
+            delete dest delta >>=
             (function
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> return ())
