@@ -1512,6 +1512,47 @@ object(self)
               | ContinueLoop _-> return ())
             >>= fun ()->
             do_actions tl
+          | Upward n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let lines= Zed_edit.lines edit in
+            let line= Zed_edit.line ctx in
+            let dest= max 0 (line - count * n) in
+            let line_delta = line - dest in
+            if line_delta > 0 then
+              let pos_start= Zed_lines.line_start lines dest
+              and pos_end= Zed_lines.line_stop lines line in
+              let pos_delta= pos_end - pos_start in
+              self#exec [
+                Edit (Zed (Zed_edit.Goto pos_start));
+                Edit (Zed (Zed_edit.Delete_next_chars pos_delta));
+                ] >>=
+              (function
+                | Result r-> Lwt_mvar.put result r
+                | ContinueLoop _-> do_actions tl)
+            else
+              do_actions tl
+          | Downward n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let lines= Zed_edit.lines edit in
+            let line_count= Zed_lines.count lines in
+            let line= Zed_edit.line ctx in
+            let dest= min line_count (line + count * n) in
+            let line_delta = dest - line in
+            if line_delta > 0 then
+              let pos_start= Zed_lines.line_start lines line
+              and pos_end= Zed_lines.line_stop lines dest in
+              let pos_delta= pos_end - pos_start in
+              self#exec [
+                Edit (Zed (Zed_edit.Goto pos_start));
+                Edit (Zed (Zed_edit.Delete_next_chars pos_delta));
+                ] >>=
+              (function
+                | Result r-> Lwt_mvar.put result r
+                | ContinueLoop _-> do_actions tl)
+            else
+              do_actions tl
           | _-> do_actions tl)
         | ChangeMode _mode-> do_actions tl
     in
