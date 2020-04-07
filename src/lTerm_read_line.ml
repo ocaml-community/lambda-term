@@ -1579,6 +1579,32 @@ object(self)
               | ContinueLoop _-> do_actions tl)
             >>= fun ()->
             do_actions tl
+          | Word_back n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let text= Zed_edit.text edit in
+            let start, stop= LTerm_vi.Query.get_boundary true ctx in
+            let pos= min (stop - 1) (Zed_edit.position ctx) in
+            let rec prev_word pos n=
+              if n > 0 && pos > start then
+                let prev= max
+                  start
+                  (LTerm_vi.Query.prev_word ~pos ~start text)
+                in
+                prev_word prev (n-1)
+              else
+                pos
+            in
+            let prev_pos= prev_word pos (count*n) in
+            let delta= pos - prev_pos in
+            self#exec [
+              Edit (Zed (Zed_edit.Delete_prev_chars delta));
+              ] >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> do_actions tl)
+            >>= fun ()->
+            do_actions tl
           | _-> do_actions tl)
         | ChangeMode _mode-> do_actions tl
     in
