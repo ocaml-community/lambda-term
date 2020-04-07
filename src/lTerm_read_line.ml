@@ -1547,23 +1547,18 @@ object(self)
           | Left n->
             let ctx= self#context in
             let pos, delta= LTerm_vi.Query.left (count*n) ctx in
-            self#exec [
-              Edit (Zed (Zed_edit.Goto pos));
-              Edit (Zed (Zed_edit.Delete_next_chars delta));
-              ] >>=
+            delete pos delta >>=
             (function
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> return ())
             >>= fun ()->
             do_actions tl
           | Right n->
+            let newline=true in
             let ctx= self#context in
-            let pos, delta= LTerm_vi.Query.right (count*n) ctx in
+            let pos, delta= LTerm_vi.Query.right ~newline (count*n) ctx in
             let pos= pos - delta in
-            self#exec [
-              Edit (Zed (Zed_edit.Goto pos));
-              Edit (Zed (Zed_edit.Delete_next_chars delta));
-              ] >>=
+            delete pos delta >>=
             (function
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> return ())
@@ -1622,6 +1617,24 @@ object(self)
                 | ContinueLoop _-> return ())
             else
               do_actions tl
+          | Line->
+            let ctx= self#context in
+            let edit= self#edit in
+            let lines= Zed_edit.lines edit in
+            let line_count= Zed_lines.count lines in
+            let line= Zed_edit.line ctx in
+            let dest= min line_count (line + count - 1) in
+            let pos_start= Zed_lines.line_start lines line
+            and pos_end= Zed_lines.line_stop lines dest in
+            let pos_end=
+              if dest < line_count
+              then pos_end + 1
+              else pos_end in
+            let pos_delta= pos_end - pos_start in
+            delete pos_start pos_delta >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
           | Word n->
             let ctx= self#context in
             let pos= Zed_edit.position ctx in
@@ -1774,23 +1787,18 @@ object(self)
           | Left n->
             let ctx= self#context in
             let pos, delta= LTerm_vi.Query.left (count*n) ctx in
-            self#exec [
-              Edit (Zed (Zed_edit.Goto pos));
-              Edit (Zed (Zed_edit.Delete_next_chars delta));
-              ] >>=
+            change pos delta >>=
             (function
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> return ())
             >>= fun ()->
             do_actions tl
           | Right n->
+            let newline= true in
             let ctx= self#context in
-            let pos, delta= LTerm_vi.Query.right (count*n) ctx in
+            let pos, delta= LTerm_vi.Query.right ~newline (count*n) ctx in
             let pos= pos - delta in
-            self#exec [
-              Edit (Zed (Zed_edit.Goto pos));
-              Edit (Zed (Zed_edit.Delete_next_chars delta));
-              ] >>=
+            change pos delta >>=
             (function
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> return ())
