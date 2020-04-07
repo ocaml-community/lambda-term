@@ -1296,6 +1296,31 @@ object(self)
       else
         return (ContinueLoop [])
     in
+    let change ?boundary start len=
+      let edit= self#edit in
+      let text= Zed_edit.text edit in
+      let eot= Zed_rope.length text in
+      let boundary_start, boundary_end=
+        match boundary with
+        | Some (b, e)-> b, e
+        | None-> 0, eot
+      in
+      let _ori_start, _ori_len, _ori_stop= start, len, start+len in
+      let start, len, _stop=
+        let start= max boundary_start _ori_start in
+        let stop= min boundary_end _ori_stop in
+        let len= stop - start in
+        start, len, stop
+      in
+      if len > 0 then
+        self#exec [
+          Edit (Zed (Zed_edit.Goto start));
+          Edit (Zed (Zed_edit.Delete_next_chars len));
+          Edit (Zed (Zed_edit.Goto start))
+          ]
+      else
+        return (ContinueLoop [])
+    in
     let rec do_actions= function
       | []-> return ()
       | action::tl->
@@ -1698,7 +1723,7 @@ object(self)
             let line= Zed_edit.line ctx in
             let pos= Zed_edit.position ctx in
             let start= Zed_lines.line_start lines line in
-            delete start (pos+1 - start) >>=
+            delete start (pos - start) >>=
             (function
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> return ())
@@ -1716,7 +1741,7 @@ object(self)
               | `Zs-> LTerm_vi.Query.next_word ~pos:start ~stop text
               | _-> start
             in
-            delete nonblank (pos+1 - nonblank) >>=
+            delete nonblank (pos - nonblank) >>=
             (function
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> return ())
@@ -1738,6 +1763,233 @@ object(self)
             let pos= Zed_edit.position ctx in
             let next= LTerm_vi.Query.line_LastChar ~newline (count*n) ctx in
             delete pos (next+1 - pos) >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | _-> do_actions tl)
+        | Change (motion, count)->
+          (match motion with
+          | Left n->
+            let ctx= self#context in
+            let pos, delta= LTerm_vi.Query.left (count*n) ctx in
+            self#exec [
+              Edit (Zed (Zed_edit.Goto pos));
+              Edit (Zed (Zed_edit.Delete_next_chars delta));
+              ] >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Right n->
+            let ctx= self#context in
+            let pos, delta= LTerm_vi.Query.right (count*n) ctx in
+            let pos= pos - delta in
+            self#exec [
+              Edit (Zed (Zed_edit.Goto pos));
+              Edit (Zed (Zed_edit.Delete_next_chars delta));
+              ] >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Right_nl n->
+            let newline= true in
+            let ctx= self#context in
+            let pos, delta= LTerm_vi.Query.right ~newline (count*n) ctx in
+            let pos= pos - delta in
+            self#exec [
+              Edit (Zed (Zed_edit.Goto pos));
+              Edit (Zed (Zed_edit.Delete_next_chars delta));
+              ] >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Upward n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let lines= Zed_edit.lines edit in
+            let line= Zed_edit.line ctx in
+            let dest= max 0 (line - count * n) in
+            let line_delta = line - dest in
+            if line_delta > 0 then
+              let pos_start= Zed_lines.line_start lines dest
+              and pos_end= Zed_lines.line_stop lines line in
+              let pos_delta= pos_end - pos_start in
+              change pos_start pos_delta >>=
+              (function
+                | Result r-> Lwt_mvar.put result r
+                | ContinueLoop _-> return ())
+            else
+              do_actions tl
+          | Downward n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let lines= Zed_edit.lines edit in
+            let line_count= Zed_lines.count lines in
+            let line= Zed_edit.line ctx in
+            let dest= min line_count (line + count * n) in
+            let line_delta = dest - line in
+            if line_delta > 0 then
+              let pos_start= Zed_lines.line_start lines line
+              and pos_end= Zed_lines.line_stop lines dest in
+              let pos_end=
+                if dest < line_count
+                then pos_end + 1
+                else pos_end in
+              let pos_delta= pos_end - pos_start in
+              change pos_start pos_delta >>=
+              (function
+                | Result r-> Lwt_mvar.put result r
+                | ContinueLoop _-> return ())
+            else
+              do_actions tl
+          | Word n->
+            let ctx= self#context in
+            let pos= Zed_edit.position ctx in
+            let edit= self#edit in
+            let text= Zed_edit.text edit in
+            let _start, stop= LTerm_vi.Query.get_boundary true ctx in
+            let rec next_word pos n=
+              if n > 0 && pos < stop then
+                let next=
+                  (LTerm_vi.Query.next_word ~pos ~stop text)
+                in
+                next_word next (n-1)
+              else
+                pos
+            in
+            let next_pos = next_word pos (count*n) in
+            let delta= next_pos - pos in
+            change pos delta >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Word_back n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let text= Zed_edit.text edit in
+            let start, stop= LTerm_vi.Query.get_boundary true ctx in
+            let pos= min (stop - 1) (Zed_edit.position ctx) in
+            let rec prev_word pos n=
+              if n > 0 && pos > start then
+                let prev= max
+                  start
+                  (LTerm_vi.Query.prev_word ~pos ~start text)
+                in
+                prev_word prev (n-1)
+              else
+                pos
+            in
+            let prev_pos= prev_word pos (count*n) in
+            let delta= pos - prev_pos in
+            change pos delta >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Word_end n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let text= Zed_edit.text edit in
+            let _start, stop= LTerm_vi.Query.get_boundary true ctx in
+            let pos= Zed_edit.position ctx in
+            let rec next_word pos n=
+              if n > 0 && pos < stop then
+                let next=
+                  (LTerm_vi.Query.next_word_end ~pos ~stop text)
+                in
+                next_word next (n-1)
+              else
+                pos
+            in
+            let next_pos= next_word pos (count*n) in
+            let delta= next_pos + 1 - pos in
+            change pos delta >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Word_back_end n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let text= Zed_edit.text edit in
+            if Zed_rope.length text <= 0 then do_actions tl else
+            let start, stop= LTerm_vi.Query.get_boundary true ctx in
+            let pos= min (stop - 1) (Zed_edit.position ctx) in
+            let rec prev_word pos n=
+              if n > 0 && pos > start then
+                let prev=
+                  (LTerm_vi.Query.prev_word_end ~pos ~start text)
+                in
+                prev_word prev (n-1)
+              else
+                pos
+            in
+            let dest= prev_word pos (count*n) in
+            let delta= pos - dest + 1 in
+            change dest delta >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Line_FirstChar _n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let lines= Zed_edit.lines edit in
+            let line= Zed_edit.line ctx in
+            let pos= Zed_edit.position ctx in
+            let start= Zed_lines.line_start lines line in
+            change start (pos - start) >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Line_FirstNonBlank _n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let pos= Zed_edit.position ctx in
+            let start, stop= LTerm_vi.Query.get_boundary false ctx in
+            let text= Zed_edit.text edit in
+            let chr_fst= (Zed_char.core (Zed_rope.get text start)) in
+            let nonblank=
+              match LTerm_vi.Query.get_category chr_fst with
+              | `Zs-> LTerm_vi.Query.next_word ~pos:start ~stop text
+              | _-> start
+            in
+            change nonblank (pos - nonblank) >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Line_LastChar n->
+            let ctx= self#context in
+            let pos= Zed_edit.position ctx in
+            let next= LTerm_vi.Query.line_LastChar (count*n) ctx in
+            change pos (next+1 - pos) >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Line_LastChar_nl n->
+            let newline= true in
+            let ctx= self#context in
+            let pos= Zed_edit.position ctx in
+            let next= LTerm_vi.Query.line_LastChar ~newline (count*n) ctx in
+            change pos (next+1 - pos) >>=
             (function
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> return ())
