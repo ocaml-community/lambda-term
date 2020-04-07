@@ -2056,6 +2056,13 @@ object(self)
             >>= fun ()->
             do_actions tl
           | _-> do_actions tl)
+        | Undo count->
+          self#exec @@ list_make (Edit (Zed (Zed_edit.Undo))) count >>=
+          (function
+            | Result r-> Lwt_mvar.put result r
+            | ContinueLoop _-> return ())
+          >>= fun ()->
+          do_actions tl
         | ChangeMode _mode-> do_actions tl
     in
     let rec listen ()=
