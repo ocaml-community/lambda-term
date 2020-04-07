@@ -1471,7 +1471,21 @@ object(self)
             lastChar (count*n) >>= fun ()->
             do_actions tl
           | _-> do_actions tl)
-        | Delete (_motion, _count)-> do_actions tl
+        | Delete (motion, count)->
+          (match motion with
+          | Left n->
+            let ctx= self#context in
+            let pos, delta= LTerm_vi.Query.left (count*n) ctx in
+            self#exec [
+              Edit (Zed (Zed_edit.Goto pos));
+              Edit (Zed (Zed_edit.Delete_next_chars delta));
+              ] >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | _-> do_actions tl)
         | ChangeMode _mode-> do_actions tl
     in
     let rec listen ()=
