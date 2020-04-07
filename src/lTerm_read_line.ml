@@ -1250,6 +1250,15 @@ object(self)
       in
       create [] n
     in
+    let list_dup elm n=
+      let rec create acc n=
+        if n > 0 then
+          create (elm::acc) (n-1)
+        else
+          acc
+      in
+      create [] n |> List.concat
+    in
     let delete ?boundary start len=
       let edit= self#edit in
       let text= Zed_edit.text edit in
@@ -1325,7 +1334,33 @@ object(self)
       | []-> return ()
       | action::tl->
         match action with
-        | LTerm_vi.Vi_action.Insert (_insert, _count)-> do_actions tl
+        | LTerm_vi.Vi_action.Insert (insert, count)->
+          (match insert with
+          | Newline_below _s->
+            self#exec @@
+              (Edit (Zed (Zed_edit.Goto_eol)))::
+              (list_make (Edit (Zed (Zed_edit.Newline))) count)
+            >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Newline_above _s->
+            self#exec @@
+              list_dup [
+                Edit (Zed (Zed_edit.Goto_bol));
+                Edit (Zed (Zed_edit.Newline));
+                Edit (Zed (Zed_edit.Prev_line));
+              ]
+              count
+            >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | _-> do_actions tl)
         | Motion (motion, count)->
           (match motion with
           | Left n->
@@ -1540,6 +1575,23 @@ object(self)
                 return ()
             in
             lastChar (count*n) >>= fun ()->
+            do_actions tl
+          | GotoLine_first->
+            self#exec [Edit (Zed (Zed_edit.Goto_bot))] >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | GotoLine_last->
+            self#exec [
+              Edit (Zed (Zed_edit.Goto_eot));
+              Edit (Zed (Zed_edit.Prev_char))
+              ] >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
             do_actions tl
           | _-> do_actions tl)
         | Delete (motion, count)->
