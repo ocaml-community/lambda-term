@@ -1689,7 +1689,59 @@ object(self)
             (function
               | Result r-> Lwt_mvar.put result r
               | ContinueLoop _-> return ())
-             >>= fun ()->
+            >>= fun ()->
+            do_actions tl
+          | Line_FirstChar _n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let lines= Zed_edit.lines edit in
+            let line= Zed_edit.line ctx in
+            let pos= Zed_edit.position ctx in
+            let start= Zed_lines.line_start lines line in
+            delete start (pos+1 - start) >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Line_FirstNonBlank _n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let pos= Zed_edit.position ctx in
+            let start, stop= LTerm_vi.Query.get_boundary false ctx in
+            let text= Zed_edit.text edit in
+            let chr_fst= (Zed_char.core (Zed_rope.get text start)) in
+            let nonblank=
+              match LTerm_vi.Query.get_category chr_fst with
+              | `Zs-> LTerm_vi.Query.next_word ~pos:start ~stop text
+              | _-> start
+            in
+            delete nonblank (pos+1 - nonblank) >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Line_LastChar n->
+            let ctx= self#context in
+            let pos= Zed_edit.position ctx in
+            let next= LTerm_vi.Query.line_LastChar (count*n) ctx in
+            delete pos (next+1 - pos) >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Line_LastChar_nl n->
+            let newline= true in
+            let ctx= self#context in
+            let pos= Zed_edit.position ctx in
+            let next= LTerm_vi.Query.line_LastChar ~newline (count*n) ctx in
+            delete pos (next+1 - pos) >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
             do_actions tl
           | _-> do_actions tl)
         | ChangeMode _mode-> do_actions tl
