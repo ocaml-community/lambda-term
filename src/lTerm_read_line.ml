@@ -2057,7 +2057,10 @@ object(self)
             do_actions tl
           | _-> do_actions tl)
         | Undo count->
-          self#exec @@ list_make (Edit (Zed (Zed_edit.Undo))) count >>=
+          self#exec @@ list_dup [
+            Edit (Zed (Zed_edit.Undo));
+            Edit (Zed (Zed_edit.Prev_char));
+            ] count >>=
           (function
             | Result r-> Lwt_mvar.put result r
             | ContinueLoop _-> return ())
@@ -2066,6 +2069,7 @@ object(self)
         | ChangeMode _mode-> do_actions tl
     in
     let rec listen ()=
+      set_key_sequence [];
       LTerm_vi.Concurrent.MsgBox.get msgBox >>= (function
         | Bypass keyseq->
           let keyseq= List.map LTerm_vi.of_vi_key keyseq in
