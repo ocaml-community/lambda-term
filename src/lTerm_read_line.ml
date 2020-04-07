@@ -1485,6 +1485,33 @@ object(self)
               | ContinueLoop _-> return ())
             >>= fun ()->
             do_actions tl
+          | Right n->
+            let ctx= self#context in
+            let pos, delta= LTerm_vi.Query.right (count*n) ctx in
+            let pos= pos - delta in
+            self#exec [
+              Edit (Zed (Zed_edit.Goto pos));
+              Edit (Zed (Zed_edit.Delete_next_chars delta));
+              ] >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Right_nl n->
+            let newline= true in
+            let ctx= self#context in
+            let pos, delta= LTerm_vi.Query.right ~newline (count*n) ctx in
+            let pos= pos - delta in
+            self#exec [
+              Edit (Zed (Zed_edit.Goto pos));
+              Edit (Zed (Zed_edit.Delete_next_chars delta));
+              ] >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
           | _-> do_actions tl)
         | ChangeMode _mode-> do_actions tl
     in
