@@ -1529,7 +1529,7 @@ object(self)
                 ] >>=
               (function
                 | Result r-> Lwt_mvar.put result r
-                | ContinueLoop _-> do_actions tl)
+                | ContinueLoop _-> return ())
             else
               do_actions tl
           | Downward n->
@@ -1550,7 +1550,7 @@ object(self)
                 ] >>=
               (function
                 | Result r-> Lwt_mvar.put result r
-                | ContinueLoop _-> do_actions tl)
+                | ContinueLoop _-> return ())
             else
               do_actions tl
           | Word n->
@@ -1576,7 +1576,7 @@ object(self)
               ] >>=
             (function
               | Result r-> Lwt_mvar.put result r
-              | ContinueLoop _-> do_actions tl)
+              | ContinueLoop _-> return ())
             >>= fun ()->
             do_actions tl
           | Word_back n->
@@ -1602,7 +1602,43 @@ object(self)
               ] >>=
             (function
               | Result r-> Lwt_mvar.put result r
-              | ContinueLoop _-> do_actions tl)
+              | ContinueLoop _-> return ())
+            >>= fun ()->
+            do_actions tl
+          | Word_end n->
+            let ctx= self#context in
+            let edit= self#edit in
+            let text= Zed_edit.text edit in
+            let _start, stop= LTerm_vi.Query.get_boundary true ctx in
+            let pos= Zed_edit.position ctx in
+            let rec next_word pos n=
+              if n > 0 && pos < stop then
+                let next= min
+                  (stop - 1)
+                  (LTerm_vi.Query.next_word_end ~pos ~stop text)
+                in
+                next_word next (n-1)
+              else
+                pos
+            in
+            let next_pos= next_word pos (count*n) in
+            let step_back= (||)
+              (next_pos >= Zed_rope.length text - 1)
+              ((=)
+                (Zed_char.core (Zed_rope.get text (next_pos+1)))
+                (Zed_utf8.extract "\n" 0))
+            in
+            let delta= next_pos + 1 - pos in
+            self#exec
+              (Edit (Zed (Zed_edit.Delete_next_chars delta)) ::
+              if step_back then
+                [Edit (Zed (Zed_edit.Prev_char))]
+              else
+                [])
+            >>=
+            (function
+              | Result r-> Lwt_mvar.put result r
+              | ContinueLoop _-> return ())
             >>= fun ()->
             do_actions tl
           | _-> do_actions tl)
