@@ -1299,7 +1299,7 @@ object(self)
         in
         self#exec [
           Edit (Zed (Zed_edit.Goto start));
-          Edit (Zed (Zed_edit.Delete_next_chars len));
+          Edit (Zed (Zed_edit.Kill_next_chars len));
           Edit (Zed (Zed_edit.Goto end_pos))
           ]
       else
@@ -1324,11 +1324,33 @@ object(self)
       if len > 0 then
         self#exec [
           Edit (Zed (Zed_edit.Goto start));
-          Edit (Zed (Zed_edit.Delete_next_chars len));
+          Edit (Zed (Zed_edit.Kill_next_chars len));
           Edit (Zed (Zed_edit.Goto start))
           ]
       else
         return (ContinueLoop [])
+    in
+    let setup_pos ()=
+      let ctx= self#context in
+      let edit= self#edit in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let text_len= Zed_rope.length text in
+      (if text_len > 0 then
+        let step= if pos >= text_len then pos - 1 else pos in
+        let step=
+          if (=)
+            (Zed_char.core (Zed_rope.get text step))
+            (Zed_utf8.extract "\n" 0)
+          then max 0 @@ step - 1
+          else step
+        in
+        self#exec [Edit (Zed (Zed_edit.Goto step))]
+      else
+        self#exec [Edit (Zed (Zed_edit.Goto_bol))]) >>=
+      (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
     in
     let rec do_actions= function
       | []-> return ()
@@ -1623,7 +1645,7 @@ object(self)
             let pos= pos - delta in
             self#exec [
               Edit (Zed (Zed_edit.Goto pos));
-              Edit (Zed (Zed_edit.Delete_next_chars delta));
+              Edit (Zed (Zed_edit.Kill_next_chars delta));
               ] >>=
             (function
               | Result r-> Lwt_mvar.put result r
@@ -1863,7 +1885,7 @@ object(self)
             let pos= pos - delta in
             self#exec [
               Edit (Zed (Zed_edit.Goto pos));
-              Edit (Zed (Zed_edit.Delete_next_chars delta));
+              Edit (Zed (Zed_edit.Kill_next_chars delta));
               ] >>=
             (function
               | Result r-> Lwt_mvar.put result r
@@ -2059,6 +2081,17 @@ object(self)
         | Undo count->
           self#exec @@ list_dup [
             Edit (Zed (Zed_edit.Undo));
+            ] count >>=
+          (function
+            | Result r-> Lwt_mvar.put result r
+            | ContinueLoop _-> return ())
+          >>= setup_pos
+          >>= fun ()->
+          do_actions tl
+        | Paste count->
+          self#exec @@ list_dup [
+            Edit (Zed (Zed_edit.Next_char));
+            Edit (Zed (Zed_edit.Yank));
             Edit (Zed (Zed_edit.Prev_char));
             ] count >>=
           (function
