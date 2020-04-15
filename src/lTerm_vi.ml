@@ -1107,7 +1107,15 @@ let perform ctx exec result action=
       | Result r-> Lwt_mvar.put result r
       | ContinueLoop _-> return ())
     >>= setup_pos
-  | Paste count->
+  | Paste_before count->
+    exec @@ list_dup [
+      Edit (Zed (Zed_edit.Yank));
+      Edit (Zed (Zed_edit.Prev_char));
+      ] count >>=
+    (function
+      | Result r-> Lwt_mvar.put result r
+      | ContinueLoop _-> return ())
+  | Paste_after count->
     exec @@ list_dup [
       Edit (Zed (Zed_edit.Next_char));
       Edit (Zed (Zed_edit.Yank));
