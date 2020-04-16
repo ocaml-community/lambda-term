@@ -144,12 +144,27 @@ module Query = struct
       (Zed_lines.line_start lines line_idx
       , Zed_lines.line_stop lines line_idx)
 
+  let is_space= function
+    | `Cc | `Zs | `Zl | `Zp | `Mn -> true
+    | _-> false
+
   let category_equal c1 c2=
     match c1, c2 with
     | `Ll, `Lu | `Lu, `Ll-> true
     | _-> c1 = c2
 
-  let next_category ?(nl_as_sp=true) ~pos ~stop text=
+  let category_equal_blank c1 c2=
+    let b1= is_space c1
+    and b2= is_space c2 in
+    b1 = b2
+
+  let next_category
+      ?(nl_as_sp=true)
+      ?(is_equal=category_equal)
+      ~pos
+      ~stop
+      text
+    =
     let start_category=
       let zchar= Zed_rope.get text pos in
       let core= Zed_char.core zchar in
@@ -160,7 +175,7 @@ module Query = struct
       if pos < stop then
         let zchar, zip= Zed_rope.Zip.next zip in
         let category= get_category ~nl_as_sp (Zed_char.core zchar) in
-        if category_equal category start_category then
+        if is_equal category start_category then
           skip_curr zip (pos + 1)
         else
           pos
@@ -169,7 +184,13 @@ module Query = struct
     in
     skip_curr zip pos
 
-  let prev_category ?(nl_as_sp=true) ~pos ~start text=
+  let prev_category
+      ?(nl_as_sp=true)
+      ?(is_equal=category_equal)
+      ~pos
+      ~start
+      text
+    =
     let start_category=
       let zchar= Zed_rope.get text pos in
       let core= Zed_char.core zchar in
@@ -180,7 +201,7 @@ module Query = struct
       if pos > start then
         let zchar, zip= Zed_rope.Zip.prev zip in
         let category= get_category ~nl_as_sp (Zed_char.core zchar) in
-        if category_equal category start_category then
+        if is_equal category start_category then
           skip_curr zip (pos - 1)
         else
           pos
