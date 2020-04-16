@@ -643,6 +643,26 @@ let perform ctx exec result action=
           return ()
       in
       next_word (count*n)
+    | WORD n->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let _start, stop= Query.get_boundary true ctx in
+      let rec next_word n=
+        let pos= Zed_edit.position ctx in
+        if n > 0 && pos < stop then
+          let next=
+            min (stop - 1) (Query.next_WORD ~pos ~stop text)
+          in
+          exec
+            (list_make
+              (Edit (Zed (Zed_edit.Goto next))) 1) >>=
+          (function
+            | Result r-> Lwt_mvar.put result r
+            | ContinueLoop _-> next_word (n-1))
+        else
+          return ()
+      in
+      next_word (count*n)
     | Word_back n->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
@@ -652,6 +672,26 @@ let perform ctx exec result action=
         if n > 0 && pos > start then
           let prev=
             max start (Query.prev_word ~pos ~start text)
+          in
+          exec
+            (list_make
+              (Edit (Zed (Zed_edit.Goto prev))) 1) >>=
+          (function
+            | Result r-> Lwt_mvar.put result r
+            | ContinueLoop _-> prev_word (n-1))
+        else
+          return ()
+      in
+      prev_word (count*n)
+    | WORD_back n->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let start, stop= Query.get_boundary true ctx in
+      let rec prev_word n=
+        let pos= min (stop - 1) (Zed_edit.position ctx) in
+        if n > 0 && pos > start then
+          let prev=
+            max start (Query.prev_WORD ~pos ~start text)
           in
           exec
             (list_make
@@ -684,6 +724,27 @@ let perform ctx exec result action=
           return ()
       in
       next_word (count*n)
+    | WORD_end n->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let _start, stop= Query.get_boundary true ctx in
+      let rec next_word n=
+        let pos= Zed_edit.position ctx in
+        if n > 0 && pos < stop then
+          let next= min
+            (stop - 1)
+            (Query.next_WORD_end ~pos ~stop text)
+          in
+          exec
+            (list_make
+              (Edit (Zed (Zed_edit.Goto next))) 1) >>=
+          (function
+            | Result r-> Lwt_mvar.put result r
+            | ContinueLoop _-> next_word (n-1))
+        else
+          return ()
+      in
+      next_word (count*n)
     | Word_back_end n->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
@@ -693,6 +754,26 @@ let perform ctx exec result action=
         if n > 0 && pos > start then
           let prev=
             max start (Query.prev_word_end ~pos ~start text)
+          in
+          exec
+            (list_make
+              (Edit (Zed (Zed_edit.Goto prev))) 1) >>=
+          (function
+            | Result r-> Lwt_mvar.put result r
+            | ContinueLoop _-> prev_word (n-1))
+        else
+          return ()
+      in
+      prev_word (count*n)
+    | WORD_back_end n->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let start, stop= Query.get_boundary true ctx in
+      let rec prev_word n=
+        let pos= min (stop - 1) (Zed_edit.position ctx) in
+        if n > 0 && pos > start then
+          let prev=
+            max start (Query.prev_WORD_end ~pos ~start text)
           in
           exec
             (list_make
