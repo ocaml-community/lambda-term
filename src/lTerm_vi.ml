@@ -333,7 +333,15 @@ module Query = struct
     if is_space start_category then
       prev
     else
-      prev_category ~nl_as_sp ~pos:prev ~start text
+      let before_category=
+        let zchar= Zed_rope.get text prev in
+        let core= Zed_char.core zchar in
+        get_category ~nl_as_sp core
+      in
+      if is_space before_category then
+        prev_category ~nl_as_sp ~pos:prev ~start text
+      else
+        prev
 
   let prev_word_end ?multi_line ~pos ~start text=
     let prev_category ~nl_as_sp=
