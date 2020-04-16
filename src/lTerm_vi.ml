@@ -261,9 +261,9 @@ module Query = struct
     1 +
       if category_equal start_category before_start then
         if is_space start_category then
-          prev
-        else
           prev_category ~nl_as_sp ~pos:prev ~start text
+        else
+          prev
       else if is_space before_start then
         let prev= prev_category ~nl_as_sp ~pos:prev ~start text in
         if prev <= start then prev else
