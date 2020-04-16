@@ -148,6 +148,8 @@ module Query = struct
     | `Cc | `Zs | `Zl | `Zp | `Mn -> true
     | _-> false
 
+  let is_not_space c= not (is_space c)
+
   let category_equal c1 c2=
     match c1, c2 with
     | `Ll, `Lu | `Lu, `Ll-> true
@@ -210,7 +212,7 @@ module Query = struct
     in
     (skip_curr zip pos) - 1
 
-  let next_word ?(multi_line=true) ~pos ~stop text=
+  let next_word' ?(multi_line=true) ~next_category ~pos ~stop text=
     let nl_as_sp= multi_line in
     let start_category=
       let zchar= Zed_rope.get text pos in
@@ -218,14 +220,14 @@ module Query = struct
       get_category ~nl_as_sp core
     in
     let next= next_category ~nl_as_sp ~pos ~stop text in
-    if start_category = `Zs then
+    if is_space start_category then
       next (* currently at a space, just skip spaces *)
     else
     if next < stop then
       (* skip potential subsequent spaces after skip current word*)
       let zchar= Zed_rope.get text next in
       let core= Zed_char.core zchar in
-      if get_category ~nl_as_sp core = `Zs then
+      if is_space (get_category ~nl_as_sp core) then
         (* skip subsequent spaces *)
         next_category ~nl_as_sp ~pos:next ~stop text
       else
@@ -233,7 +235,17 @@ module Query = struct
     else
       stop
 
-  let prev_word ?(multi_line=true) ~pos ~start text=
+  let next_word ?multi_line ~pos ~stop text=
+    let next_category ~nl_as_sp=
+      next_category ~nl_as_sp ~is_equal:category_equal in
+    next_word' ?multi_line ~next_category ~pos ~stop text
+
+  let next_WORD ?multi_line ~pos ~stop text=
+    let next_category ~nl_as_sp=
+      next_category ~nl_as_sp ~is_equal:category_equal_blank in
+    next_word' ?multi_line ~next_category ~pos ~stop text
+
+  let prev_word' ?(multi_line=true) ~prev_category ~pos ~start text=
     if pos <= start then start else
     let nl_as_sp= multi_line in
     let start_category=
@@ -248,18 +260,28 @@ module Query = struct
     let prev= prev_category ~nl_as_sp ~pos ~start text in
     1 +
       if category_equal start_category before_start then
-        if start_category <> `Zs then
+        if is_space start_category then
           prev
         else
           prev_category ~nl_as_sp ~pos:prev ~start text
-      else if before_start = `Zs then
+      else if is_space before_start then
         let prev= prev_category ~nl_as_sp ~pos:prev ~start text in
         if prev <= start then prev else
         prev_category ~nl_as_sp ~pos:prev ~start text
       else
         prev_category ~nl_as_sp ~pos:prev ~start text
 
-  let next_word_end ?(multi_line=true) ~pos ~stop text=
+  let prev_word ?multi_line ~pos ~start text=
+    let prev_category ~nl_as_sp=
+      prev_category ~nl_as_sp ~is_equal:category_equal in
+    prev_word' ?multi_line ~prev_category ~pos ~start text
+
+  let prev_WORD ?multi_line ~pos ~start text=
+    let prev_category ~nl_as_sp=
+      prev_category ~nl_as_sp ~is_equal:category_equal_blank in
+    prev_word' ?multi_line ~prev_category ~pos ~start text
+
+  let next_word_end' ?(multi_line=true) ~next_category ~pos ~stop text=
     let pos=
       if pos >= (stop-1) then stop else
       let nl_as_sp= multi_line in
@@ -275,20 +297,30 @@ module Query = struct
       let next= next_category ~nl_as_sp ~pos ~stop text in
       if next >= stop then stop else
       if category_equal start_category after_start
-        && start_category <> `Zs
+        && is_not_space start_category
       then
         next
       else
         let next= next_category ~nl_as_sp ~pos:next ~stop text in
         if next >= stop then stop else
-        if start_category = `Zs then
+        if is_space start_category then
           next
         else
           next_category ~nl_as_sp ~pos:next ~stop text
     in
     max 0 @@ pos - 1
 
-  let prev_word_end ?(multi_line=true) ~pos ~start text=
+  let next_word_end ?multi_line ~pos ~stop text=
+    let next_category ~nl_as_sp=
+      next_category ~nl_as_sp ~is_equal:category_equal in
+    next_word_end' ?multi_line ~next_category ~pos ~stop text
+
+  let next_WORD_end ?multi_line ~pos ~stop text=
+    let next_category ~nl_as_sp=
+      next_category ~nl_as_sp ~is_equal:category_equal_blank in
+    next_word_end' ?multi_line ~next_category ~pos ~stop text
+
+  let prev_word_end' ?(multi_line=true) ~prev_category ~pos ~start text=
     if pos <= start then start else
     let nl_as_sp= multi_line in
     let start_category=
@@ -298,10 +330,21 @@ module Query = struct
     in
     let prev= prev_category ~nl_as_sp ~pos ~start text in
     if prev <= start then start else
-    if start_category = `Zs then
+    if is_space start_category then
       prev
     else
       prev_category ~nl_as_sp ~pos:prev ~start text
+
+  let prev_word_end ?multi_line ~pos ~start text=
+    let prev_category ~nl_as_sp=
+      prev_category ~nl_as_sp ~is_equal:category_equal in
+    prev_word_end' ?multi_line ~prev_category ~pos ~start text
+
+  let prev_WORD_end ?multi_line ~pos ~start text=
+    let prev_category ~nl_as_sp=
+      prev_category ~nl_as_sp ~is_equal:category_equal_blank in
+    prev_word_end' ?multi_line ~prev_category ~pos ~start text
+
 end
 
 module Vi = Mew_vi.Core.Make (Concurrent)
@@ -675,9 +718,10 @@ let perform ctx exec result action=
       let text= Zed_edit.text edit in
       let chr_fst= (Zed_char.core (Zed_rope.get text start)) in
       let nonblank=
-        match Query.get_category chr_fst with
-        | `Zs-> Query.next_word ~pos:start ~stop text
-        | _-> start
+        if Query.(is_space (get_category chr_fst)) then
+          Query.next_word ~pos:start ~stop text
+        else
+          start
       in
       exec
         (list_make
@@ -909,9 +953,10 @@ let perform ctx exec result action=
       let text= Zed_edit.text edit in
       let chr_fst= (Zed_char.core (Zed_rope.get text start)) in
       let nonblank=
-        match Query.get_category chr_fst with
-        | `Zs-> Query.next_word ~pos:start ~stop text
-        | _-> start
+        if Query.(is_space (get_category chr_fst)) then
+          Query.next_word ~pos:start ~stop text
+        else
+          start
       in
       delete nonblank (pos - nonblank) >>=
       (function
@@ -1096,9 +1141,10 @@ let perform ctx exec result action=
       let text= Zed_edit.text edit in
       let chr_fst= (Zed_char.core (Zed_rope.get text start)) in
       let nonblank=
-        match Query.get_category chr_fst with
-        | `Zs-> Query.next_word ~pos:start ~stop text
-        | _-> start
+        if Query.(is_space (get_category chr_fst)) then
+          Query.next_word ~pos:start ~stop text
+        else
+          start
       in
       change nonblank (pos - nonblank) >>=
       (function
