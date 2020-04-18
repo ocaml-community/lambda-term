@@ -47,6 +47,13 @@ module Query = struct
   | Word_back_end of int (* ge *)
   | WORD_back_end of int (* gE *)
 
+  (* line *)
+  | Line
+
+  (* occurrence *)
+  | Occurrence_inline of string
+  | Occurrence_inline_back of string
+
   (* text object *)
   | Sentence_backword of int (* ( *)
   | Sentence_forward of int (* ) *)
@@ -62,6 +69,12 @@ module Query = struct
   | Sentence_inner of int (* is *)
   | Paragraph_include of int (* ap *)
   | Paragraph_inner of int (* ip *)
+  | Parenthesis_include of int (* a( a) *)
+  | Parenthesis_inner of int (* i( i) *)
+  | Bracket_include of int (* a[ a] *)
+  | Bracket_inner of int (* i[ i] *)
+  | AngleBracket_include of int (* a< a> *)
+  | AngleBracket_inner of int (* i< i> *)
   *)
   let left n ctx= (* h *)
     let n= max 0 n in
@@ -352,6 +365,20 @@ module Query = struct
     let prev_category ~nl_as_sp=
       prev_category ~nl_as_sp ~is_equal:category_equal_blank in
     prev_word_end' ?multi_line ~prev_category ~pos ~start text
+
+  let occurrence ~pos ~stop chr text=
+    try
+      let zip= Zed_rope.Zip.make_f text (pos+1) in
+      let next= Zed_rope.Zip.find_f
+        (fun c-> Zed_char.compare chr c = 0)
+        zip
+      in
+      let next_pos= Zed_rope.Zip.offset next in
+      if next_pos < stop then
+        Some next_pos
+      else
+        None
+    with _-> None
 
 end
 
