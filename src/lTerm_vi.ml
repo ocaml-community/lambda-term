@@ -692,6 +692,32 @@ let perform ctx exec result action=
       | Result r-> Lwt_mvar.put result r
       | ContinueLoop _-> return ())
   in
+  let pare_include pair level action=
+    let text= Zed_edit.text (Zed_edit.edit ctx) in
+    let pos= Zed_edit.position ctx in
+    let start= 0
+    and stop= Zed_rope.length text in
+    (match Query.occurrence_pare
+      ~pos ~level ~start ~stop
+      pair
+      text
+    with
+    | Some (left, right)-> action left (right+1 - left)
+    | None-> return (ContinueLoop []))
+  in
+  let pare_inner pair level action=
+    let text= Zed_edit.text (Zed_edit.edit ctx) in
+    let pos= Zed_edit.position ctx in
+    let start= 0
+    and stop= Zed_rope.length text in
+    (match Query.occurrence_pare
+      ~pos ~level ~start ~stop
+      pair
+      text
+    with
+    | Some (left, right)-> action (left+1) (right - (left+1))
+    | None-> return (ContinueLoop []))
+  in
   match action with
   | Vi_action.Insert (insert, count)->
     (match insert with
@@ -1292,6 +1318,36 @@ let perform ctx exec result action=
       let next= Query.line_LastChar ~newline (count*n) ctx in
       delete pos (next+1 - pos) >>=
       (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Parenthesis_include n->
+      pare_include Zed_char.(of_utf8 "(", of_utf8 ")") (n*count) delete
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Parenthesis_inner n->
+      pare_inner Zed_char.(of_utf8 "(", of_utf8 ")") (n*count) delete
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Bracket_include n->
+      pare_include Zed_char.(of_utf8 "[", of_utf8 "]") (n*count) delete
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Bracket_inner n->
+      pare_inner Zed_char.(of_utf8 "[", of_utf8 "]") (n*count) delete
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | AngleBracket_include n->
+      pare_include Zed_char.(of_utf8 "<", of_utf8 ">") (n*count) delete
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | AngleBracket_inner n->
+      pare_inner Zed_char.(of_utf8 "<", of_utf8 ">") (n*count) delete
+      >>= (function
         | Result r-> Lwt_mvar.put result r
         | ContinueLoop _-> return ())
     | _-> return ())
