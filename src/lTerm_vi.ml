@@ -1033,6 +1033,28 @@ let perform ctx exec result action=
       (function
         | Result r-> Lwt_mvar.put result r
         | ContinueLoop _-> return ())
+    | Occurrence_inline chr->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx + 1 in
+      let lines= Zed_edit.lines edit in
+      let line= Zed_edit.line ctx in
+      let stop= Zed_lines.line_stop lines line in
+      let rec query_n chr pos n=
+        if n < 1 then None else
+        let next= Query.occurrence_char ~pos ~stop chr text in
+        if n = 1 then next else
+          match next with
+          | Some next-> query_n chr (next+1) (n-1)
+          | None-> None
+      in
+      (match query_n (Zed_char.of_utf8 chr) pos count with
+      | Some pos->
+        exec [ Edit (Zed (Zed_edit.Goto pos)) ]
+        >>= (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
     | _-> return ())
   | Delete (motion, count)->
     (match motion with
