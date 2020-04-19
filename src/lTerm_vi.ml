@@ -366,7 +366,7 @@ module Query = struct
       prev_category ~nl_as_sp ~is_equal:category_equal_blank in
     prev_word_end' ?multi_line ~prev_category ~pos ~start text
 
-  let occurrence ~pos ~stop chr text=
+  let occurrence_char ~pos ~stop chr text=
     try
       let zip= Zed_rope.Zip.make_f text pos in
       let next= Zed_rope.Zip.find_f
@@ -380,7 +380,7 @@ module Query = struct
         None
     with _-> None
 
-  let occurrence_back ~pos ~start chr text=
+  let occurrence_char_back ~pos ~start chr text=
     try
       let zip= Zed_rope.Zip.make_f text pos in
       let prev= Zed_rope.Zip.find_b
@@ -393,6 +393,111 @@ module Query = struct
       else
         None
     with _-> None
+
+  let occurrence ~pos ~stop ~cmp text=
+    try
+      let zip= Zed_rope.Zip.make_f text pos in
+      let next= Zed_rope.Zip.find_f cmp zip in
+      let next_pos= Zed_rope.Zip.offset next in
+      if next_pos < stop then
+        Some (next_pos, Zed_rope.get text next_pos)
+      else
+        None
+    with _-> None
+
+  let occurrence_back ~pos ~start ~cmp text=
+    try
+      let zip= Zed_rope.Zip.make_f text pos in
+      let prev= Zed_rope.Zip.find_b cmp zip in
+      let prev_pos= Zed_rope.Zip.offset prev in
+      if prev_pos > start then
+        Some (prev_pos - 1, Zed_rope.get text (prev_pos - 1))
+      else
+        None
+    with _-> None
+
+  let occurrence_pare_raw ~pos ~level ~start ~stop pair text=
+    let left, right= pair in
+    let rec find_left level pos=
+      if pos >= start then
+        if level > 0 then
+          match occurrence_char_back ~pos ~start left text with
+          | Some pos-> find_left (level-1) (pos - 1)
+          | None-> None
+        else
+          Some (pos+1)
+      else
+        None
+    in
+    let rec find_right level pos=
+      if pos < stop then
+        if level > 0 then
+          match occurrence_char ~pos ~stop right text with
+          | Some pos-> find_right (level-1) (pos - 1)
+          | None-> None
+        else
+          Some (pos-1)
+      else
+        None
+    in
+    if level > 0 then
+      match find_left level (pos+1) with
+      | Some left->
+        (match find_right level pos with
+        | Some right-> Some (left, right)
+        | None-> None)
+      | None-> None
+    else
+      None
+
+  let occurrence_pare ~pos ~level ~start ~stop pair text=
+    let left, right= pair in
+    let equal a b= Zed_char.compare a b = 0 in
+    let cmp c= equal c left || equal c right in
+    let rec find_left level pos=
+      if pos >= start then
+        if level > 0 then
+          match occurrence_back ~pos ~start ~cmp text with
+          | Some (pos, c)->
+            if equal c left then
+              find_left (level-1) (pos - 1)
+            else
+              find_left (level+1) (pos - 1)
+          | None-> None
+        else
+          Some (pos+1)
+      else
+        None
+    in
+    let rec find_right level pos=
+      if pos < stop then
+        if level > 0 then
+          match occurrence ~pos ~stop ~cmp text with
+          | Some (pos, c)->
+            if equal c right then
+              find_right (level-1) (pos + 1)
+            else
+              find_right (level+1) (pos + 1)
+          | None-> None
+        else
+          Some (pos-1)
+      else
+        None
+    in
+    if level > 0 && pos >= start && pos < stop then
+      let init_pos=
+        if equal (Zed_rope.get text pos) right
+        then pos
+        else pos+1
+      in
+      match find_left level init_pos with
+      | Some left->
+        (match find_right 1 (left+1) with
+        | Some right-> Some (left, right)
+        | None-> None)
+      | None-> None
+    else
+      None
 
 end
 
