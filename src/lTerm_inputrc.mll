@@ -334,7 +334,10 @@ and comma_actions seq l = parse
 
 {
   let default =
-    Filename.concat LTerm_resources.home ".lambda-term-inputrc"
+    LTerm_resources.xdgbd_file
+      ~loc:LTerm_resources.Config
+      ~allow_legacy_location:true
+      ".lambda-term-inputrc"
 
   let load ?(file = default) () =
     Lwt.catch (fun () ->
