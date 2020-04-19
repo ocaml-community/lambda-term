@@ -1,3 +1,8 @@
+Next
+----
+
+* Load inputrc file from ~/.config/.lambda-term-inputrc as per XDG conventions (@copy)
+
 2.0.3 (2019-12-31)
 ------------------
 
