@@ -368,7 +368,7 @@ module Query = struct
 
   let occurrence ~pos ~stop chr text=
     try
-      let zip= Zed_rope.Zip.make_f text (pos+1) in
+      let zip= Zed_rope.Zip.make_f text pos in
       let next= Zed_rope.Zip.find_f
         (fun c-> Zed_char.compare chr c = 0)
         zip
@@ -376,6 +376,20 @@ module Query = struct
       let next_pos= Zed_rope.Zip.offset next in
       if next_pos < stop then
         Some next_pos
+      else
+        None
+    with _-> None
+
+  let occurrence_back ~pos ~start chr text=
+    try
+      let zip= Zed_rope.Zip.make_f text pos in
+      let prev= Zed_rope.Zip.find_b
+        (fun c-> Zed_char.compare chr c = 0)
+        zip
+      in
+      let prev_pos= Zed_rope.Zip.offset prev in
+      if prev_pos > start then
+        Some (prev_pos - 1)
       else
         None
     with _-> None
