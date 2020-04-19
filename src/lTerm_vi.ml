@@ -1620,6 +1620,36 @@ let perform ctx exec result action=
       (function
         | Result r-> Lwt_mvar.put result r
         | ContinueLoop _-> return ())
+    | Parenthesis_include n->
+      pare_include Zed_char.(of_utf8 "(", of_utf8 ")") (n*count) change
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Parenthesis_inner n->
+      pare_inner Zed_char.(of_utf8 "(", of_utf8 ")") (n*count) change
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Bracket_include n->
+      pare_include Zed_char.(of_utf8 "[", of_utf8 "]") (n*count) change
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Bracket_inner n->
+      pare_inner Zed_char.(of_utf8 "[", of_utf8 "]") (n*count) change
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | AngleBracket_include n->
+      pare_include Zed_char.(of_utf8 "<", of_utf8 ">") (n*count) change
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | AngleBracket_inner n->
+      pare_inner Zed_char.(of_utf8 "<", of_utf8 ">") (n*count) change
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
     | _-> return ())
   | Undo count->
     exec @@ list_dup [
