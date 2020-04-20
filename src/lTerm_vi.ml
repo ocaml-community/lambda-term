@@ -1394,6 +1394,16 @@ let perform ctx exec result action=
       >>= (function
         | Result r-> Lwt_mvar.put result r
         | ContinueLoop _-> return ())
+    | Brace_include n->
+      pare_include Zed_char.(of_utf8 "{", of_utf8 "}") (n*count) delete
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Brace_inner n->
+      pare_inner Zed_char.(of_utf8 "{", of_utf8 "}") (n*count) delete
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
     | Occurrence_inline chr->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
@@ -1739,6 +1749,16 @@ let perform ctx exec result action=
         | ContinueLoop _-> return ())
     | AngleBracket_inner n->
       pare_inner Zed_char.(of_utf8 "<", of_utf8 ">") (n*count) change
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Brace_include n->
+      pare_include Zed_char.(of_utf8 "{", of_utf8 "}") (n*count) change
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Brace_inner n->
+      pare_inner Zed_char.(of_utf8 "{", of_utf8 "}") (n*count) change
       >>= (function
         | Result r-> Lwt_mvar.put result r
         | ContinueLoop _-> return ())
