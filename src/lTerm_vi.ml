@@ -1137,6 +1137,18 @@ let perform ctx exec result action=
           | Result r-> Lwt_mvar.put result r
           | ContinueLoop _-> return ())
       | None-> return ())
+    | Match->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let stop= Zed_rope.length text in
+      (match Query.item_match ~start:0 ~stop pos text with
+      | Some pos->
+        exec [ Edit (Zed (Zed_edit.Goto pos)) ]
+        >>= (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
     | _-> return ())
   | Delete (motion, count)->
     (match motion with
@@ -1512,6 +1524,21 @@ let perform ctx exec result action=
           | Result r-> Lwt_mvar.put result r
           | ContinueLoop _-> return ())
       | None-> return ())
+    | Match->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let stop= Zed_rope.length text in
+      (match Query.item_match ~start:0 ~stop pos text with
+      | Some dest->
+        (if dest > pos then
+          delete pos (dest+1 - pos)
+        else
+          delete dest (pos+1 - dest))
+        >>= (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
     | _-> return ())
   | Change (motion, count)->
     (match motion with
@@ -1867,6 +1894,21 @@ let perform ctx exec result action=
         let delta= stop - pos in
         change pos delta >>=
         (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
+    | Match->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let stop= Zed_rope.length text in
+      (match Query.item_match ~start:0 ~stop pos text with
+      | Some dest->
+        (if dest > pos then
+          change pos (dest+1 - pos)
+        else
+          change dest (pos+1 - dest))
+        >>= (function
           | Result r-> Lwt_mvar.put result r
           | ContinueLoop _-> return ())
       | None-> return ())
