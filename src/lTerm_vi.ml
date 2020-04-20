@@ -1394,6 +1394,54 @@ let perform ctx exec result action=
       >>= (function
         | Result r-> Lwt_mvar.put result r
         | ContinueLoop _-> return ())
+    | Occurrence_inline chr->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx + 1 in
+      let lines= Zed_edit.lines edit in
+      let line= Zed_edit.line ctx in
+      let stop= Zed_lines.line_stop lines line in
+      let rec query_n chr pos n=
+        if n < 1 then None else
+        let next= Query.occurrence_char ~pos ~stop chr text in
+        if n = 1 then next else
+          match next with
+          | Some next-> query_n chr (next+1) (n-1)
+          | None-> None
+      in
+      (match query_n (Zed_char.of_utf8 chr) pos count with
+      | Some pos->
+        let start= Zed_edit.position ctx in
+        let delta= pos+1 - start in
+        delete start delta >>=
+        (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
+    | Occurrence_inline_back chr->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx + 1 in
+      let lines= Zed_edit.lines edit in
+      let line= Zed_edit.line ctx in
+      let start= Zed_lines.line_start lines line in
+      let rec query_n chr pos n=
+        if n < 1 then None else
+        let prev= Query.occurrence_char_back ~pos ~start chr text in
+        if n = 1 then prev else
+          match prev with
+          | Some prev-> query_n chr prev (n-1)
+          | None-> None
+      in
+      (match query_n (Zed_char.of_utf8 chr) (pos-1) count with
+      | Some pos->
+        let stop= Zed_edit.position ctx in
+        let delta= stop - pos in
+        delete pos delta >>=
+        (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
     | _-> return ())
   | Change (motion, count)->
     (match motion with
