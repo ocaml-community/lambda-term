@@ -499,6 +499,66 @@ module Query = struct
     else
       None
 
+  let item_match ~start ~stop pos text=
+    match Zed_rope.get text pos |> Zed_char.to_utf8 with
+    | "("->
+      (match occurrence_pare
+        ~pos ~level:1 ~start ~stop
+        (Zed_char.of_utf8 "(", Zed_char.of_utf8 ")") text
+      with
+      | Some (_, right)-> Some right
+      | None-> None)
+    | ")"->
+      (match occurrence_pare
+        ~pos ~level:1 ~start ~stop
+        (Zed_char.of_utf8 "(", Zed_char.of_utf8 ")") text
+      with
+      | Some (left, _)-> Some left
+      | None-> None)
+    | "["->
+      (match occurrence_pare
+        ~pos ~level:1 ~start ~stop
+        (Zed_char.of_utf8 "[", Zed_char.of_utf8 "]") text
+      with
+      | Some (_, right)-> Some right
+      | None-> None)
+    | "]"->
+      (match occurrence_pare
+        ~pos ~level:1 ~start ~stop
+        (Zed_char.of_utf8 "[", Zed_char.of_utf8 "]") text
+      with
+      | Some (left, _)-> Some left
+      | None-> None)
+    | "<"->
+      (match occurrence_pare
+        ~pos ~level:1 ~start ~stop
+        (Zed_char.of_utf8 "<", Zed_char.of_utf8 ">") text
+      with
+      | Some (_, right)-> Some right
+      | None-> None)
+    | ">"->
+      (match occurrence_pare
+        ~pos ~level:1 ~start ~stop
+        (Zed_char.of_utf8 "<", Zed_char.of_utf8 ">") text
+      with
+      | Some (left, _)-> Some left
+      | None-> None)
+    | "{"->
+      (match occurrence_pare
+        ~pos ~level:1 ~start ~stop
+        (Zed_char.of_utf8 "{", Zed_char.of_utf8 "}") text
+      with
+      | Some (_, right)-> Some right
+      | None-> None)
+    | "}"->
+      (match occurrence_pare
+        ~pos ~level:1 ~start ~stop
+        (Zed_char.of_utf8 "{", Zed_char.of_utf8 "}") text
+      with
+      | Some (left, _)-> Some left
+      | None-> None)
+    | _-> None
+
 end
 
 module Vi = Mew_vi.Core.Make (Concurrent)
