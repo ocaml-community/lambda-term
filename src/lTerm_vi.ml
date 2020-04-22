@@ -455,8 +455,8 @@ module Query = struct
     let equal a b= Zed_char.compare a b = 0 in
     let cmp c= equal c left || equal c right in
     let rec find_left level pos=
-      if pos >= start then
-        if level > 0 then
+      if level > 0 then
+        if pos >= start then
           match occurrence_back ~pos ~start ~cmp text with
           | Some (pos, c)->
             if equal c left then
@@ -465,13 +465,13 @@ module Query = struct
               find_left (level+1) (pos - 1)
           | None-> None
         else
-          Some (pos+1)
+          None
       else
-        None
+        Some (pos+1)
     in
     let rec find_right level pos=
-      if pos < stop then
-        if level > 0 then
+      if level > 0 then
+        if pos < stop then
           match occurrence ~pos ~stop ~cmp text with
           | Some (pos, c)->
             if equal c right then
@@ -480,9 +480,9 @@ module Query = struct
               find_right (level+1) (pos + 1)
           | None-> None
         else
-          Some (pos-1)
+          None
       else
-        None
+        Some (pos-1)
     in
     if level > 0 && pos >= start && pos < stop then
       let init_pos=
@@ -1939,4 +1939,5 @@ let perform ctx exec result action=
       | Result r-> Lwt_mvar.put result r
       | ContinueLoop _-> return ())
   | ChangeMode _mode-> return ()
+  | _-> return ()
 
