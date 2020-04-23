@@ -559,6 +559,71 @@ module Query = struct
       | None-> None)
     | _-> None
 
+  let include_word' ?(multi_line=true) ~next_category ~pos ~stop text=
+    if Zed_rope.length text = 0 then None else
+    let nl_as_sp= multi_line in
+    let start_category=
+      let zchar= Zed_rope.get text pos in
+      let core= Zed_char.core zchar in
+      get_category ~nl_as_sp core
+    in
+    let pos_begin=
+      if is_space start_category then
+        let next= next_category ~nl_as_sp ~pos ~stop text in
+        if next < stop then
+          Some next
+        else
+          None
+      else
+        let prev= prev_category ~nl_as_sp ~pos ~start:0 text in
+        if prev >= pos - 1 then
+          Some pos
+        else
+          Some (prev + 1)
+    in
+    match pos_begin with
+    | Some pos_begin->
+      let pos_end= next_category ~nl_as_sp ~pos ~stop text - 1 in
+      Some (pos_begin, pos_end)
+    | None-> None
+
+  let include_word ?multi_line ~pos ~stop text=
+    let next_category ~nl_as_sp=
+      next_category ~nl_as_sp ~is_equal:category_equal in
+    include_word' ?multi_line ~next_category ~pos ~stop text
+
+  let include_WORD ?multi_line ~pos ~stop text=
+    let next_category ~nl_as_sp=
+      next_category ~nl_as_sp ~is_equal:category_equal_blank in
+    include_word' ?multi_line ~next_category ~pos ~stop text
+
+  let inner_word'
+      ?(multi_line=true) ~prev_category ~next_category ~pos ~stop text
+    =
+    if Zed_rope.length text = 0 then None else
+    let nl_as_sp= multi_line in
+    let pos_begin=
+      if pos = 0 then
+        0
+      else
+        prev_category ~nl_as_sp ~pos ~start:0 text + 1
+    and pos_end= next_category ~nl_as_sp ~pos ~stop text - 1 in
+    Some (pos_begin, pos_end)
+
+  let inner_word ?multi_line ~pos ~stop text=
+    let prev_category ~nl_as_sp=
+      prev_category ~nl_as_sp ~is_equal:category_equal
+    and next_category ~nl_as_sp=
+      next_category ~nl_as_sp ~is_equal:category_equal in
+    inner_word' ?multi_line ~prev_category ~next_category ~pos ~stop text
+
+  let inner_WORD ?multi_line ~pos ~stop text=
+    let prev_category ~nl_as_sp=
+      prev_category ~nl_as_sp ~is_equal:category_equal_blank
+    and next_category ~nl_as_sp=
+      next_category ~nl_as_sp ~is_equal:category_equal_blank in
+    inner_word' ?multi_line ~prev_category ~next_category ~pos ~stop text
+
 end
 
 module Vi = Mew_vi.Core.Make (Concurrent)
