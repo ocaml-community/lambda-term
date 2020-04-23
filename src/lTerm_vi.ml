@@ -799,6 +799,10 @@ let perform ctx exec result action=
     else
       return (ContinueLoop [])
   in
+  let yank start len=
+    Zed_edit.copy_sequence ctx start len;
+    return (ContinueLoop [])
+  in
   let setup_pos ()=
     let edit= Zed_edit.edit ctx in
     let text= Zed_edit.text edit in
@@ -2149,6 +2153,427 @@ let perform ctx exec result action=
           | ContinueLoop _-> return ())
       | None-> return ())
     | _-> return ())
+  | Yank (motion, count)->
+    (match motion with
+    | Left n->
+      let pos, delta= Query.left (count*n) ctx in
+      Zed_edit.copy_sequence ctx pos delta;
+      return ()
+    | Right n->
+      let newline=true in
+      let pos, delta= Query.right ~newline (count*n) ctx in
+      let pos= pos - delta in
+      Zed_edit.copy_sequence ctx pos delta;
+      return ()
+    | Right_nl n->
+      let newline= true in
+      let pos, delta= Query.right ~newline (count*n) ctx in
+      let pos= pos - delta in
+      Zed_edit.copy_sequence ctx pos delta;
+      return ()
+    | Upward n->
+      let edit= Zed_edit.edit ctx in
+      let lines= Zed_edit.lines edit in
+      let line= Zed_edit.line ctx in
+      let dest= max 0 (line - count * n) in
+      let line_delta = line - dest in
+      if line_delta > 0 then
+        let pos_start= Zed_lines.line_start lines dest
+        and pos_end= Zed_lines.line_stop lines line in
+        let pos_delta= pos_end - pos_start in
+        Zed_edit.copy_sequence ctx pos_start pos_delta;
+        return ()
+      else
+        return ()
+    | Downward n->
+      let edit= Zed_edit.edit ctx in
+      let lines= Zed_edit.lines edit in
+      let line_count= Zed_lines.count lines in
+      let line= Zed_edit.line ctx in
+      let dest= min line_count (line + count * n) in
+      let line_delta = dest - line in
+      if line_delta > 0 then
+        let pos_start= Zed_lines.line_start lines line
+        and pos_end= Zed_lines.line_stop lines dest in
+        let pos_end=
+          if dest < line_count
+          then pos_end + 1
+          else pos_end in
+        let pos_delta= pos_end - pos_start in
+        Zed_edit.copy_sequence ctx pos_start pos_delta;
+        return ()
+      else
+        return ()
+    | Line->
+      let edit= Zed_edit.edit ctx in
+      let lines= Zed_edit.lines edit in
+      let line_count= Zed_lines.count lines in
+      let line= Zed_edit.line ctx in
+      let dest= min line_count (line + count - 1) in
+      let pos_start= Zed_lines.line_start lines line
+      and pos_end= Zed_lines.line_stop lines dest in
+      let pos_end=
+        if dest < line_count
+        then pos_end + 1
+        else pos_end in
+      let pos_delta= pos_end - pos_start in
+      Zed_edit.copy_sequence ctx pos_start pos_delta;
+      return ()
+    | Word n->
+      let pos= Zed_edit.position ctx in
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let _start, stop= Query.get_boundary true ctx in
+      let rec next_word pos n=
+        if n > 0 && pos < stop then
+          let next=
+            (Query.next_word ~pos ~stop text)
+          in
+          next_word next (n-1)
+        else
+          pos
+      in
+      let next_pos = next_word pos (count*n) in
+      let delta= next_pos - pos in
+      Zed_edit.copy_sequence ctx pos delta;
+      return ()
+    | WORD n->
+      let pos= Zed_edit.position ctx in
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let _start, stop= Query.get_boundary true ctx in
+      let rec next_word pos n=
+        if n > 0 && pos < stop then
+          let next=
+            (Query.next_WORD ~pos ~stop text)
+          in
+          next_word next (n-1)
+        else
+          pos
+      in
+      let next_pos = next_word pos (count*n) in
+      let delta= next_pos - pos in
+      Zed_edit.copy_sequence ctx pos delta;
+      return ()
+    | Word_back n->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let start, stop= Query.get_boundary true ctx in
+      let pos= min (stop - 1) (Zed_edit.position ctx) in
+      let rec prev_word pos n=
+        if n > 0 && pos > start then
+          let prev= max
+            start
+            (Query.prev_word ~pos ~start text)
+          in
+          prev_word prev (n-1)
+        else
+          pos
+      in
+      let prev_pos= prev_word pos (count*n) in
+      let delta= pos - prev_pos in
+      Zed_edit.copy_sequence ctx prev_pos delta;
+      return ()
+    | WORD_back n->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let start, stop= Query.get_boundary true ctx in
+      let pos= min (stop - 1) (Zed_edit.position ctx) in
+      let rec prev_word pos n=
+        if n > 0 && pos > start then
+          let prev= max
+            start
+            (Query.prev_WORD ~pos ~start text)
+          in
+          prev_word prev (n-1)
+        else
+          pos
+      in
+      let prev_pos= prev_word pos (count*n) in
+      let delta= pos - prev_pos in
+      Zed_edit.copy_sequence ctx prev_pos delta;
+      return ()
+    | Word_end n->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let _start, stop= Query.get_boundary true ctx in
+      let pos= Zed_edit.position ctx in
+      let rec next_word pos n=
+        if n > 0 && pos < stop then
+          let next=
+            (Query.next_word_end ~pos ~stop text)
+          in
+          next_word next (n-1)
+        else
+          pos
+      in
+      let next_pos= next_word pos (count*n) in
+      let delta= next_pos + 1 - pos in
+      Zed_edit.copy_sequence ctx pos delta;
+      return ()
+    | WORD_end n->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let _start, stop= Query.get_boundary true ctx in
+      let pos= Zed_edit.position ctx in
+      let rec next_word pos n=
+        if n > 0 && pos < stop then
+          let next=
+            (Query.next_WORD_end ~pos ~stop text)
+          in
+          next_word next (n-1)
+        else
+          pos
+      in
+      let next_pos= next_word pos (count*n) in
+      let delta= next_pos + 1 - pos in
+      Zed_edit.copy_sequence ctx pos delta;
+      return ()
+    | Word_back_end n->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      if Zed_rope.length text <= 0 then return () else
+      let start, stop= Query.get_boundary true ctx in
+      let pos= min (stop - 1) (Zed_edit.position ctx) in
+      let rec prev_word pos n=
+        if n > 0 && pos > start then
+          let prev=
+            (Query.prev_word_end ~pos ~start text)
+          in
+          prev_word prev (n-1)
+        else
+          pos
+      in
+      let dest= prev_word pos (count*n) in
+      let delta= pos - dest + 1 in
+      Zed_edit.copy_sequence ctx dest delta;
+      return ()
+    | WORD_back_end n->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      if Zed_rope.length text <= 0 then return () else
+      let start, stop= Query.get_boundary true ctx in
+      let pos= min (stop - 1) (Zed_edit.position ctx) in
+      let rec prev_word pos n=
+        if n > 0 && pos > start then
+          let prev=
+            (Query.prev_WORD_end ~pos ~start text)
+          in
+          prev_word prev (n-1)
+        else
+          pos
+      in
+      let dest= prev_word pos (count*n) in
+      let delta= pos - dest + 1 in
+      Zed_edit.copy_sequence ctx dest delta;
+      return ()
+    | Line_FirstChar _n->
+      let edit= Zed_edit.edit ctx in
+      let lines= Zed_edit.lines edit in
+      let line= Zed_edit.line ctx in
+      let pos= Zed_edit.position ctx in
+      let start= Zed_lines.line_start lines line in
+      Zed_edit.copy_sequence ctx start (pos - start);
+      return ()
+    | Line_FirstNonBlank _n->
+      let edit= Zed_edit.edit ctx in
+      let pos= Zed_edit.position ctx in
+      let start, stop= Query.get_boundary false ctx in
+      let text= Zed_edit.text edit in
+      let chr_fst= (Zed_char.core (Zed_rope.get text start)) in
+      let nonblank=
+        if Query.(is_space (get_category chr_fst)) then
+          Query.next_word ~pos:start ~stop text
+        else
+          start
+      in
+      Zed_edit.copy_sequence ctx nonblank (pos - nonblank);
+      return ()
+    | Line_LastChar n->
+      let pos= Zed_edit.position ctx in
+      let next= Query.line_LastChar (count*n) ctx in
+      Zed_edit.copy_sequence ctx pos (next+1 - pos);
+      return ()
+    | Line_LastChar_nl n->
+      let newline= true in
+      let pos= Zed_edit.position ctx in
+      let next= Query.line_LastChar ~newline (count*n) ctx in
+      Zed_edit.copy_sequence ctx pos (next+1 - pos);
+      return ()
+    | Parenthesis_include n->
+      pare_include Zed_char.(of_utf8 "(", of_utf8 ")") (n*count) yank
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Parenthesis_inner n->
+      pare_inner Zed_char.(of_utf8 "(", of_utf8 ")") (n*count) yank
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Bracket_include n->
+      pare_include Zed_char.(of_utf8 "[", of_utf8 "]") (n*count) yank
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Bracket_inner n->
+      pare_inner Zed_char.(of_utf8 "[", of_utf8 "]") (n*count) yank
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | AngleBracket_include n->
+      pare_include Zed_char.(of_utf8 "<", of_utf8 ">") (n*count) yank
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | AngleBracket_inner n->
+      pare_inner Zed_char.(of_utf8 "<", of_utf8 ">") (n*count) yank
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Brace_include n->
+      pare_include Zed_char.(of_utf8 "{", of_utf8 "}") (n*count) yank
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Brace_inner n->
+      pare_inner Zed_char.(of_utf8 "{", of_utf8 "}") (n*count) yank
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Occurrence_inline chr->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx + 1 in
+      let lines= Zed_edit.lines edit in
+      let line= Zed_edit.line ctx in
+      let stop= Zed_lines.line_stop lines line in
+      let rec query_n chr pos n=
+        if n < 1 then None else
+        let next= Query.occurrence_char ~pos ~stop chr text in
+        if n = 1 then next else
+          match next with
+          | Some next-> query_n chr (next+1) (n-1)
+          | None-> None
+      in
+      (match query_n (Zed_char.of_utf8 chr) pos count with
+      | Some pos->
+        let start= Zed_edit.position ctx in
+        let delta= pos+1 - start in
+        Zed_edit.copy_sequence ctx start delta;
+        return ()
+      | None-> return ())
+    | Occurrence_inline_back chr->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx + 1 in
+      let lines= Zed_edit.lines edit in
+      let line= Zed_edit.line ctx in
+      let start= Zed_lines.line_start lines line in
+      let rec query_n chr pos n=
+        if n < 1 then None else
+        let prev= Query.occurrence_char_back ~pos ~start chr text in
+        if n = 1 then prev else
+          match prev with
+          | Some prev-> query_n chr prev (n-1)
+          | None-> None
+      in
+      (match query_n (Zed_char.of_utf8 chr) (pos-1) count with
+      | Some pos->
+        let stop= Zed_edit.position ctx in
+        let delta= stop - pos in
+        Zed_edit.copy_sequence ctx pos delta;
+        return ()
+      | None-> return ())
+    | Match->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let stop= Zed_rope.length text in
+      (match Query.item_match ~start:0 ~stop pos text with
+      | Some dest->
+        if dest > pos then
+          Zed_edit.copy_sequence ctx pos (dest+1 - pos)
+        else
+          Zed_edit.copy_sequence ctx dest (pos+1 - dest);
+          return ()
+      | None-> return ())
+    | Word_include num->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let stop= Zed_rope.length text in
+      let move_n pos n=
+        let rec move_n pos n=
+          if n >= 1 then
+            match Query.include_word ~stop ~pos text with
+            | Some (_word_begin, word_end)-> move_n (word_end+1) (n-1)
+            | None-> pos-1
+          else
+            pos-1
+        in
+        if n >= 1 then
+          match Query.include_word ~stop ~pos text with
+          | Some (word_begin, word_end)->
+            let word_end= move_n (word_end+1) (n - 1) in
+            Some (word_begin, word_end)
+          | None-> None
+        else
+          None
+      in
+      (match move_n pos (num*count) with
+      | Some (word_begin, word_end)->
+        Zed_edit.copy_sequence ctx word_begin (word_end+1 - word_begin);
+        return ()
+      | None-> return ())
+    | WORD_include num->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let stop= Zed_rope.length text in
+      let move_n pos n=
+        let rec move_n pos n=
+          if n >= 1 then
+            match Query.include_WORD ~stop ~pos text with
+            | Some (_word_begin, word_end)-> move_n (word_end+1) (n-1)
+            | None-> pos
+          else
+            pos-1
+        in
+        if n >= 1 then
+          match Query.include_WORD ~stop ~pos text with
+          | Some (word_begin, word_end)->
+            let word_end= move_n (word_end+1) (n - 1) in
+            Some (word_begin, word_end)
+          | None-> None
+        else
+          None
+      in
+      (match move_n pos (num*count) with
+      | Some (word_begin, word_end)->
+        Zed_edit.copy_sequence ctx word_begin (word_end+1 - word_begin);
+        return ()
+      | None-> return ())
+    | Word_inner _num->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let stop= Zed_rope.length text in
+      (match Query.inner_word ~pos ~stop text with
+      | Some (word_begin, word_end)->
+        Zed_edit.copy_sequence ctx word_begin (word_end+1 - word_begin);
+        return ()
+      | None-> return ())
+    | WORD_inner _num->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let stop= Zed_rope.length text in
+      (match Query.inner_WORD ~pos ~stop text with
+      | Some (word_begin, word_end)->
+        Zed_edit.copy_sequence ctx word_begin (word_end+1 - word_begin);
+        return ()
+      | None-> return ())
+    | _-> return ())
   | Undo count->
     exec @@ list_dup [
       Edit (Zed (Zed_edit.Undo));
@@ -2181,5 +2606,4 @@ let perform ctx exec result action=
       | Result r-> Lwt_mvar.put result r
       | ContinueLoop _-> return ())
   | ChangeMode _mode-> return ()
-  | _-> return ()
 
