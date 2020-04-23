@@ -1351,7 +1351,12 @@ let perform ctx exec result action=
       let pos= Zed_edit.position ctx in
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
-      let _start, stop= Query.get_boundary true ctx in
+      let _start, stop=
+        if count * n > 1 then
+          Query.get_boundary true ctx
+        else
+          Query.get_boundary false ctx
+      in
       let rec next_word pos n=
         if n > 0 && pos < stop then
           let next=
@@ -1371,7 +1376,12 @@ let perform ctx exec result action=
       let pos= Zed_edit.position ctx in
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
-      let _start, stop= Query.get_boundary true ctx in
+      let _start, stop=
+        if count * n > 1 then
+          Query.get_boundary true ctx
+        else
+          Query.get_boundary false ctx
+      in
       let rec next_word pos n=
         if n > 0 && pos < stop then
           let next=
@@ -1703,7 +1713,12 @@ let perform ctx exec result action=
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
-      let stop= Zed_rope.length text in
+      let _start, stop=
+        if count * num > 1 then
+          Query.get_boundary true ctx
+        else
+          Query.get_boundary false ctx
+      in
       let move_n pos n=
         let rec move_n pos n=
           if n >= 1 then
@@ -1733,7 +1748,12 @@ let perform ctx exec result action=
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
-      let stop= Zed_rope.length text in
+      let _start, stop=
+        if count * num > 1 then
+          Query.get_boundary true ctx
+        else
+          Query.get_boundary false ctx
+      in
       let move_n pos n=
         let rec move_n pos n=
           if n >= 1 then
@@ -1852,7 +1872,12 @@ let perform ctx exec result action=
       let pos= Zed_edit.position ctx in
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
-      let _start, stop= Query.get_boundary true ctx in
+      let _start, stop=
+        if count * n > 1 then
+          Query.get_boundary true ctx
+        else
+          Query.get_boundary false ctx
+      in
       let rec next_word pos n=
         if n > 0 && pos < stop then
           let next=
@@ -1872,7 +1897,12 @@ let perform ctx exec result action=
       let pos= Zed_edit.position ctx in
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
-      let _start, stop= Query.get_boundary true ctx in
+      let _start, stop=
+        if count * n > 1 then
+          Query.get_boundary true ctx
+        else
+          Query.get_boundary false ctx
+      in
       let rec next_word pos n=
         if n > 0 && pos < stop then
           let next=
@@ -2204,7 +2234,12 @@ let perform ctx exec result action=
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
-      let stop= Zed_rope.length text in
+      let _start, stop=
+        if count * num > 1 then
+          Query.get_boundary true ctx
+        else
+          Query.get_boundary false ctx
+      in
       let move_n pos n=
         let rec move_n pos n=
           if n >= 1 then
@@ -2234,7 +2269,12 @@ let perform ctx exec result action=
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
-      let stop= Zed_rope.length text in
+      let _start, stop=
+        if count * num > 1 then
+          Query.get_boundary true ctx
+        else
+          Query.get_boundary false ctx
+      in
       let move_n pos n=
         let rec move_n pos n=
           if n >= 1 then
@@ -2355,7 +2395,12 @@ let perform ctx exec result action=
       let pos= Zed_edit.position ctx in
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
-      let _start, stop= Query.get_boundary true ctx in
+      let _start, stop=
+        if count * n > 1 then
+          Query.get_boundary true ctx
+        else
+          Query.get_boundary false ctx
+      in
       let rec next_word pos n=
         if n > 0 && pos < stop then
           let next=
@@ -2373,7 +2418,12 @@ let perform ctx exec result action=
       let pos= Zed_edit.position ctx in
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
-      let _start, stop= Query.get_boundary true ctx in
+      let _start, stop=
+        if count * n > 1 then
+          Query.get_boundary true ctx
+        else
+          Query.get_boundary false ctx
+      in
       let rec next_word pos n=
         if n > 0 && pos < stop then
           let next=
