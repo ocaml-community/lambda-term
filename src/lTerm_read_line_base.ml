@@ -131,5 +131,5 @@ type 'a loop_result=
 type 'a loop_status=
   | Ev of LTerm_event.t
   | Loop_result of 'a
-  | Interrupt
+  | Interrupt of exn option
 

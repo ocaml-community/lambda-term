@@ -211,7 +211,7 @@ object(self)
   method clipboard = clipboard
   method macro = macro
 
-  val interrupt: unit Lwt_mvar.t= Lwt_mvar.create_empty ()
+  val interrupt: exn option Lwt_mvar.t= Lwt_mvar.create_empty ()
   method interrupt= interrupt
 
   (* The event which occurs when completion need to be recomputed. *)
@@ -377,7 +377,7 @@ object(self)
 
       | Interrupt_or_delete_next_char ->
           if Zed_rope.is_empty (Zed_edit.text edit) then
-            (Lwt.async @@ Lwt_mvar.put interrupt;
+            (Lwt.async (fun ()-> Lwt_mvar.put interrupt None);
             raise Interrupt)
           else
             Zed_edit.delete_next_char context
@@ -588,7 +588,7 @@ class virtual ['a] abstract = object
   method virtual complete : unit
   method virtual show_box : bool
   method virtual mode : mode signal
-  method virtual interrupt : unit Lwt_mvar.t
+  method virtual interrupt : exn option Lwt_mvar.t
 end
 
 (* +-----------------------------------------------------------------+
@@ -832,7 +832,7 @@ object(self)
     | LTerm_editor.Vi->
       let _vi_edit= vi_state#vi_edit in
       vi_edit <- Some _vi_edit;
-      self#listen_vi _vi_edit#action_output
+      self#listen_vi _vi_edit#action_output self#interrupt
 
   method key_sequence = key_sequence
 
@@ -1122,7 +1122,7 @@ object(self)
 
   val result= Lwt_mvar.create_empty ()
 
-  method private listen_vi msgBox=
+  method private listen_vi msgBox exnBox=
     let rec perform_actions= function
       | []-> return ()
       | action::tl->
@@ -1144,7 +1144,11 @@ object(self)
           listen
         )
     in
-    vi_thread <- Some (listen ())
+    let thread=
+      Lwt.catch listen
+        (fun exn-> Lwt_mvar.put exnBox (Some exn))
+    in
+    vi_thread <- Some (thread)
 
   method private process_keys keys=
     self#keyseq keys >>= function
@@ -1159,11 +1163,12 @@ object(self)
     Lwt.pick [
       Lwt.(>|=) (LTerm.read_event term) (fun ev-> Ev ev);
       Lwt.(>|=) (Lwt_mvar.take result) (fun r-> Loop_result r);
-      Lwt.(>|=) (Lwt_mvar.take self#interrupt) (fun ()-> Interrupt);
+      Lwt.(>|=) (Lwt_mvar.take self#interrupt) (fun e-> Interrupt e);
       ]
     >>= function
     | Loop_result r-> return r
-    | Interrupt-> raise Interrupt
+    | Interrupt (Some exn)-> raise exn
+    | Interrupt None-> raise Interrupt
     | Ev ev->
     match ev with
       | LTerm_event.Resize size ->
