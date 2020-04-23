@@ -394,34 +394,6 @@ module Query = struct
         None
     with _-> None
 
-  let occurrence_char_till ~pos ~stop chr text=
-    try
-      let zip= Zed_rope.Zip.make_f text pos in
-      let next= Zed_rope.Zip.find_f
-        (fun c-> Zed_char.compare chr c = 0)
-        zip
-      in
-      let next_pos= Zed_rope.Zip.offset next in
-      if next_pos < stop then
-        Some (next_pos - 1)
-      else
-        None
-    with _-> None
-
-  let occurrence_char_till_back ~pos ~start chr text=
-    try
-      let zip= Zed_rope.Zip.make_f text pos in
-      let prev= Zed_rope.Zip.find_b
-        (fun c-> Zed_char.compare chr c = 0)
-        zip
-      in
-      let prev_pos= Zed_rope.Zip.offset prev in
-      if prev_pos > start then
-        Some prev_pos
-      else
-        None
-    with _-> None
-
   let occurrence ~pos ~stop ~cmp text=
     try
       let zip= Zed_rope.Zip.make_f text pos in
@@ -1237,6 +1209,50 @@ let perform ctx exec result action=
           | Result r-> Lwt_mvar.put result r
           | ContinueLoop _-> return ())
       | None-> return ())
+    | Occurrence_inline_till chr->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx + 1 in
+      let lines= Zed_edit.lines edit in
+      let line= Zed_edit.line ctx in
+      let stop= Zed_lines.line_stop lines line in
+      let rec query_n chr pos n=
+        if n < 1 then None else
+        let next= Query.occurrence_char ~pos ~stop chr text in
+        if n = 1 then next else
+          match next with
+          | Some next-> query_n chr (next+1) (n-1)
+          | None-> None
+      in
+      (match query_n (Zed_char.of_utf8 chr) pos count with
+      | Some pos->
+        exec [ Edit (Zed (Zed_edit.Goto (pos-1))) ]
+        >>= (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
+    | Occurrence_inline_till_back chr->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx + 1 in
+      let lines= Zed_edit.lines edit in
+      let line= Zed_edit.line ctx in
+      let start= Zed_lines.line_start lines line in
+      let rec query_n chr pos n=
+        if n < 1 then None else
+        let prev= Query.occurrence_char_back ~pos ~start chr text in
+        if n = 1 then prev else
+          match prev with
+          | Some prev-> query_n chr prev (n-1)
+          | None-> None
+      in
+      (match query_n (Zed_char.of_utf8 chr) (pos-1) count with
+      | Some pos->
+        exec [ Edit (Zed (Zed_edit.Goto (pos+1))) ]
+        >>= (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
     | Match->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
@@ -1621,6 +1637,50 @@ let perform ctx exec result action=
         let delta= stop - pos in
         delete pos delta >>=
         (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
+    | Occurrence_inline_till chr->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let lines= Zed_edit.lines edit in
+      let line= Zed_edit.line ctx in
+      let stop= Zed_lines.line_stop lines line in
+      let rec query_n chr pos n=
+        if n < 1 then None else
+        let next= Query.occurrence_char ~pos ~stop chr text in
+        if n = 1 then next else
+          match next with
+          | Some next-> query_n chr (next+1) (n-1)
+          | None-> None
+      in
+      (match query_n (Zed_char.of_utf8 chr) (pos+1) count with
+      | Some dest->
+        delete pos (dest - pos)
+        >>= (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
+    | Occurrence_inline_till_back chr->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let lines= Zed_edit.lines edit in
+      let line= Zed_edit.line ctx in
+      let start= Zed_lines.line_start lines line in
+      let rec query_n chr pos n=
+        if n < 1 then None else
+        let prev= Query.occurrence_char_back ~pos ~start chr text in
+        if n = 1 then prev else
+          match prev with
+          | Some prev-> query_n chr prev (n-1)
+          | None-> None
+      in
+      (match query_n (Zed_char.of_utf8 chr) pos count with
+      | Some dest->
+        delete (dest+1) (pos-1 - dest)
+        >>= (function
           | Result r-> Lwt_mvar.put result r
           | ContinueLoop _-> return ())
       | None-> return ())
@@ -2081,6 +2141,50 @@ let perform ctx exec result action=
           | Result r-> Lwt_mvar.put result r
           | ContinueLoop _-> return ())
       | None-> return ())
+    | Occurrence_inline_till chr->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let lines= Zed_edit.lines edit in
+      let line= Zed_edit.line ctx in
+      let stop= Zed_lines.line_stop lines line in
+      let rec query_n chr pos n=
+        if n < 1 then None else
+        let next= Query.occurrence_char ~pos ~stop chr text in
+        if n = 1 then next else
+          match next with
+          | Some next-> query_n chr (next+1) (n-1)
+          | None-> None
+      in
+      (match query_n (Zed_char.of_utf8 chr) (pos+1) count with
+      | Some dest->
+        change pos (dest - pos)
+        >>= (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
+    | Occurrence_inline_till_back chr->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let lines= Zed_edit.lines edit in
+      let line= Zed_edit.line ctx in
+      let start= Zed_lines.line_start lines line in
+      let rec query_n chr pos n=
+        if n < 1 then None else
+        let prev= Query.occurrence_char_back ~pos ~start chr text in
+        if n = 1 then prev else
+          match prev with
+          | Some prev-> query_n chr prev (n-1)
+          | None-> None
+      in
+      (match query_n (Zed_char.of_utf8 chr) pos count with
+      | Some dest->
+        change (dest+1) (pos-1 - dest)
+        >>= (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
     | Match->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
@@ -2510,6 +2614,46 @@ let perform ctx exec result action=
         let stop= Zed_edit.position ctx in
         let delta= stop - pos in
         Zed_edit.copy_sequence ctx pos delta;
+        return ()
+      | None-> return ())
+    | Occurrence_inline_till chr->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let lines= Zed_edit.lines edit in
+      let line= Zed_edit.line ctx in
+      let stop= Zed_lines.line_stop lines line in
+      let rec query_n chr pos n=
+        if n < 1 then None else
+        let next= Query.occurrence_char ~pos ~stop chr text in
+        if n = 1 then next else
+          match next with
+          | Some next-> query_n chr (next+1) (n-1)
+          | None-> None
+      in
+      (match query_n (Zed_char.of_utf8 chr) (pos+1) count with
+      | Some dest->
+        Zed_edit.copy_sequence ctx  pos (dest - pos);
+        return ()
+      | None-> return ())
+    | Occurrence_inline_till_back chr->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let lines= Zed_edit.lines edit in
+      let line= Zed_edit.line ctx in
+      let start= Zed_lines.line_start lines line in
+      let rec query_n chr pos n=
+        if n < 1 then None else
+        let prev= Query.occurrence_char_back ~pos ~start chr text in
+        if n = 1 then prev else
+          match prev with
+          | Some prev-> query_n chr prev (n-1)
+          | None-> None
+      in
+      (match query_n (Zed_char.of_utf8 chr) pos count with
+      | Some dest->
+        Zed_edit.copy_sequence ctx (dest+1) (pos-1 - dest);
         return ()
       | None-> return ())
     | Match->
