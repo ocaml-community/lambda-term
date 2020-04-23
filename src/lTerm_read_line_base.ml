@@ -14,6 +14,8 @@
 
 let pervasives_compare= compare
 
+exception Interrupt
+
 type action =
   | Edit of LTerm_edit.action
   | Interrupt_or_delete_next_char
@@ -131,5 +133,5 @@ type 'a loop_result=
 type 'a loop_status=
   | Ev of LTerm_event.t
   | Loop_result of 'a
-  | Interrupt of exn option
+  | Interrupted of exn
 
