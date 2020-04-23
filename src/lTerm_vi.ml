@@ -561,6 +561,7 @@ module Query = struct
 
   let include_word' ?(multi_line=true) ~next_category ~pos ~stop text=
     if Zed_rope.length text = 0 then None else
+    if pos >= stop then None else
     let nl_as_sp= multi_line in
     let start_category=
       let zchar= Zed_rope.get text pos in
@@ -583,7 +584,9 @@ module Query = struct
     in
     match pos_begin with
     | Some pos_begin->
-      let pos_end= next_category ~nl_as_sp ~pos ~stop text - 1 in
+      let pos_end= next_word'
+        ~multi_line ~next_category ~pos:pos_begin ~stop text - 1
+      in
       Some (pos_begin, pos_end)
     | None-> None
 
@@ -1600,6 +1603,90 @@ let perform ctx exec result action=
           delete pos (dest+1 - pos)
         else
           delete dest (pos+1 - dest))
+        >>= (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
+    | Word_include num->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let stop= Zed_rope.length text in
+      let move_n pos n=
+        let rec move_n pos n=
+          if n >= 1 then
+            match Query.include_word ~stop ~pos text with
+            | Some (_word_begin, word_end)-> move_n (word_end+1) (n-1)
+            | None-> pos-1
+          else
+            pos-1
+        in
+        if n >= 1 then
+          match Query.include_word ~stop ~pos text with
+          | Some (word_begin, word_end)->
+            let word_end= move_n (word_end+1) (n - 1) in
+            Some (word_begin, word_end)
+          | None-> None
+        else
+          None
+      in
+      (match move_n pos (num*count) with
+      | Some (word_begin, word_end)->
+        delete word_begin (word_end+1 - word_begin)
+        >>= (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
+    | WORD_include num->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let stop= Zed_rope.length text in
+      let move_n pos n=
+        let rec move_n pos n=
+          if n >= 1 then
+            match Query.include_WORD ~stop ~pos text with
+            | Some (_word_begin, word_end)-> move_n (word_end+1) (n-1)
+            | None-> pos
+          else
+            pos-1
+        in
+        if n >= 1 then
+          match Query.include_WORD ~stop ~pos text with
+          | Some (word_begin, word_end)->
+            let word_end= move_n (word_end+1) (n - 1) in
+            Some (word_begin, word_end)
+          | None-> None
+        else
+          None
+      in
+      (match move_n pos (num*count) with
+      | Some (word_begin, word_end)->
+        delete word_begin (word_end+1 - word_begin)
+        >>= (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
+    | Word_inner _num->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let stop= Zed_rope.length text in
+      (match Query.inner_word ~pos ~stop text with
+      | Some (word_begin, word_end)->
+        delete word_begin (word_end+1 - word_begin)
+        >>= (function
+          | Result r-> Lwt_mvar.put result r
+          | ContinueLoop _-> return ())
+      | None-> return ())
+    | WORD_inner _num->
+      let edit= Zed_edit.edit ctx in
+      let text= Zed_edit.text edit in
+      let pos= Zed_edit.position ctx in
+      let stop= Zed_rope.length text in
+      (match Query.inner_WORD ~pos ~stop text with
+      | Some (word_begin, word_end)->
+        delete word_begin (word_end+1 - word_begin)
         >>= (function
           | Result r-> Lwt_mvar.put result r
           | ContinueLoop _-> return ())
