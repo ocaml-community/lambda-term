@@ -113,14 +113,6 @@ module Query = struct
     let column= Zed_edit.column ctx in
     (start, column - start)
 
-  let line_FirstNonBlank _n ctx= (* ^ *)
-    let edit= Zed_edit.edit ctx in
-    let lines= Zed_edit.lines edit
-    and line_idx= Zed_edit.line ctx in
-    let start= Zed_lines.line_start lines line_idx in
-    let line_len= Zed_lines.line_length lines line_idx in
-    start, line_len
-
   let line_LastChar ?(newline=false) n ctx= (* ^ *)
     let edit= Zed_edit.edit ctx in
     let lines= Zed_edit.lines edit
@@ -257,6 +249,21 @@ module Query = struct
     let next_category ~nl_as_sp=
       next_category ~nl_as_sp ~is_equal:category_equal_blank in
     next_word' ?multi_line ~next_category ~pos ~stop text
+
+  let line_FirstNonBlank _n ctx= (* ^ *)
+    let edit= Zed_edit.edit ctx in
+    let text= Zed_edit.text edit in
+    let lines= Zed_edit.lines edit
+    and line_idx= Zed_edit.line ctx in
+    let line_len= Zed_lines.line_length lines line_idx in
+    let stop= Zed_lines.line_stop lines line_idx in
+    if line_len > 0 then
+      if is_space (get_category (Zed_char.core (Zed_rope.get text 0))) then
+        min (stop-1) (next_word ~multi_line:false ~pos:0 ~stop text)
+      else
+        0
+    else
+      0
 
   let prev_word' ?(multi_line=true) ~prev_category ~pos ~start text=
     if pos <= start then start else
@@ -1106,21 +1113,10 @@ let perform ctx exec result action=
         | Result r-> Lwt_mvar.put result r
         | ContinueLoop _-> return ())
     | Line_FirstNonBlank _n->
-      let edit= Zed_edit.edit ctx in
-      let start, stop= Query.get_boundary false ctx in
-      let text= Zed_edit.text edit in
-      let chr_fst= (Zed_char.core (Zed_rope.get text start)) in
-      let nonblank=
-        if Query.(is_space (get_category chr_fst)) then
-          Query.next_word ~pos:start ~stop text
-        else
-          start
-      in
+      let nonblank= Query.line_FirstNonBlank 1 ctx in
       exec
-        (list_make
-          (Edit (Zed (Zed_edit.Goto nonblank)))
-          1) >>=
-      (function
+        [Edit (Zed (Zed_edit.Goto nonblank))]
+      >>= (function
         | Result r-> Lwt_mvar.put result r
         | ContinueLoop _-> return ())
     | Line_LastChar n->
@@ -1532,18 +1528,13 @@ let perform ctx exec result action=
         | Result r-> Lwt_mvar.put result r
         | ContinueLoop _-> return ())
     | Line_FirstNonBlank _n->
-      let edit= Zed_edit.edit ctx in
       let pos= Zed_edit.position ctx in
-      let start, stop= Query.get_boundary false ctx in
-      let text= Zed_edit.text edit in
-      let chr_fst= (Zed_char.core (Zed_rope.get text start)) in
-      let nonblank=
-        if Query.(is_space (get_category chr_fst)) then
-          Query.next_word ~pos:start ~stop text
-        else
-          start
-      in
-      delete nonblank (pos - nonblank) >>=
+      let nonblank= Query.line_FirstNonBlank 1 ctx in
+      (if nonblank < pos then
+        delete nonblank (pos - nonblank)
+      else
+        delete pos (nonblank - pos))
+      >>=
       (function
         | Result r-> Lwt_mvar.put result r
         | ContinueLoop _-> return ())
@@ -2053,18 +2044,13 @@ let perform ctx exec result action=
         | Result r-> Lwt_mvar.put result r
         | ContinueLoop _-> return ())
     | Line_FirstNonBlank _n->
-      let edit= Zed_edit.edit ctx in
       let pos= Zed_edit.position ctx in
-      let start, stop= Query.get_boundary false ctx in
-      let text= Zed_edit.text edit in
-      let chr_fst= (Zed_char.core (Zed_rope.get text start)) in
-      let nonblank=
-        if Query.(is_space (get_category chr_fst)) then
-          Query.next_word ~pos:start ~stop text
-        else
-          start
-      in
-      change nonblank (pos - nonblank) >>=
+      let nonblank= Query.line_FirstNonBlank 1 ctx in
+      (if nonblank < pos then
+        change nonblank (pos - nonblank)
+      else
+        change pos (nonblank - pos))
+      >>=
       (function
         | Result r-> Lwt_mvar.put result r
         | ContinueLoop _-> return ())
@@ -2558,18 +2544,12 @@ let perform ctx exec result action=
       Zed_edit.copy_sequence ctx start (pos - start);
       return ()
     | Line_FirstNonBlank _n->
-      let edit= Zed_edit.edit ctx in
       let pos= Zed_edit.position ctx in
-      let start, stop= Query.get_boundary false ctx in
-      let text= Zed_edit.text edit in
-      let chr_fst= (Zed_char.core (Zed_rope.get text start)) in
-      let nonblank=
-        if Query.(is_space (get_category chr_fst)) then
-          Query.next_word ~pos:start ~stop text
-        else
-          start
-      in
-      Zed_edit.copy_sequence ctx nonblank (pos - nonblank);
+      let nonblank= Query.line_FirstNonBlank 1 ctx in
+      if nonblank < pos then
+        Zed_edit.copy_sequence ctx nonblank (pos - nonblank)
+      else
+        Zed_edit.copy_sequence ctx nonblank (pos - nonblank);
       return ()
     | Line_LastChar n->
       let pos= Zed_edit.position ctx in
