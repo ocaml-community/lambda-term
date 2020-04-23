@@ -256,12 +256,12 @@ module Query = struct
     let lines= Zed_edit.lines edit
     and line_idx= Zed_edit.line ctx in
     let line_len= Zed_lines.line_length lines line_idx in
-    let stop= Zed_lines.line_stop lines line_idx in
+    let start, stop= get_boundary false ctx in
     if line_len > 0 then
-      if is_space (get_category (Zed_char.core (Zed_rope.get text 0))) then
-        min (stop-1) (next_word ~multi_line:false ~pos:0 ~stop text)
+      if is_space (get_category (Zed_char.core (Zed_rope.get text start))) then
+        min (stop-1) (next_word ~multi_line:false ~pos:start ~stop text)
       else
-        0
+        start
     else
       0
 
