@@ -187,7 +187,7 @@ class virtual ['a] engine : ?history : history -> ?clipboard : Zed_edit.clipboar
         completion should be displayed, and when [Some msg] [msg]
         should be displayed. *)
 
-  method interrupt : exn option Lwt_mvar.t
+  method interrupt : exn Lwt_mvar.t
     (** To notify an interrupt singal *)
 
   (** {6 Completion} *)
@@ -241,7 +241,7 @@ class virtual ['a] abstract : object
   method virtual complete : unit
   method virtual show_box : bool
   method virtual mode : mode signal
-  method virtual interrupt : exn option Lwt_mvar.t
+  method virtual interrupt : exn Lwt_mvar.t
 end
 
 (** {6 Predefined classes} *)

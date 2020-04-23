@@ -15,7 +15,6 @@ open LTerm_key
 
 let return, (>>=) = Lwt.return, Lwt.(>>=)
 
-exception Interrupt
 type prompt = LTerm_text.t
 type history = Zed_string.t list
 
@@ -211,7 +210,7 @@ object(self)
   method clipboard = clipboard
   method macro = macro
 
-  val interrupt: exn option Lwt_mvar.t= Lwt_mvar.create_empty ()
+  val interrupt: exn Lwt_mvar.t= Lwt_mvar.create_empty ()
   method interrupt= interrupt
 
   (* The event which occurs when completion need to be recomputed. *)
@@ -377,8 +376,7 @@ object(self)
 
       | Interrupt_or_delete_next_char ->
           if Zed_rope.is_empty (Zed_edit.text edit) then
-            (Lwt.async (fun ()-> Lwt_mvar.put interrupt None);
-            raise Interrupt)
+            Lwt.async (fun ()-> Lwt_mvar.put interrupt Interrupt)
           else
             Zed_edit.delete_next_char context
 
@@ -588,7 +586,7 @@ class virtual ['a] abstract = object
   method virtual complete : unit
   method virtual show_box : bool
   method virtual mode : mode signal
-  method virtual interrupt : exn option Lwt_mvar.t
+  method virtual interrupt : exn Lwt_mvar.t
 end
 
 (* +-----------------------------------------------------------------+
@@ -1146,7 +1144,7 @@ object(self)
     in
     let thread=
       Lwt.catch listen
-        (fun exn-> Lwt_mvar.put exnBox (Some exn))
+        (fun exn-> Lwt_mvar.put exnBox exn)
     in
     vi_thread <- Some (thread)
 
@@ -1163,12 +1161,11 @@ object(self)
     Lwt.pick [
       Lwt.(>|=) (LTerm.read_event term) (fun ev-> Ev ev);
       Lwt.(>|=) (Lwt_mvar.take result) (fun r-> Loop_result r);
-      Lwt.(>|=) (Lwt_mvar.take self#interrupt) (fun e-> Interrupt e);
+      Lwt.(>|=) (Lwt_mvar.take self#interrupt) (fun e-> Interrupted e);
       ]
     >>= function
     | Loop_result r-> return r
-    | Interrupt (Some exn)-> raise exn
-    | Interrupt None-> raise Interrupt
+    | Interrupted exn-> raise exn
     | Ev ev->
     match ev with
       | LTerm_event.Resize size ->
