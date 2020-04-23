@@ -2174,6 +2174,12 @@ let perform ctx exec result action=
     (function
       | Result r-> Lwt_mvar.put result r
       | ContinueLoop _-> return ())
+  | Join count->
+    exec @@
+      (list_make (Edit (Zed (Zed_edit.Join_line))) count)
+    >>= (function
+      | Result r-> Lwt_mvar.put result r
+      | ContinueLoop _-> return ())
   | ChangeMode _mode-> return ()
   | _-> return ()
 
