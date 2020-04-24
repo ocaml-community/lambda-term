@@ -1,5 +1,21 @@
-Next
-----
+3.0.0 (2020-04-24)
+------------------
+
+### Additions
+
+* `LTerm_editor`: two editor modes: default and vi
+
+* `LTerm_read_line: class virtual ['a] term`:
+  * `method editor_mode : LTerm_editor.mode signal`: the current editor mode
+  * `method set_editor_mode : LTerm_editor.mode -> unit`: set the current editor mode
+
+### Breaking
+
+`LTerm_read_line: class virtual ['a] term`: the type signature of `method private exec` is changed to `?keys : LTerm_key.t list -> action list -> 'a loop_result Lwt.t` from `method private exec : action list -> 'a Lwt.t`
+
+Since this is a private method and is intended to be used internally, the backward-compatibility is not affeted in most cases.
+
+### General
 
 * Load inputrc file from ~/.config/.lambda-term-inputrc as per XDG conventions (@copy)
 
