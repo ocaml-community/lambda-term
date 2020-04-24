@@ -493,7 +493,9 @@ module Query = struct
     in
     if level > 0 && pos >= start && pos < stop then
       let init_pos=
-        if equal (Zed_rope.get text pos) right
+        if equal (Zed_rope.get text pos) left
+        then pos+1
+        else if equal (Zed_rope.get text pos) right
         then pos
         else pos+1
       in
@@ -1794,6 +1796,18 @@ let perform ctx exec result action=
           | Result r-> Lwt_mvar.put result r
           | ContinueLoop _-> return ())
       | None-> return ())
+    | Quote_inner (chr, _num)->
+      let quote= Zed_char.of_utf8 chr in
+      pare_inner (quote, quote) 1 delete
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Quote_include (chr, num)->
+      let quote= Zed_char.of_utf8 chr in
+      pare_include (quote, quote) (num*count) delete
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
     | _-> return ())
   | Change (motion, count)->
     (match motion with
@@ -2310,6 +2324,18 @@ let perform ctx exec result action=
           | Result r-> Lwt_mvar.put result r
           | ContinueLoop _-> return ())
       | None-> return ())
+    | Quote_inner (chr, _num)->
+      let quote= Zed_char.of_utf8 chr in
+      pare_inner (quote, quote) 1 change
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Quote_include (chr, num)->
+      let quote= Zed_char.of_utf8 chr in
+      pare_include (quote, quote) (num*count) change
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
     | _-> return ())
   | Yank (motion, count)->
     (match motion with
@@ -2775,6 +2801,18 @@ let perform ctx exec result action=
         Zed_edit.copy_sequence ctx word_begin (word_end+1 - word_begin);
         return ()
       | None-> return ())
+    | Quote_inner (chr, _num)->
+      let quote= Zed_char.of_utf8 chr in
+      pare_inner (quote, quote) 1 yank
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
+    | Quote_include (chr, num)->
+      let quote= Zed_char.of_utf8 chr in
+      pare_include (quote, quote) (num*count) yank
+      >>= (function
+        | Result r-> Lwt_mvar.put result r
+        | ContinueLoop _-> return ())
     | _-> return ())
   | Undo count->
     exec @@ list_dup [
