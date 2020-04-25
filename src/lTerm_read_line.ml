@@ -1122,10 +1122,12 @@ object(self)
 
   method private listen_vi msgBox exnBox=
     let rec perform_actions= function
-      | []-> return ()
+      | []-> return (ContinueLoop [])
       | action::tl->
-        LTerm_vi.perform self#context self#exec result action >>= fun ()->
-        perform_actions tl
+        LTerm_vi.perform self#context self#exec action
+        >>= function
+        | Result _ as r -> return r
+        | ContinueLoop _-> perform_actions tl
     in
     let rec listen ()=
       set_key_sequence [];
@@ -1138,8 +1140,10 @@ object(self)
             )
         | Dummy-> listen ()
         | Vi actions->
-          perform_actions actions >>=
-          listen
+          perform_actions actions
+          >>= function
+          | ContinueLoop _-> listen ()
+          | Result r-> Lwt_mvar.put result r
         )
     in
     let thread=

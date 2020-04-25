@@ -303,5 +303,5 @@ open LTerm_read_line_base
 val perform :
   'a Zed_edit.context ->
   (action list -> 'b loop_result Lwt.t) ->
-  'b Lwt_mvar.t -> Vi.Vi_action.t -> unit Lwt.t
+  Vi.Vi_action.t -> 'b loop_result Lwt.t
 
