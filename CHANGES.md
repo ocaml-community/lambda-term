@@ -23,6 +23,8 @@ Add initial support for vi editing mode to `LTerm_read_line`:
   * paste: p P
   * line joining: J
 
+Many thanks to @nilsbecker for his feature-request on vi edit mode and the helps during the development on this topic!
+
 ### Breaking
 
   * `LTerm_read_line
