@@ -14,10 +14,11 @@ depends: [
   "lwt"   {>= "4.0.0"}
   "lwt_log"
   "react"
-  "zed"   {>= "2.0.3" & < "3.0"}
+  "zed"   {>= "3.0.0" & < "4.0"}
   "camomile" {>= "1.0.1"}
   "lwt_react"
-  "dune" {>= "1.0.0"}
+  "mew_vi"  {>= "0.3.0" & < "1.0.0"}
+  "dune" {>= "1.1.0"}
 ]
 synopsis: "Terminal manipulation library for OCaml"
 description: """
