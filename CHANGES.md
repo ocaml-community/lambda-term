@@ -1,4 +1,4 @@
-3.0.0 (2020-04-24)
+3.0.0 (2020-04-25)
 ------------------
 
 ### Additions
@@ -9,11 +9,30 @@
   * `method editor_mode : LTerm_editor.mode signal`: the current editor mode
   * `method set_editor_mode : LTerm_editor.mode -> unit`: set the current editor mode
 
+Add initial support for vi editing mode to `LTerm_read_line`:
+  * motions:
+    * h l 0 ^ $
+    * j k gg G
+    * w W e E b B ge gE
+    * f F t T
+    * aw iw aW iW
+    * include or inner ( ), [ ], { }, < >, ' and "
+    * generic quote: aq? iq? where ? could be any character
+    * bracket matching: jump back and forth between matched brakcets
+  * delete, change, yank with motions
+  * paste: p P
+  * line joining: J
+
 ### Breaking
 
-`LTerm_read_line: class virtual ['a] term`: the type signature of `method private exec` is changed to `?keys : LTerm_key.t list -> action list -> 'a loop_result Lwt.t` from `method private exec : action list -> 'a Lwt.t`
+  * `LTerm_read_line
+    * class virtual ['a] term`: the type signature of `method private exec` is changed
+      from
+      `method private exec : action list -> 'a Lwt.t`
+      to
+      `?keys : LTerm_key.t list -> action list -> 'a loop_result Lwt.t`
 
-Since this is a private method and is intended to be used internally, the backward-compatibility is not affeted in most cases.
+Since this is a private method and is intended to be used internally, the backward-compatibility will not be affected in most cases.
 
 ### General
 
