@@ -232,16 +232,21 @@ module Vi :
               set_keyseq : ?step:React.step -> keyseq -> unit;
               mutable resolver_insert : t;
               mutable resolver_normal : t;
+              mutable resolver_visual : t;
               mutable resolver_command : t;
             }
             val resolver_dummy : 'a -> keyseq -> result
             val resolver_insert : status -> Mew_vi.Key.t list -> result
-            module Normal :
+            module Common :
               sig
                 val try_count :
                   (int option -> 'a -> keyseq -> result) ->
                   'a -> keyseq -> result
-                val try_motion : int option -> 'a -> keyseq -> result
+                val try_motion :
+                  Mew_vi.Mode.name -> int option -> 'a -> keyseq -> result
+              end
+            module Normal :
+              sig
                 val try_change_mode : status -> keyseq -> result
                 val try_modify : int option -> 'a -> keyseq -> result
                 val try_insert : int option -> 'a -> keyseq -> result
@@ -249,11 +254,23 @@ module Vi :
                   int option -> 'a -> keyseq -> result
                 val resolver_normal : status -> keyseq -> result
               end
+            module Visual :
+              sig
+                val try_change_mode : status -> keyseq -> result
+                val try_motion : int option -> status -> keyseq -> result
+                val try_modify : 'a -> keyseq -> result
+                val try_motion_modify :
+                  int option -> status -> keyseq -> result
+                val resolver_visual : status -> keyseq -> result
+              end
             val make_status :
               ?mode:Mew_vi.Mode.Name.t ->
               ?keyseq:keyseq ->
               ?resolver_insert:t ->
-              ?resolver_normal:t -> ?resolver_command:t -> unit -> status
+              ?resolver_normal:t ->
+              ?resolver_visual:t ->
+              ?resolver_command:t ->
+              unit -> status
             val interpret :
               ?resolver:t ->
               ?keyseq:keyseq ->

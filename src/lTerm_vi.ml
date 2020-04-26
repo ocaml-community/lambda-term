@@ -2542,5 +2542,28 @@ let perform ctx exec action=
   | Join count->
     exec @@
       (list_make (Edit (Zed (Zed_edit.Join_line))) count)
-  | ChangeMode _mode-> return (ContinueLoop [])
+  | DeleteSelected->
+    let edit= Zed_edit.edit ctx in
+    if Zed_edit.get_selection edit then
+      let a = Zed_edit.position ctx and b = Zed_cursor.get_position (Zed_edit.mark edit) in
+      let a = min a b and b = max a b in
+      delete a (b+1 - a)
+    else
+      return (ContinueLoop [])
+  | YankSelected->
+    let edit= Zed_edit.edit ctx in
+    if Zed_edit.get_selection edit then
+      let a = Zed_edit.position ctx and b = Zed_cursor.get_position (Zed_edit.mark edit) in
+      let a = min a b and b = max a b in
+      yank a (b+1 - a)
+    else
+      return (ContinueLoop [])
+  | ChangeMode mode->
+    let edit= Zed_edit.edit ctx in
+    (match mode with
+    | Insert-> Zed_edit.set_selection edit false
+    | Normal-> Zed_edit.set_selection edit false
+    | Visual-> Zed_edit.set_mark ctx
+    | Commandline-> Zed_edit.set_selection edit false);
+    return (ContinueLoop [])
 
