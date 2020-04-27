@@ -46,7 +46,7 @@ let () =
           let history = LTerm_history.create [] in
           LTerm_history.load history fn >>= fun () ->
           Sys.remove fn;
-          if check nproc count 0 (List.sort compare (List.map int_of_string (LTerm_history.contents history))) then begin
+          if check nproc count 0 (List.sort compare (List.map int_of_string (LTerm_history.contents history |> List.map Zed_string.to_utf8))) then begin
             prerr_endline "success";
             exit 0
           end else begin
@@ -54,7 +54,7 @@ let () =
             exit 1
           end
         )
-    | [|name; fn; s1; s2; s3|] ->
+    | [|_name; fn; s1; s2; s3|] ->
         Lwt_main.run (
           let nproc = int_of_string s1
           and count = int_of_string s2
@@ -64,7 +64,7 @@ let () =
             if i >= count then
               return ()
             else begin
-              LTerm_history.add history (string_of_int (start + i * nproc));
+              LTerm_history.add history (Zed_string.of_utf8 (string_of_int (start + i * nproc)));
               assert (LTerm_history.length history = i + 1 && LTerm_history.old_count history = i);
               LTerm_history.save history fn >>= fun () ->
               loop (i + 1)
