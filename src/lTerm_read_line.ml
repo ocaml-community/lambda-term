@@ -1163,7 +1163,7 @@ object(self)
   (* The main loop. *)
   method private loop =
     Lwt.pick [
-      Lwt.(>|=) (LTerm.read_event term) (fun ev-> Ev ev);
+      (Lwt.pause () >>= fun ()-> Lwt.(>|=) (LTerm.read_event term) (fun ev-> Ev ev));
       Lwt.(>|=) (Lwt_mvar.take result) (fun r-> Loop_result r);
       Lwt.(>|=) (Lwt_mvar.take self#interrupt) (fun e-> Interrupted e);
       ]
