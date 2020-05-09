@@ -218,7 +218,9 @@ module Vi :
       sig
         module Register :
           sig
-            type t= Seq of string | Line of string
+            type t= string
+            type content= Seq of string | Line of string
+            val compare_content : content -> content -> int
           end
         module RegisterMap : Map.S with type key = Register.t
 
@@ -235,7 +237,7 @@ module Vi :
               set_mode: ?step:React.step -> Mew_vi.Mode.Name.t -> unit;
               keyseq: keyseq React.signal;
               set_keyseq: ?step:React.step -> keyseq -> unit;
-              mutable registers : string RegisterMap.t;
+              mutable registers : Register.content RegisterMap.t;
               mutable resolver_insert: t;
               mutable resolver_normal: t;
               mutable resolver_visual: t;
@@ -277,7 +279,7 @@ module Vi :
             val make_config :
               ?mode:Mew_vi.Mode.Name.t ->
               ?keyseq:keyseq ->
-              ?registers:string RegisterMap.t ->
+              ?registers:Register.content RegisterMap.t ->
               ?resolver_insert:t ->
               ?resolver_normal:t ->
               ?resolver_visual:t ->
@@ -311,6 +313,8 @@ class edit :
     method o : Mew_vi.Key.t Lwt_mvar.t
     method setMode : Vi.Base.Mode.name -> unit
     method timeout : float
+    method get_register : string -> Vi.Interpret.Register.content option
+    method set_register : string -> Vi.Interpret.Register.content -> unit
   end
 class state :
   object
