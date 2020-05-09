@@ -887,7 +887,7 @@ let perform ctx exec action=
     | _-> return (ContinueLoop []))
   | Motion (motion, count)->
     (match motion with
-    | Left n->
+    | Left->
       let rec left n=
         if n > 0 then
           let pos, _delta= Query.left n ctx in
@@ -900,8 +900,8 @@ let perform ctx exec action=
         else
           return (ContinueLoop [])
       in
-      left (count*n)
-    | Right n->
+      left count
+    | Right->
       let rec right n=
         if n > 0 then
           let pos, _delta= Query.right n ctx in
@@ -914,8 +914,8 @@ let perform ctx exec action=
         else
           return (ContinueLoop [])
       in
-      right (count*n)
-    | Right_nl n->
+      right count
+    | Right_nl->
       let newline= true in
       let rec right n=
         if n > 0 then
@@ -929,18 +929,18 @@ let perform ctx exec action=
         else
           return (ContinueLoop [])
       in
-      right (count*n)
-    | Upward n->
+      right count
+    | Upward->
       exec
         (list_make
           (Edit (Zed Zed_edit.Prev_line))
-          (count*n))
-    | Downward n->
+          count)
+    | Downward->
       exec
         (list_make
           (Edit (Zed Zed_edit.Next_line))
-          (count*n))
-    | Word n->
+          count)
+    | Word->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop= Query.get_boundary true ctx in
@@ -958,8 +958,8 @@ let perform ctx exec action=
         else
           return (ContinueLoop [])
       in
-      next_word (count*n)
-    | WORD n->
+      next_word count
+    | WORD->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop= Query.get_boundary true ctx in
@@ -977,8 +977,8 @@ let perform ctx exec action=
         else
           return (ContinueLoop [])
       in
-      next_word (count*n)
-    | Word_back n->
+      next_word count
+    | Word_back->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let start, stop= Query.get_boundary true ctx in
@@ -997,8 +997,8 @@ let perform ctx exec action=
         else
           return (ContinueLoop [])
       in
-      prev_word (count*n)
-    | WORD_back n->
+      prev_word count
+    | WORD_back->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let start, stop= Query.get_boundary true ctx in
@@ -1016,8 +1016,8 @@ let perform ctx exec action=
         else
           return (ContinueLoop [])
       in
-      prev_word (count*n)
-    | Word_end n->
+      prev_word count
+    | Word_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop= Query.get_boundary true ctx in
@@ -1036,8 +1036,8 @@ let perform ctx exec action=
         else
           return (ContinueLoop [])
       in
-      next_word (count*n)
-    | WORD_end n->
+      next_word count
+    | WORD_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop= Query.get_boundary true ctx in
@@ -1056,8 +1056,8 @@ let perform ctx exec action=
         else
           return (ContinueLoop [])
       in
-      next_word (count*n)
-    | Word_back_end n->
+      next_word count
+    | Word_back_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let start, stop= Query.get_boundary true ctx in
@@ -1075,8 +1075,8 @@ let perform ctx exec action=
         else
           return (ContinueLoop [])
       in
-      prev_word (count*n)
-    | WORD_back_end n->
+      prev_word count
+    | WORD_back_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let start, stop= Query.get_boundary true ctx in
@@ -1094,17 +1094,17 @@ let perform ctx exec action=
         else
           return (ContinueLoop [])
       in
-      prev_word (count*n)
-    | Line_FirstChar n->
+      prev_word count
+    | Line_FirstChar->
       exec
         (list_make
           (Edit (Zed Zed_edit.Goto_bol))
-          (count*n))
-    | Line_FirstNonBlank _n->
+          count)
+    | Line_FirstNonBlank->
       let nonblank= Query.line_FirstNonBlank 1 ctx in
       exec
         [Edit (Zed (Zed_edit.Goto nonblank))]
-    | Line_LastChar n->
+    | Line_LastChar->
       let rec lastChar n=
         if n > 0 then
           let pos= Query.line_LastChar n ctx in
@@ -1116,8 +1116,8 @@ let perform ctx exec action=
         else
           return (ContinueLoop [])
       in
-      lastChar (count*n)
-    | Line_LastChar_nl n->
+      lastChar count
+    | Line_LastChar_nl->
       let newline= true in
       let rec lastChar n=
         if n > 0 then
@@ -1130,7 +1130,7 @@ let perform ctx exec action=
         else
           return (ContinueLoop [])
       in
-      lastChar (count*n)
+      lastChar count
     | GotoLine_first->
       exec [Edit (Zed (Zed_edit.Goto_bot))]
     | GotoLine_last->
@@ -1224,29 +1224,29 @@ let perform ctx exec action=
         exec [ Edit (Zed (Zed_edit.Goto pos)) ]
       | None-> return (ContinueLoop []))
     | _-> return (ContinueLoop []))
-  | Delete (motion, count)->
+  | Delete (_register, motion, count)->
     (match motion with
-    | Left n->
-      let pos, delta= Query.left (count*n) ctx in
+    | Left->
+      let pos, delta= Query.left count ctx in
       delete pos delta
-    | Right n->
+    | Right->
       let newline=true in
-      let pos, delta= Query.right ~newline (count*n) ctx in
+      let pos, delta= Query.right ~newline count ctx in
       let pos= pos - delta in
       delete pos delta
-    | Right_nl n->
+    | Right_nl->
       let newline= true in
-      let pos, delta= Query.right ~newline (count*n) ctx in
+      let pos, delta= Query.right ~newline count ctx in
       let pos= pos - delta in
       exec [
         Edit (Zed (Zed_edit.Goto pos));
         Edit (Zed (Zed_edit.Kill_next_chars delta));
         ]
-    | Upward n->
+    | Upward->
       let edit= Zed_edit.edit ctx in
       let lines= Zed_edit.lines edit in
       let line= Zed_edit.line ctx in
-      let dest= max 0 (line - count * n) in
+      let dest= max 0 (line - count) in
       let line_delta = line - dest in
       if line_delta > 0 then
         let pos_start= Zed_lines.line_start lines dest
@@ -1255,12 +1255,12 @@ let perform ctx exec action=
         delete pos_start pos_delta
       else
         return (ContinueLoop [])
-    | Downward n->
+    | Downward->
       let edit= Zed_edit.edit ctx in
       let lines= Zed_edit.lines edit in
       let line_count= Zed_lines.count lines in
       let line= Zed_edit.line ctx in
-      let dest= min line_count (line + count * n) in
+      let dest= min line_count (line + count) in
       let line_delta = dest - line in
       if line_delta > 0 then
         let pos_start= Zed_lines.line_start lines line
@@ -1287,12 +1287,12 @@ let perform ctx exec action=
         else pos_end in
       let pos_delta= pos_end - pos_start in
       delete pos_start pos_delta
-    | Word n->
+    | Word->
       let pos= Zed_edit.position ctx in
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop=
-        if count * n > 1 then
+        if count > 1 then
           Query.get_boundary true ctx
         else
           Query.get_boundary false ctx
@@ -1306,15 +1306,15 @@ let perform ctx exec action=
         else
           pos
       in
-      let next_pos = next_word pos (count*n) in
+      let next_pos = next_word pos count in
       let delta= next_pos - pos in
       delete pos delta
-    | WORD n->
+    | WORD->
       let pos= Zed_edit.position ctx in
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop=
-        if count * n > 1 then
+        if count > 1 then
           Query.get_boundary true ctx
         else
           Query.get_boundary false ctx
@@ -1328,10 +1328,10 @@ let perform ctx exec action=
         else
           pos
       in
-      let next_pos = next_word pos (count*n) in
+      let next_pos = next_word pos count in
       let delta= next_pos - pos in
       delete pos delta
-    | Word_back n->
+    | Word_back->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let start, stop= Query.get_boundary true ctx in
@@ -1346,10 +1346,10 @@ let perform ctx exec action=
         else
           pos
       in
-      let prev_pos= prev_word pos (count*n) in
+      let prev_pos= prev_word pos count in
       let delta= pos - prev_pos in
       delete prev_pos delta
-    | WORD_back n->
+    | WORD_back->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let start, stop= Query.get_boundary true ctx in
@@ -1364,10 +1364,10 @@ let perform ctx exec action=
         else
           pos
       in
-      let prev_pos= prev_word pos (count*n) in
+      let prev_pos= prev_word pos count in
       let delta= pos - prev_pos in
       delete prev_pos delta
-    | Word_end n->
+    | Word_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop= Query.get_boundary true ctx in
@@ -1381,10 +1381,10 @@ let perform ctx exec action=
         else
           pos
       in
-      let next_pos= next_word pos (count*n) in
+      let next_pos= next_word pos count in
       let delta= next_pos + 1 - pos in
       delete pos delta
-    | WORD_end n->
+    | WORD_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop= Query.get_boundary true ctx in
@@ -1398,10 +1398,10 @@ let perform ctx exec action=
         else
           pos
       in
-      let next_pos= next_word pos (count*n) in
+      let next_pos= next_word pos count in
       let delta= next_pos + 1 - pos in
       delete pos delta
-    | Word_back_end n->
+    | Word_back_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       if Zed_rope.length text <= 0 then return (ContinueLoop []) else
@@ -1416,10 +1416,10 @@ let perform ctx exec action=
         else
           pos
       in
-      let dest= prev_word pos (count*n) in
+      let dest= prev_word pos count in
       let delta= pos - dest + 1 in
       delete dest delta
-    | WORD_back_end n->
+    | WORD_back_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       if Zed_rope.length text <= 0 then return (ContinueLoop []) else
@@ -1434,48 +1434,48 @@ let perform ctx exec action=
         else
           pos
       in
-      let dest= prev_word pos (count*n) in
+      let dest= prev_word pos count in
       let delta= pos - dest + 1 in
       delete dest delta
-    | Line_FirstChar _n->
+    | Line_FirstChar->
       let edit= Zed_edit.edit ctx in
       let lines= Zed_edit.lines edit in
       let line= Zed_edit.line ctx in
       let pos= Zed_edit.position ctx in
       let start= Zed_lines.line_start lines line in
       delete start (pos - start)
-    | Line_FirstNonBlank _n->
+    | Line_FirstNonBlank->
       let pos= Zed_edit.position ctx in
       let nonblank= Query.line_FirstNonBlank 1 ctx in
       (if nonblank < pos then
         delete nonblank (pos - nonblank)
       else
         delete pos (nonblank - pos))
-    | Line_LastChar n->
+    | Line_LastChar->
       let pos= Zed_edit.position ctx in
-      let next= Query.line_LastChar (count*n) ctx in
+      let next= Query.line_LastChar count ctx in
       delete pos (next+1 - pos)
-    | Line_LastChar_nl n->
+    | Line_LastChar_nl->
       let newline= true in
       let pos= Zed_edit.position ctx in
-      let next= Query.line_LastChar ~newline (count*n) ctx in
+      let next= Query.line_LastChar ~newline count ctx in
       delete pos (next+1 - pos)
-    | Parenthesis_include n->
-      pare_include Zed_char.(of_utf8 "(", of_utf8 ")") (n*count) delete
-    | Parenthesis_inner n->
-      pare_inner Zed_char.(of_utf8 "(", of_utf8 ")") (n*count) delete
-    | Bracket_include n->
-      pare_include Zed_char.(of_utf8 "[", of_utf8 "]") (n*count) delete
-    | Bracket_inner n->
-      pare_inner Zed_char.(of_utf8 "[", of_utf8 "]") (n*count) delete
-    | AngleBracket_include n->
-      pare_include Zed_char.(of_utf8 "<", of_utf8 ">") (n*count) delete
-    | AngleBracket_inner n->
-      pare_inner Zed_char.(of_utf8 "<", of_utf8 ">") (n*count) delete
-    | Brace_include n->
-      pare_include Zed_char.(of_utf8 "{", of_utf8 "}") (n*count) delete
-    | Brace_inner n->
-      pare_inner Zed_char.(of_utf8 "{", of_utf8 "}") (n*count) delete
+    | Parenthesis_include->
+      pare_include Zed_char.(of_utf8 "(", of_utf8 ")") count delete
+    | Parenthesis_inner->
+      pare_inner Zed_char.(of_utf8 "(", of_utf8 ")") count delete
+    | Bracket_include->
+      pare_include Zed_char.(of_utf8 "[", of_utf8 "]") count delete
+    | Bracket_inner->
+      pare_inner Zed_char.(of_utf8 "[", of_utf8 "]") count delete
+    | AngleBracket_include->
+      pare_include Zed_char.(of_utf8 "<", of_utf8 ">") count delete
+    | AngleBracket_inner->
+      pare_inner Zed_char.(of_utf8 "<", of_utf8 ">") count delete
+    | Brace_include->
+      pare_include Zed_char.(of_utf8 "{", of_utf8 "}") count delete
+    | Brace_inner->
+      pare_inner Zed_char.(of_utf8 "{", of_utf8 "}") count delete
     | Occurrence_inline chr->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
@@ -1568,12 +1568,12 @@ let perform ctx exec action=
         else
           delete dest (pos+1 - dest))
       | None-> return (ContinueLoop []))
-    | Word_include num->
+    | Word_include->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
       let _start, stop=
-        if count * num > 1 then
+        if count > 1 then
           Query.get_boundary true ctx
         else
           Query.get_boundary false ctx
@@ -1596,16 +1596,16 @@ let perform ctx exec action=
         else
           None
       in
-      (match move_n pos (num*count) with
+      (match move_n pos count with
       | Some (word_begin, word_end)->
         delete word_begin (word_end+1 - word_begin)
       | None-> return (ContinueLoop []))
-    | WORD_include num->
+    | WORD_include->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
       let _start, stop=
-        if count * num > 1 then
+        if count > 1 then
           Query.get_boundary true ctx
         else
           Query.get_boundary false ctx
@@ -1628,11 +1628,11 @@ let perform ctx exec action=
         else
           None
       in
-      (match move_n pos (num*count) with
+      (match move_n pos count with
       | Some (word_begin, word_end)->
         delete word_begin (word_end+1 - word_begin)
       | None-> return (ContinueLoop []))
-    | Word_inner _num->
+    | Word_inner->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
@@ -1641,7 +1641,7 @@ let perform ctx exec action=
       | Some (word_begin, word_end)->
         delete word_begin (word_end+1 - word_begin)
       | None-> return (ContinueLoop []))
-    | WORD_inner _num->
+    | WORD_inner->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
@@ -1650,36 +1650,36 @@ let perform ctx exec action=
       | Some (word_begin, word_end)->
         delete word_begin (word_end+1 - word_begin)
       | None-> return (ContinueLoop []))
-    | Quote_inner (chr, _num)->
+    | Quote_inner chr->
       let quote= Zed_char.of_utf8 chr in
       pare_inner (quote, quote) 1 delete
-    | Quote_include (chr, num)->
+    | Quote_include chr->
       let quote= Zed_char.of_utf8 chr in
-      pare_include (quote, quote) (num*count) delete
+      pare_include (quote, quote) count delete
     | _-> return (ContinueLoop []))
-  | Change (motion, count)->
+  | Change (_register, motion, count)->
     (match motion with
-    | Left n->
-      let pos, delta= Query.left (count*n) ctx in
+    | Left->
+      let pos, delta= Query.left count ctx in
       change pos delta
-    | Right n->
+    | Right->
       let newline= true in
-      let pos, delta= Query.right ~newline (count*n) ctx in
+      let pos, delta= Query.right ~newline count ctx in
       let pos= pos - delta in
       change pos delta
-    | Right_nl n->
+    | Right_nl->
       let newline= true in
-      let pos, delta= Query.right ~newline (count*n) ctx in
+      let pos, delta= Query.right ~newline count ctx in
       let pos= pos - delta in
       exec [
         Edit (Zed (Zed_edit.Goto pos));
         Edit (Zed (Zed_edit.Kill_next_chars delta));
         ]
-    | Upward n->
+    | Upward->
       let edit= Zed_edit.edit ctx in
       let lines= Zed_edit.lines edit in
       let line= Zed_edit.line ctx in
-      let dest= max 0 (line - count * n) in
+      let dest= max 0 (line - count) in
       let line_delta = line - dest in
       if line_delta > 0 then
         let pos_start= Zed_lines.line_start lines dest
@@ -1688,12 +1688,12 @@ let perform ctx exec action=
         change pos_start pos_delta
       else
         return (ContinueLoop [])
-    | Downward n->
+    | Downward->
       let edit= Zed_edit.edit ctx in
       let lines= Zed_edit.lines edit in
       let line_count= Zed_lines.count lines in
       let line= Zed_edit.line ctx in
-      let dest= min line_count (line + count * n) in
+      let dest= min line_count (line + count) in
       let line_delta = dest - line in
       if line_delta > 0 then
         let pos_start= Zed_lines.line_start lines line
@@ -1706,12 +1706,12 @@ let perform ctx exec action=
         change pos_start pos_delta
       else
         return (ContinueLoop [])
-    | Word n->
+    | Word->
       let pos= Zed_edit.position ctx in
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop=
-        if count * n > 1 then
+        if count > 1 then
           Query.get_boundary true ctx
         else
           Query.get_boundary false ctx
@@ -1725,15 +1725,15 @@ let perform ctx exec action=
         else
           pos
       in
-      let next_pos = next_word pos (count*n) in
+      let next_pos = next_word pos count in
       let delta= next_pos - pos in
       change pos delta
-    | WORD n->
+    | WORD->
       let pos= Zed_edit.position ctx in
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop=
-        if count * n > 1 then
+        if count > 1 then
           Query.get_boundary true ctx
         else
           Query.get_boundary false ctx
@@ -1747,10 +1747,10 @@ let perform ctx exec action=
         else
           pos
       in
-      let next_pos = next_word pos (count*n) in
+      let next_pos = next_word pos count in
       let delta= next_pos - pos in
       change pos delta
-    | Word_back n->
+    | Word_back->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let start, stop= Query.get_boundary true ctx in
@@ -1765,10 +1765,10 @@ let perform ctx exec action=
         else
           pos
       in
-      let prev_pos= prev_word pos (count*n) in
+      let prev_pos= prev_word pos count in
       let delta= pos - prev_pos in
       change prev_pos delta
-    | WORD_back n->
+    | WORD_back->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let start, stop= Query.get_boundary true ctx in
@@ -1783,10 +1783,10 @@ let perform ctx exec action=
         else
           pos
       in
-      let prev_pos= prev_word pos (count*n) in
+      let prev_pos= prev_word pos count in
       let delta= pos - prev_pos in
       change prev_pos delta
-    | Word_end n->
+    | Word_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop= Query.get_boundary true ctx in
@@ -1800,10 +1800,10 @@ let perform ctx exec action=
         else
           pos
       in
-      let next_pos= next_word pos (count*n) in
+      let next_pos= next_word pos count in
       let delta= next_pos + 1 - pos in
       change pos delta
-    | WORD_end n->
+    | WORD_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop= Query.get_boundary true ctx in
@@ -1817,10 +1817,10 @@ let perform ctx exec action=
         else
           pos
       in
-      let next_pos= next_word pos (count*n) in
+      let next_pos= next_word pos count in
       let delta= next_pos + 1 - pos in
       change pos delta
-    | Word_back_end n->
+    | Word_back_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       if Zed_rope.length text <= 0 then return (ContinueLoop []) else
@@ -1835,10 +1835,10 @@ let perform ctx exec action=
         else
           pos
       in
-      let dest= prev_word pos (count*n) in
+      let dest= prev_word pos count in
       let delta= pos - dest + 1 in
       change dest delta
-    | WORD_back_end n->
+    | WORD_back_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       if Zed_rope.length text <= 0 then return (ContinueLoop []) else
@@ -1853,48 +1853,48 @@ let perform ctx exec action=
         else
           pos
       in
-      let dest= prev_word pos (count*n) in
+      let dest= prev_word pos count in
       let delta= pos - dest + 1 in
       change dest delta
-    | Line_FirstChar _n->
+    | Line_FirstChar->
       let edit= Zed_edit.edit ctx in
       let lines= Zed_edit.lines edit in
       let line= Zed_edit.line ctx in
       let pos= Zed_edit.position ctx in
       let start= Zed_lines.line_start lines line in
       change start (pos - start)
-    | Line_FirstNonBlank _n->
+    | Line_FirstNonBlank->
       let pos= Zed_edit.position ctx in
       let nonblank= Query.line_FirstNonBlank 1 ctx in
       (if nonblank < pos then
         change nonblank (pos - nonblank)
       else
         change pos (nonblank - pos))
-    | Line_LastChar n->
+    | Line_LastChar->
       let pos= Zed_edit.position ctx in
-      let next= Query.line_LastChar (count*n) ctx in
+      let next= Query.line_LastChar count ctx in
       change pos (next+1 - pos)
-    | Line_LastChar_nl n->
+    | Line_LastChar_nl->
       let newline= true in
       let pos= Zed_edit.position ctx in
-      let next= Query.line_LastChar ~newline (count*n) ctx in
+      let next= Query.line_LastChar ~newline count ctx in
       change pos (next+1 - pos)
-    | Parenthesis_include n->
-      pare_include Zed_char.(of_utf8 "(", of_utf8 ")") (n*count) change
-    | Parenthesis_inner n->
-      pare_inner Zed_char.(of_utf8 "(", of_utf8 ")") (n*count) change
-    | Bracket_include n->
-      pare_include Zed_char.(of_utf8 "[", of_utf8 "]") (n*count) change
-    | Bracket_inner n->
-      pare_inner Zed_char.(of_utf8 "[", of_utf8 "]") (n*count) change
-    | AngleBracket_include n->
-      pare_include Zed_char.(of_utf8 "<", of_utf8 ">") (n*count) change
-    | AngleBracket_inner n->
-      pare_inner Zed_char.(of_utf8 "<", of_utf8 ">") (n*count) change
-    | Brace_include n->
-      pare_include Zed_char.(of_utf8 "{", of_utf8 "}") (n*count) change
-    | Brace_inner n->
-      pare_inner Zed_char.(of_utf8 "{", of_utf8 "}") (n*count) change
+    | Parenthesis_include->
+      pare_include Zed_char.(of_utf8 "(", of_utf8 ")") count change
+    | Parenthesis_inner->
+      pare_inner Zed_char.(of_utf8 "(", of_utf8 ")") count change
+    | Bracket_include->
+      pare_include Zed_char.(of_utf8 "[", of_utf8 "]") count change
+    | Bracket_inner->
+      pare_inner Zed_char.(of_utf8 "[", of_utf8 "]") count change
+    | AngleBracket_include->
+      pare_include Zed_char.(of_utf8 "<", of_utf8 ">") count change
+    | AngleBracket_inner->
+      pare_inner Zed_char.(of_utf8 "<", of_utf8 ">") count change
+    | Brace_include->
+      pare_include Zed_char.(of_utf8 "{", of_utf8 "}") count change
+    | Brace_inner->
+      pare_inner Zed_char.(of_utf8 "{", of_utf8 "}") count change
     | Occurrence_inline chr->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
@@ -1987,12 +1987,12 @@ let perform ctx exec action=
         else
           change dest (pos+1 - dest))
       | None-> return (ContinueLoop []))
-    | Word_include num->
+    | Word_include->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
       let _start, stop=
-        if count * num > 1 then
+        if count > 1 then
           Query.get_boundary true ctx
         else
           Query.get_boundary false ctx
@@ -2015,16 +2015,16 @@ let perform ctx exec action=
         else
           None
       in
-      (match move_n pos (num*count) with
+      (match move_n pos count with
       | Some (word_begin, word_end)->
         change word_begin (word_end+1 - word_begin)
       | None-> return (ContinueLoop []))
-    | WORD_include num->
+    | WORD_include->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
       let _start, stop=
-        if count * num > 1 then
+        if count > 1 then
           Query.get_boundary true ctx
         else
           Query.get_boundary false ctx
@@ -2047,11 +2047,11 @@ let perform ctx exec action=
         else
           None
       in
-      (match move_n pos (num*count) with
+      (match move_n pos count with
       | Some (word_begin, word_end)->
         change word_begin (word_end+1 - word_begin)
       | None-> return (ContinueLoop []))
-    | Word_inner _num->
+    | Word_inner->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
@@ -2060,7 +2060,7 @@ let perform ctx exec action=
       | Some (word_begin, word_end)->
         change word_begin (word_end+1 - word_begin)
       | None-> return (ContinueLoop []))
-    | WORD_inner _num->
+    | WORD_inner->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
@@ -2069,36 +2069,36 @@ let perform ctx exec action=
       | Some (word_begin, word_end)->
         change word_begin (word_end+1 - word_begin)
       | None-> return (ContinueLoop []))
-    | Quote_inner (chr, _num)->
+    | Quote_inner chr->
       let quote= Zed_char.of_utf8 chr in
       pare_inner (quote, quote) 1 change
-    | Quote_include (chr, num)->
+    | Quote_include chr->
       let quote= Zed_char.of_utf8 chr in
-      pare_include (quote, quote) (num*count) change
+      pare_include (quote, quote) count change
     | _-> return (ContinueLoop []))
-  | Yank (motion, count)->
+  | Yank (_register, motion, count)->
     (match motion with
-    | Left n->
-      let pos, delta= Query.left (count*n) ctx in
+    | Left->
+      let pos, delta= Query.left count ctx in
       Zed_edit.copy_sequence ctx pos delta;
       return (ContinueLoop [])
-    | Right n->
+    | Right->
       let newline=true in
-      let pos, delta= Query.right ~newline (count*n) ctx in
+      let pos, delta= Query.right ~newline count ctx in
       let pos= pos - delta in
       Zed_edit.copy_sequence ctx pos delta;
       return (ContinueLoop [])
-    | Right_nl n->
+    | Right_nl->
       let newline= true in
-      let pos, delta= Query.right ~newline (count*n) ctx in
+      let pos, delta= Query.right ~newline count ctx in
       let pos= pos - delta in
       Zed_edit.copy_sequence ctx pos delta;
       return (ContinueLoop [])
-    | Upward n->
+    | Upward->
       let edit= Zed_edit.edit ctx in
       let lines= Zed_edit.lines edit in
       let line= Zed_edit.line ctx in
-      let dest= max 0 (line - count * n) in
+      let dest= max 0 (line - count) in
       let line_delta = line - dest in
       if line_delta > 0 then
         let pos_start= Zed_lines.line_start lines dest
@@ -2108,12 +2108,12 @@ let perform ctx exec action=
         return (ContinueLoop [])
       else
         return (ContinueLoop [])
-    | Downward n->
+    | Downward->
       let edit= Zed_edit.edit ctx in
       let lines= Zed_edit.lines edit in
       let line_count= Zed_lines.count lines in
       let line= Zed_edit.line ctx in
-      let dest= min line_count (line + count * n) in
+      let dest= min line_count (line + count) in
       let line_delta = dest - line in
       if line_delta > 0 then
         let pos_start= Zed_lines.line_start lines line
@@ -2142,12 +2142,12 @@ let perform ctx exec action=
       let pos_delta= pos_end - pos_start in
       Zed_edit.copy_sequence ctx pos_start pos_delta;
       return (ContinueLoop [])
-    | Word n->
+    | Word->
       let pos= Zed_edit.position ctx in
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop=
-        if count * n > 1 then
+        if count > 1 then
           Query.get_boundary true ctx
         else
           Query.get_boundary false ctx
@@ -2161,16 +2161,16 @@ let perform ctx exec action=
         else
           pos
       in
-      let next_pos = next_word pos (count*n) in
+      let next_pos = next_word pos count in
       let delta= next_pos - pos in
       Zed_edit.copy_sequence ctx pos delta;
       return (ContinueLoop [])
-    | WORD n->
+    | WORD->
       let pos= Zed_edit.position ctx in
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop=
-        if count * n > 1 then
+        if count > 1 then
           Query.get_boundary true ctx
         else
           Query.get_boundary false ctx
@@ -2184,11 +2184,11 @@ let perform ctx exec action=
         else
           pos
       in
-      let next_pos = next_word pos (count*n) in
+      let next_pos = next_word pos count in
       let delta= next_pos - pos in
       Zed_edit.copy_sequence ctx pos delta;
       return (ContinueLoop [])
-    | Word_back n->
+    | Word_back->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let start, stop= Query.get_boundary true ctx in
@@ -2203,11 +2203,11 @@ let perform ctx exec action=
         else
           pos
       in
-      let prev_pos= prev_word pos (count*n) in
+      let prev_pos= prev_word pos count in
       let delta= pos - prev_pos in
       Zed_edit.copy_sequence ctx prev_pos delta;
       return (ContinueLoop [])
-    | WORD_back n->
+    | WORD_back->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let start, stop= Query.get_boundary true ctx in
@@ -2222,11 +2222,11 @@ let perform ctx exec action=
         else
           pos
       in
-      let prev_pos= prev_word pos (count*n) in
+      let prev_pos= prev_word pos count in
       let delta= pos - prev_pos in
       Zed_edit.copy_sequence ctx prev_pos delta;
       return (ContinueLoop [])
-    | Word_end n->
+    | Word_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop= Query.get_boundary true ctx in
@@ -2240,11 +2240,11 @@ let perform ctx exec action=
         else
           pos
       in
-      let next_pos= next_word pos (count*n) in
+      let next_pos= next_word pos count in
       let delta= next_pos + 1 - pos in
       Zed_edit.copy_sequence ctx pos delta;
       return (ContinueLoop [])
-    | WORD_end n->
+    | WORD_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let _start, stop= Query.get_boundary true ctx in
@@ -2258,11 +2258,11 @@ let perform ctx exec action=
         else
           pos
       in
-      let next_pos= next_word pos (count*n) in
+      let next_pos= next_word pos count in
       let delta= next_pos + 1 - pos in
       Zed_edit.copy_sequence ctx pos delta;
       return (ContinueLoop [])
-    | Word_back_end n->
+    | Word_back_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       if Zed_rope.length text <= 0 then return (ContinueLoop []) else
@@ -2277,11 +2277,11 @@ let perform ctx exec action=
         else
           pos
       in
-      let dest= prev_word pos (count*n) in
+      let dest= prev_word pos count in
       let delta= pos - dest + 1 in
       Zed_edit.copy_sequence ctx dest delta;
       return (ContinueLoop [])
-    | WORD_back_end n->
+    | WORD_back_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       if Zed_rope.length text <= 0 then return (ContinueLoop []) else
@@ -2296,11 +2296,11 @@ let perform ctx exec action=
         else
           pos
       in
-      let dest= prev_word pos (count*n) in
+      let dest= prev_word pos count in
       let delta= pos - dest + 1 in
       Zed_edit.copy_sequence ctx dest delta;
       return (ContinueLoop [])
-    | Line_FirstChar _n->
+    | Line_FirstChar->
       let edit= Zed_edit.edit ctx in
       let lines= Zed_edit.lines edit in
       let line= Zed_edit.line ctx in
@@ -2308,7 +2308,7 @@ let perform ctx exec action=
       let start= Zed_lines.line_start lines line in
       Zed_edit.copy_sequence ctx start (pos - start);
       return (ContinueLoop [])
-    | Line_FirstNonBlank _n->
+    | Line_FirstNonBlank->
       let pos= Zed_edit.position ctx in
       let nonblank= Query.line_FirstNonBlank 1 ctx in
       if nonblank < pos then
@@ -2316,33 +2316,33 @@ let perform ctx exec action=
       else
         Zed_edit.copy_sequence ctx nonblank (pos - nonblank);
       return (ContinueLoop [])
-    | Line_LastChar n->
+    | Line_LastChar->
       let pos= Zed_edit.position ctx in
-      let next= Query.line_LastChar (count*n) ctx in
+      let next= Query.line_LastChar count ctx in
       Zed_edit.copy_sequence ctx pos (next+1 - pos);
       return (ContinueLoop [])
-    | Line_LastChar_nl n->
+    | Line_LastChar_nl->
       let newline= true in
       let pos= Zed_edit.position ctx in
-      let next= Query.line_LastChar ~newline (count*n) ctx in
+      let next= Query.line_LastChar ~newline count ctx in
       Zed_edit.copy_sequence ctx pos (next+1 - pos);
       return (ContinueLoop [])
-    | Parenthesis_include n->
-      pare_include Zed_char.(of_utf8 "(", of_utf8 ")") (n*count) yank
-    | Parenthesis_inner n->
-      pare_inner Zed_char.(of_utf8 "(", of_utf8 ")") (n*count) yank
-    | Bracket_include n->
-      pare_include Zed_char.(of_utf8 "[", of_utf8 "]") (n*count) yank
-    | Bracket_inner n->
-      pare_inner Zed_char.(of_utf8 "[", of_utf8 "]") (n*count) yank
-    | AngleBracket_include n->
-      pare_include Zed_char.(of_utf8 "<", of_utf8 ">") (n*count) yank
-    | AngleBracket_inner n->
-      pare_inner Zed_char.(of_utf8 "<", of_utf8 ">") (n*count) yank
-    | Brace_include n->
-      pare_include Zed_char.(of_utf8 "{", of_utf8 "}") (n*count) yank
-    | Brace_inner n->
-      pare_inner Zed_char.(of_utf8 "{", of_utf8 "}") (n*count) yank
+    | Parenthesis_include->
+      pare_include Zed_char.(of_utf8 "(", of_utf8 ")") count yank
+    | Parenthesis_inner->
+      pare_inner Zed_char.(of_utf8 "(", of_utf8 ")") count yank
+    | Bracket_include->
+      pare_include Zed_char.(of_utf8 "[", of_utf8 "]") count yank
+    | Bracket_inner->
+      pare_inner Zed_char.(of_utf8 "[", of_utf8 "]") count yank
+    | AngleBracket_include->
+      pare_include Zed_char.(of_utf8 "<", of_utf8 ">") count yank
+    | AngleBracket_inner->
+      pare_inner Zed_char.(of_utf8 "<", of_utf8 ">") count yank
+    | Brace_include->
+      pare_include Zed_char.(of_utf8 "{", of_utf8 "}") count yank
+    | Brace_inner->
+      pare_inner Zed_char.(of_utf8 "{", of_utf8 "}") count yank
     | Occurrence_inline chr->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
@@ -2440,7 +2440,7 @@ let perform ctx exec action=
           Zed_edit.copy_sequence ctx dest (pos+1 - dest);
         return (ContinueLoop [])
       | None-> return (ContinueLoop []))
-    | Word_include num->
+    | Word_include->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
@@ -2463,12 +2463,12 @@ let perform ctx exec action=
         else
           None
       in
-      (match move_n pos (num*count) with
+      (match move_n pos count with
       | Some (word_begin, word_end)->
         Zed_edit.copy_sequence ctx word_begin (word_end+1 - word_begin);
         return (ContinueLoop [])
       | None-> return (ContinueLoop []))
-    | WORD_include num->
+    | WORD_include->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
@@ -2491,12 +2491,12 @@ let perform ctx exec action=
         else
           None
       in
-      (match move_n pos (num*count) with
+      (match move_n pos count with
       | Some (word_begin, word_end)->
         Zed_edit.copy_sequence ctx word_begin (word_end+1 - word_begin);
         return (ContinueLoop [])
       | None-> return (ContinueLoop []))
-    | Word_inner _num->
+    | Word_inner->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
@@ -2506,7 +2506,7 @@ let perform ctx exec action=
         Zed_edit.copy_sequence ctx word_begin (word_end+1 - word_begin);
         return (ContinueLoop [])
       | None-> return (ContinueLoop []))
-    | WORD_inner _num->
+    | WORD_inner->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
       let pos= Zed_edit.position ctx in
@@ -2516,24 +2516,24 @@ let perform ctx exec action=
         Zed_edit.copy_sequence ctx word_begin (word_end+1 - word_begin);
         return (ContinueLoop [])
       | None-> return (ContinueLoop []))
-    | Quote_inner (chr, _num)->
+    | Quote_inner chr->
       let quote= Zed_char.of_utf8 chr in
       pare_inner (quote, quote) 1 yank
-    | Quote_include (chr, num)->
+    | Quote_include chr->
       let quote= Zed_char.of_utf8 chr in
-      pare_include (quote, quote) (num*count) yank
+      pare_include (quote, quote) count yank
     | _-> return (ContinueLoop []))
   | Undo count->
     exec @@ list_dup [
       Edit (Zed (Zed_edit.Undo));
       ] count
     >>= (fun r-> setup_pos () >>= fun _-> return r)
-  | Paste_before count->
+  | Paste_before (_register, count)->
     exec @@ list_dup [
       Edit (Zed (Zed_edit.Yank));
       Edit (Zed (Zed_edit.Prev_char));
       ] count
-  | Paste_after count->
+  | Paste_after (_register, count)->
     exec @@ list_dup [
       Edit (Zed (Zed_edit.Next_char));
       Edit (Zed (Zed_edit.Yank));
@@ -2542,7 +2542,7 @@ let perform ctx exec action=
   | Join count->
     exec @@
       (list_make (Edit (Zed (Zed_edit.Join_line))) count)
-  | DeleteSelected->
+  | DeleteSelected _register->
     let edit= Zed_edit.edit ctx in
     if Zed_edit.get_selection edit then
       let a = Zed_edit.position ctx and b = Zed_cursor.get_position (Zed_edit.mark edit) in
@@ -2550,7 +2550,7 @@ let perform ctx exec action=
       delete a (b+1 - a)
     else
       return (ContinueLoop [])
-  | YankSelected->
+  | YankSelected _register->
     let edit= Zed_edit.edit ctx in
     if Zed_edit.get_selection edit then
       let a = Zed_edit.position ctx and b = Zed_cursor.get_position (Zed_edit.mark edit) in
