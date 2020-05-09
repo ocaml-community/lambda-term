@@ -336,7 +336,7 @@ module Query = struct
       else
         let next= next_category ~nl_as_sp ~pos:next ~stop text in
         if next >= stop then stop else
-        if is_space start_category then
+        if is_space start_category || is_not_space after_start then
           next
         else
           next_category ~nl_as_sp ~pos:next ~stop text
