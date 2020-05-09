@@ -216,64 +216,77 @@ module Vi :
       end
     module Interpret :
       sig
+        module Register :
+          sig
+            type t= Seq of string | Line of string
+          end
+        module RegisterMap : Map.S with type key = Register.t
+
         val ( >>= ) : 'a Lwt.t -> ('a -> 'b Lwt.t) -> 'b Lwt.t
-        type keyseq = Base.Key.t list
+        type register= string option
+        type count= int option
+        type keyseq= Base.Key.t list
+
         module Resolver :
           sig
-            type t = status -> keyseq -> result
-            and result =
-                Accept of (Edit_action.t * keyseq * Mew_vi.Mode.Name.t)
-              | Continue of (t * keyseq)
-              | Rejected of keyseq
-            and status = {
-              mode : Mew_vi.Mode.Name.t React.signal;
-              set_mode : ?step:React.step -> Mew_vi.Mode.Name.t -> unit;
-              keyseq : keyseq React.signal;
-              set_keyseq : ?step:React.step -> keyseq -> unit;
-              mutable resolver_insert : t;
-              mutable resolver_normal : t;
-              mutable resolver_visual : t;
-              mutable resolver_command : t;
+            type t= config -> status -> keyseq -> result
+            and config= {
+              mode: Mew_vi.Mode.Name.t React.signal;
+              set_mode: ?step:React.step -> Mew_vi.Mode.Name.t -> unit;
+              keyseq: keyseq React.signal;
+              set_keyseq: ?step:React.step -> keyseq -> unit;
+              mutable registers : string RegisterMap.t;
+              mutable resolver_insert: t;
+              mutable resolver_normal: t;
+              mutable resolver_visual: t;
+              mutable resolver_command: t;
             }
-            val resolver_dummy : 'a -> keyseq -> result
-            val resolver_insert : status -> Mew_vi.Key.t list -> result
+            and status= {
+              register: register;
+              count: count;
+            }
+            and result=
+              | Accept of (Edit_action.t * keyseq * Mew_vi.Mode.Name.t)
+              | Continue of (t * status * keyseq)
+              | Rejected of keyseq
+
+            val resolver_dummy : t
+            val resolver_insert : t
+
             module Common :
               sig
-                val try_count :
-                  (int option -> 'a -> keyseq -> result) ->
-                  'a -> keyseq -> result
-                val try_motion :
-                  Mew_vi.Mode.name -> int option -> 'a -> keyseq -> result
+                val try_count : t -> t
+                val try_motion : Mew_vi.Mode.name -> t
               end
             module Normal :
               sig
-                val try_change_mode : status -> keyseq -> result
-                val try_modify : int option -> 'a -> keyseq -> result
-                val try_insert : int option -> 'a -> keyseq -> result
-                val try_motion_modify_insert :
-                  int option -> 'a -> keyseq -> result
-                val resolver_normal : status -> keyseq -> result
+                val try_change_mode : t
+                val try_modify : t
+                val try_insert : t
+                val try_motion_modify_insert : t
+                val resolver_normal : t
               end
             module Visual :
               sig
-                val try_change_mode : status -> keyseq -> result
-                val try_motion : int option -> status -> keyseq -> result
-                val try_modify : 'a -> keyseq -> result
-                val try_motion_modify :
-                  int option -> status -> keyseq -> result
-                val resolver_visual : status -> keyseq -> result
+                val try_change_mode : t
+                val try_motion : t
+                val try_modify : t
+                val try_motion_modify : t
+                val resolver_visual : t
               end
-            val make_status :
+            val make_config :
               ?mode:Mew_vi.Mode.Name.t ->
               ?keyseq:keyseq ->
+              ?registers:string RegisterMap.t ->
               ?resolver_insert:t ->
               ?resolver_normal:t ->
               ?resolver_visual:t ->
               ?resolver_command:t ->
-              unit -> status
+              unit -> config
             val interpret :
               ?resolver:t ->
               ?keyseq:keyseq ->
+              config ->
               status ->
               Base.Key.t Lwt_mvar.t ->
               Edit_action.t Lwt_mvar.t -> unit -> 'a Lwt.t
@@ -289,7 +302,7 @@ class edit :
     val mutable curr_mode : Vi.Base.Mode.t
     val i : Mew_vi.Key.t Lwt_mvar.t
     val o : Mew_vi.Key.t Lwt_mvar.t
-    val status : Vi.Interpret.Resolver.status
+    val config : Vi.Interpret.Resolver.config
     method action_output : Vi.Edit_action.t Lwt_mvar.t
     method bindings : Vi.Base.Mode.action Vi.Base.Mode.KeyTrie.node
     method getMode : Vi.Base.Mode.t
