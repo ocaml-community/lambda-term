@@ -276,7 +276,6 @@ module Query = struct
           (index - delta)
           (Zed_cursor.get_wanted_column cursor)
       in
-
       max
         (Zed_lines.line_start lines (index - delta))
         (min wanted_idx (stop-1))
@@ -805,6 +804,7 @@ let perform ctx exec action=
     let edit= Zed_edit.edit ctx in
     let text= Zed_edit.text edit in
     let eot= Zed_rope.length text in
+    let lines= Zed_edit.lines edit in
     let boundary_start, boundary_end=
       match boundary with
       | Some (b, e)-> b, e
@@ -835,7 +835,9 @@ let perform ctx exec action=
             (Zed_char.core (Zed_rope.get text stop))
             (Zed_utf8.extract "\n" 0)
           then
-            max 0 @@ start - 1
+            max
+              (start - 1)
+              Zed_lines.(line_start lines (line_index lines start))
           else
             start
       in
