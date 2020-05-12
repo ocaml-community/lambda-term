@@ -230,6 +230,57 @@ module Query = struct
     in
     (skip_curr zip pos) - 1
 
+  let goto_line ctx index=
+    let edit= Zed_edit.edit ctx in
+    let lines= Zed_edit.lines edit in
+    let index= min index (Zed_lines.count lines) in
+    Zed_lines.line_start lines index
+
+  let next_line ctx delta=
+    let edit= Zed_edit.edit ctx in
+    let text= Zed_edit.text edit in
+    let lines= Zed_edit.lines edit in
+    let index = Zed_edit.line ctx in
+    let cursor= Zed_edit.cursor ctx in
+    let count= Zed_lines.count lines in
+    if index = Zed_lines.count lines then
+      Zed_rope.length text - 1
+    else begin
+      let stop =
+        if index + delta >= count then
+          Zed_rope.length text
+        else
+          Zed_lines.line_start lines (index + delta + 1) - 1
+      in
+      let wanted_idx= Zed_lines.get_idx_by_width
+          lines
+          (min count (index + delta))
+          (Zed_cursor.get_wanted_column cursor)
+      in
+      max
+        (Zed_lines.line_start lines (index + delta))
+        (min wanted_idx (stop-1))
+    end
+
+  let prev_line ctx delta=
+    let edit= Zed_edit.edit ctx in
+    let lines= Zed_edit.lines edit in
+    let cursor= Zed_edit.cursor ctx in
+    let index = Zed_cursor.get_line cursor in
+    if index - delta < 0 then
+      0
+    else
+      let stop = Zed_lines.line_start lines (index-delta+1) - 1 in
+      let wanted_idx= Zed_lines.get_idx_by_width
+          lines
+          (index - delta)
+          (Zed_cursor.get_wanted_column cursor)
+      in
+
+      max
+        (Zed_lines.line_start lines (index - delta))
+        (min wanted_idx (stop-1))
+
   let next_word' ?(multi_line=true) ~next_category ~pos ~stop text=
     let nl_as_sp= multi_line in
     let start_category=
@@ -931,15 +982,11 @@ let perform ctx exec action=
       in
       right count
     | Upward->
-      exec
-        (list_make
-          (Edit (Zed Zed_edit.Prev_line))
-          count)
+      let pos= Query.prev_line ctx count in
+      exec [Edit (Zed (Zed_edit.Set_pos pos))]
     | Downward->
-      exec
-        (list_make
-          (Edit (Zed Zed_edit.Next_line))
-          count)
+      let pos= Query.next_line ctx count in
+      exec [Edit (Zed (Zed_edit.Set_pos pos))]
     | Word->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
@@ -1131,6 +1178,9 @@ let perform ctx exec action=
           return (ContinueLoop [])
       in
       lastChar count
+    | GotoLine->
+      let pos= Query.goto_line ctx count in
+      exec [Edit (Zed (Zed_edit.Set_pos pos))]
     | GotoLine_first->
       exec [Edit (Zed (Zed_edit.Goto_bot))]
     | GotoLine_last->

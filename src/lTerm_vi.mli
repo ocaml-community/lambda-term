@@ -62,6 +62,9 @@ module Query :
                 CamomileLibraryDefault.Camomile.UCharInfo.general_category_type ->
                 bool) ->
       pos:int -> start:int -> Zed_rope.t -> int
+    val goto_line : 'a Zed_edit.context -> int -> int
+    val next_line : 'a Zed_edit.context -> int -> int
+    val prev_line : 'a Zed_edit.context -> int -> int
     val next_word' :
       ?multi_line:bool ->
       next_category:(nl_as_sp:bool -> pos:int -> stop:int -> Zed_rope.t -> int) ->
