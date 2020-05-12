@@ -338,6 +338,7 @@ val of_vi_key : Mew_vi.Key.t -> LTerm_key.t
 open LTerm_read_line_base
 
 val perform :
+  edit ->
   'a Zed_edit.context ->
   (action list -> 'b loop_result Lwt.t) ->
   Vi.Vi_action.t -> 'b loop_result Lwt.t
