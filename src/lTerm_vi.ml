@@ -781,7 +781,7 @@ let of_vi_key vi_key=
 open LTerm_read_line_base
 open Lwt
 
-let perform ctx exec action=
+let perform vi_edit ctx exec action=
   let list_make elm n=
     let rec create acc n=
       if n > 0 then
@@ -800,7 +800,7 @@ let perform ctx exec action=
     in
     create [] n |> List.concat
   in
-  let delete ?boundary start len=
+  let delete ~register ?(line=false) ?boundary start len=
     let edit= Zed_edit.edit ctx in
     let text= Zed_edit.text edit in
     let eot= Zed_rope.length text in
@@ -841,6 +841,18 @@ let perform ctx exec action=
           else
             start
       in
+      let content=
+        let str= Zed_rope.sub text start len
+          |> Zed_rope.to_string
+          |> Zed_string.to_utf8
+        in
+        if line then
+          Vi.Interpret.Register.Line str
+        else
+          Vi.Interpret.Register.Seq str
+      in
+      vi_edit#set_register register content;
+      vi_edit#set_register "\"" content;
       exec [
         Edit (Zed (Zed_edit.Goto start));
         Edit (Zed (Zed_edit.Kill_next_chars len));
@@ -849,7 +861,7 @@ let perform ctx exec action=
     else
       return (ContinueLoop [])
   in
-  let change ?boundary start len=
+  let change ~register ?(line=false) ?boundary start len=
     let edit= Zed_edit.edit ctx in
     let text= Zed_edit.text edit in
     let eot= Zed_rope.length text in
@@ -866,6 +878,18 @@ let perform ctx exec action=
       start, len, stop
     in
     if len > 0 then
+      let content=
+        let str= Zed_rope.sub text start len
+          |> Zed_rope.to_string
+          |> Zed_string.to_utf8
+        in
+        if line then
+          Vi.Interpret.Register.Line str
+        else
+          Vi.Interpret.Register.Seq str
+      in
+      vi_edit#set_register register content;
+      vi_edit#set_register "\"" content;
       exec [
         Edit (Zed (Zed_edit.Goto start));
         Edit (Zed (Zed_edit.Kill_next_chars len));
@@ -874,7 +898,21 @@ let perform ctx exec action=
     else
       return (ContinueLoop [])
   in
-  let yank start len=
+  let yank ~register ?(line=false) start len=
+    let edit= Zed_edit.edit ctx in
+    let text= Zed_edit.text edit in
+    let content=
+      let str= Zed_rope.sub text start len
+        |> Zed_rope.to_string
+        |> Zed_string.to_utf8
+      in
+      if line then
+        Vi.Interpret.Register.Line str
+      else
+        Vi.Interpret.Register.Seq str
+    in
+    vi_edit#set_register register content;
+    vi_edit#set_register "\"" content;
     Zed_edit.copy_sequence ctx start len;
     return (ContinueLoop [])
   in
@@ -1276,7 +1314,8 @@ let perform ctx exec action=
         exec [ Edit (Zed (Zed_edit.Goto pos)) ]
       | None-> return (ContinueLoop []))
     | _-> return (ContinueLoop []))
-  | Delete (_register, motion, count)->
+  | Delete (register, motion, count)->
+    let delete= delete ~register in
     (match motion with
     | Left->
       let pos, delta= Query.left count ctx in
@@ -1709,7 +1748,8 @@ let perform ctx exec action=
       let quote= Zed_char.of_utf8 chr in
       pare_include (quote, quote) count delete
     | _-> return (ContinueLoop []))
-  | Change (_register, motion, count)->
+  | Change (register, motion, count)->
+    let change= change ~register in
     (match motion with
     | Left->
       let pos, delta= Query.left count ctx in
@@ -2128,7 +2168,8 @@ let perform ctx exec action=
       let quote= Zed_char.of_utf8 chr in
       pare_include (quote, quote) count change
     | _-> return (ContinueLoop []))
-  | Yank (_register, motion, count)->
+  | Yank (register, motion, count)->
+    let yank= yank ~register in
     (match motion with
     | Left->
       let pos, delta= Query.left count ctx in
@@ -2594,7 +2635,8 @@ let perform ctx exec action=
   | Join count->
     exec @@
       (list_make (Edit (Zed (Zed_edit.Join_line))) count)
-  | DeleteSelected _register->
+  | DeleteSelected register->
+    let delete= delete ~register in
     let edit= Zed_edit.edit ctx in
     if Zed_edit.get_selection edit then
       let a = Zed_edit.position ctx and b = Zed_cursor.get_position (Zed_edit.mark edit) in
@@ -2602,7 +2644,8 @@ let perform ctx exec action=
       delete a (b+1 - a)
     else
       return (ContinueLoop [])
-  | YankSelected _register->
+  | YankSelected register->
+    let yank= yank ~register in
     let edit= Zed_edit.edit ctx in
     if Zed_edit.get_selection edit then
       let a = Zed_edit.position ctx and b = Zed_cursor.get_position (Zed_edit.mark edit) in

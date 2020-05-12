@@ -830,7 +830,7 @@ object(self)
     | LTerm_editor.Vi->
       let _vi_edit= vi_state#vi_edit in
       vi_edit <- Some _vi_edit;
-      self#listen_vi _vi_edit#action_output self#interrupt
+      self#listen_vi _vi_edit self#interrupt
 
   method key_sequence = key_sequence
 
@@ -1120,11 +1120,12 @@ object(self)
 
   val result= Lwt_mvar.create_empty ()
 
-  method private listen_vi msgBox exnBox=
+  method private listen_vi vi_edit exnBox=
+    let msgBox= vi_edit#action_output in
     let rec perform_actions= function
       | []-> return (ContinueLoop [])
       | action::tl->
-        LTerm_vi.perform self#context self#exec action
+        LTerm_vi.perform vi_edit self#context self#exec action
         >>= function
         | Result _ as r -> return r
         | ContinueLoop _-> perform_actions tl
