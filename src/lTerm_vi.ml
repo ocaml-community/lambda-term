@@ -1377,7 +1377,7 @@ let perform vi_edit ctx exec action=
         then pos_end + 1
         else pos_end in
       let pos_delta= pos_end - pos_start in
-      delete pos_start pos_delta
+      delete ~line:true pos_start pos_delta
     | Word->
       let pos= Zed_edit.position ctx in
       let edit= Zed_edit.edit ctx in
@@ -2621,17 +2621,46 @@ let perform vi_edit ctx exec action=
       Edit (Zed (Zed_edit.Undo));
       ] count
     >>= (fun r-> setup_pos () >>= fun _-> return r)
-  | Paste_before (_register, count)->
-    exec @@ list_dup [
-      Edit (Zed (Zed_edit.Yank));
-      Edit (Zed (Zed_edit.Prev_char));
-      ] count
-  | Paste_after (_register, count)->
-    exec @@ list_dup [
-      Edit (Zed (Zed_edit.Next_char));
-      Edit (Zed (Zed_edit.Yank));
-      Edit (Zed (Zed_edit.Prev_char));
-      ] count
+  | Paste_before (register, count)->
+    let action_paste=
+      let open Vi.Interpret.Register in
+      match vi_edit#get_register register with
+      | Some (Seq str)-> [
+        Edit (Zed (Zed_edit.Insert_str (Zed_string.of_utf8 str)));
+        Edit (Zed (Zed_edit.Prev_char));
+        ]
+      | Some (Line str)-> [
+        Edit (Zed (Zed_edit.Goto_bol));
+        Edit (Zed (Zed_edit.Insert_str (Zed_string.of_utf8 str)));
+        Edit (Zed (Zed_edit.Prev_line));
+        Edit (Zed (Zed_edit.Goto_eol));
+        Edit (Zed (Zed_edit.Prev_char));
+        ]
+      | None-> []
+    in
+    exec @@ list_dup action_paste count
+  | Paste_after (register, count)->
+    let action_paste=
+      let open Vi.Interpret.Register in
+      match vi_edit#get_register register with
+      | Some (Seq str)->
+        [
+        Edit (Zed (Zed_edit.Next_char));
+        Edit (Zed (Zed_edit.Insert_str (Zed_string.of_utf8 str)));
+        Edit (Zed (Zed_edit.Prev_char));
+        ]
+      | Some (Line str)->
+        [
+        Edit (Zed (Zed_edit.Goto_eol));
+        Edit (Zed (Zed_edit.Insert_str
+          (Zed_string.of_utf8
+            ("\n" ^ (String.sub str 0 ((String.length str)-1))))));
+        Edit (Zed (Zed_edit.Goto_eol));
+        Edit (Zed (Zed_edit.Prev_char));
+        ]
+      | None-> []
+    in
+    exec @@ list_dup action_paste count
   | Join count->
     exec @@
       (list_make (Edit (Zed (Zed_edit.Join_line))) count)
