@@ -1343,7 +1343,7 @@ let perform vi_edit ctx exec action=
         let pos_start= Zed_lines.line_start lines dest
         and pos_end= Zed_lines.line_stop lines line in
         let pos_delta= pos_end - pos_start in
-        delete pos_start pos_delta
+        delete ~line:true pos_start pos_delta
       else
         return (ContinueLoop [])
     | Downward->
@@ -1361,7 +1361,7 @@ let perform vi_edit ctx exec action=
           then pos_end + 1
           else pos_end in
         let pos_delta= pos_end - pos_start in
-        delete pos_start pos_delta
+        delete ~line:true pos_start pos_delta
       else
         return (ContinueLoop [])
     | Line->
@@ -1777,7 +1777,7 @@ let perform vi_edit ctx exec action=
         let pos_start= Zed_lines.line_start lines dest
         and pos_end= Zed_lines.line_stop lines line in
         let pos_delta= pos_end - pos_start in
-        change pos_start pos_delta
+        change ~line:true pos_start pos_delta
       else
         return (ContinueLoop [])
     | Downward->
@@ -1795,7 +1795,7 @@ let perform vi_edit ctx exec action=
           then pos_end + 1
           else pos_end in
         let pos_delta= pos_end - pos_start in
-        change pos_start pos_delta
+        change ~line:true pos_start pos_delta
       else
         return (ContinueLoop [])
     | Word->
