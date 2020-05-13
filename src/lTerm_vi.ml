@@ -2173,20 +2173,17 @@ let perform vi_edit ctx exec action=
     (match motion with
     | Left->
       let pos, delta= Query.left count ctx in
-      Zed_edit.copy_sequence ctx pos delta;
-      return (ContinueLoop [])
+      yank pos delta
     | Right->
       let newline=true in
       let pos, delta= Query.right ~newline count ctx in
       let pos= pos - delta in
-      Zed_edit.copy_sequence ctx pos delta;
-      return (ContinueLoop [])
+      yank pos delta
     | Right_nl->
       let newline= true in
       let pos, delta= Query.right ~newline count ctx in
       let pos= pos - delta in
-      Zed_edit.copy_sequence ctx pos delta;
-      return (ContinueLoop [])
+      yank pos delta
     | Upward->
       let edit= Zed_edit.edit ctx in
       let lines= Zed_edit.lines edit in
@@ -2197,8 +2194,7 @@ let perform vi_edit ctx exec action=
         let pos_start= Zed_lines.line_start lines dest
         and pos_end= Zed_lines.line_stop lines line in
         let pos_delta= pos_end - pos_start in
-        Zed_edit.copy_sequence ctx pos_start pos_delta;
-        return (ContinueLoop [])
+        yank ~line:true pos_start pos_delta
       else
         return (ContinueLoop [])
     | Downward->
@@ -2216,8 +2212,7 @@ let perform vi_edit ctx exec action=
           then pos_end + 1
           else pos_end in
         let pos_delta= pos_end - pos_start in
-        Zed_edit.copy_sequence ctx pos_start pos_delta;
-        return (ContinueLoop [])
+        yank ~line:true pos_start pos_delta
       else
         return (ContinueLoop [])
     | Line->
@@ -2233,8 +2228,7 @@ let perform vi_edit ctx exec action=
         then pos_end + 1
         else pos_end in
       let pos_delta= pos_end - pos_start in
-      Zed_edit.copy_sequence ctx pos_start pos_delta;
-      return (ContinueLoop [])
+      yank ~line:true pos_start pos_delta
     | Word->
       let pos= Zed_edit.position ctx in
       let edit= Zed_edit.edit ctx in
@@ -2256,8 +2250,7 @@ let perform vi_edit ctx exec action=
       in
       let next_pos = next_word pos count in
       let delta= next_pos - pos in
-      Zed_edit.copy_sequence ctx pos delta;
-      return (ContinueLoop [])
+      yank pos delta
     | WORD->
       let pos= Zed_edit.position ctx in
       let edit= Zed_edit.edit ctx in
@@ -2279,8 +2272,7 @@ let perform vi_edit ctx exec action=
       in
       let next_pos = next_word pos count in
       let delta= next_pos - pos in
-      Zed_edit.copy_sequence ctx pos delta;
-      return (ContinueLoop [])
+      yank pos delta
     | Word_back->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
@@ -2298,8 +2290,7 @@ let perform vi_edit ctx exec action=
       in
       let prev_pos= prev_word pos count in
       let delta= pos - prev_pos in
-      Zed_edit.copy_sequence ctx prev_pos delta;
-      return (ContinueLoop [])
+      yank prev_pos delta
     | WORD_back->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
@@ -2317,8 +2308,7 @@ let perform vi_edit ctx exec action=
       in
       let prev_pos= prev_word pos count in
       let delta= pos - prev_pos in
-      Zed_edit.copy_sequence ctx prev_pos delta;
-      return (ContinueLoop [])
+      yank prev_pos delta
     | Word_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
@@ -2335,8 +2325,7 @@ let perform vi_edit ctx exec action=
       in
       let next_pos= next_word pos count in
       let delta= next_pos + 1 - pos in
-      Zed_edit.copy_sequence ctx pos delta;
-      return (ContinueLoop [])
+      yank pos delta
     | WORD_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
@@ -2353,8 +2342,7 @@ let perform vi_edit ctx exec action=
       in
       let next_pos= next_word pos count in
       let delta= next_pos + 1 - pos in
-      Zed_edit.copy_sequence ctx pos delta;
-      return (ContinueLoop [])
+      yank pos delta
     | Word_back_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
@@ -2372,8 +2360,7 @@ let perform vi_edit ctx exec action=
       in
       let dest= prev_word pos count in
       let delta= pos - dest + 1 in
-      Zed_edit.copy_sequence ctx dest delta;
-      return (ContinueLoop [])
+      yank dest delta
     | WORD_back_end->
       let edit= Zed_edit.edit ctx in
       let text= Zed_edit.text edit in
@@ -2391,35 +2378,30 @@ let perform vi_edit ctx exec action=
       in
       let dest= prev_word pos count in
       let delta= pos - dest + 1 in
-      Zed_edit.copy_sequence ctx dest delta;
-      return (ContinueLoop [])
+      yank dest delta
     | Line_FirstChar->
       let edit= Zed_edit.edit ctx in
       let lines= Zed_edit.lines edit in
       let line= Zed_edit.line ctx in
       let pos= Zed_edit.position ctx in
       let start= Zed_lines.line_start lines line in
-      Zed_edit.copy_sequence ctx start (pos - start);
-      return (ContinueLoop [])
+      yank start (pos - start)
     | Line_FirstNonBlank->
       let pos= Zed_edit.position ctx in
       let nonblank= Query.line_FirstNonBlank 1 ctx in
       if nonblank < pos then
-        Zed_edit.copy_sequence ctx nonblank (pos - nonblank)
+        yank nonblank (pos - nonblank)
       else
-        Zed_edit.copy_sequence ctx nonblank (pos - nonblank);
-      return (ContinueLoop [])
+        yank nonblank (pos - nonblank)
     | Line_LastChar->
       let pos= Zed_edit.position ctx in
       let next= Query.line_LastChar count ctx in
-      Zed_edit.copy_sequence ctx pos (next+1 - pos);
-      return (ContinueLoop [])
+      yank pos (next+1 - pos)
     | Line_LastChar_nl->
       let newline= true in
       let pos= Zed_edit.position ctx in
       let next= Query.line_LastChar ~newline count ctx in
-      Zed_edit.copy_sequence ctx pos (next+1 - pos);
-      return (ContinueLoop [])
+      yank pos (next+1 - pos)
     | Parenthesis_include->
       pare_include Zed_char.(of_utf8 "(", of_utf8 ")") count yank
     | Parenthesis_inner->
@@ -2455,8 +2437,7 @@ let perform vi_edit ctx exec action=
       | Some pos->
         let start= Zed_edit.position ctx in
         let delta= pos+1 - start in
-        Zed_edit.copy_sequence ctx start delta;
-        return (ContinueLoop [])
+        yank start delta
       | None-> return (ContinueLoop []))
     | Occurrence_inline_back chr->
       let edit= Zed_edit.edit ctx in
@@ -2477,8 +2458,7 @@ let perform vi_edit ctx exec action=
       | Some pos->
         let stop= Zed_edit.position ctx in
         let delta= stop - pos in
-        Zed_edit.copy_sequence ctx pos delta;
-        return (ContinueLoop [])
+        yank pos delta
       | None-> return (ContinueLoop []))
     | Occurrence_inline_till chr->
       let edit= Zed_edit.edit ctx in
@@ -2497,8 +2477,7 @@ let perform vi_edit ctx exec action=
       in
       (match query_n (Zed_char.of_utf8 chr) (pos+1) count with
       | Some dest->
-        Zed_edit.copy_sequence ctx  pos (dest - pos);
-        return (ContinueLoop [])
+        yank  pos (dest - pos)
       | None-> return (ContinueLoop []))
     | Occurrence_inline_till_back chr->
       let edit= Zed_edit.edit ctx in
@@ -2517,8 +2496,7 @@ let perform vi_edit ctx exec action=
       in
       (match query_n (Zed_char.of_utf8 chr) pos count with
       | Some dest->
-        Zed_edit.copy_sequence ctx (dest+1) (pos-1 - dest);
-        return (ContinueLoop [])
+        yank (dest+1) (pos-1 - dest)
       | None-> return (ContinueLoop []))
     | Match->
       let edit= Zed_edit.edit ctx in
@@ -2528,10 +2506,9 @@ let perform vi_edit ctx exec action=
       (match Query.item_match ~start:0 ~stop pos text with
       | Some dest->
         if dest > pos then
-          Zed_edit.copy_sequence ctx pos (dest+1 - pos)
+          yank pos (dest+1 - pos)
         else
-          Zed_edit.copy_sequence ctx dest (pos+1 - dest);
-        return (ContinueLoop [])
+          yank dest (pos+1 - dest)
       | None-> return (ContinueLoop []))
     | Word_include->
       let edit= Zed_edit.edit ctx in
@@ -2586,8 +2563,7 @@ let perform vi_edit ctx exec action=
       in
       (match move_n pos count with
       | Some (word_begin, word_end)->
-        Zed_edit.copy_sequence ctx word_begin (word_end+1 - word_begin);
-        return (ContinueLoop [])
+        yank word_begin (word_end+1 - word_begin)
       | None-> return (ContinueLoop []))
     | Word_inner->
       let edit= Zed_edit.edit ctx in
@@ -2596,8 +2572,7 @@ let perform vi_edit ctx exec action=
       let stop= Zed_rope.length text in
       (match Query.inner_word ~pos ~stop text with
       | Some (word_begin, word_end)->
-        Zed_edit.copy_sequence ctx word_begin (word_end+1 - word_begin);
-        return (ContinueLoop [])
+        yank word_begin (word_end+1 - word_begin)
       | None-> return (ContinueLoop []))
     | WORD_inner->
       let edit= Zed_edit.edit ctx in
@@ -2606,8 +2581,7 @@ let perform vi_edit ctx exec action=
       let stop= Zed_rope.length text in
       (match Query.inner_WORD ~pos ~stop text with
       | Some (word_begin, word_end)->
-        Zed_edit.copy_sequence ctx word_begin (word_end+1 - word_begin);
-        return (ContinueLoop [])
+        yank word_begin (word_end+1 - word_begin)
       | None-> return (ContinueLoop []))
     | Quote_inner chr->
       let quote= Zed_char.of_utf8 chr in
