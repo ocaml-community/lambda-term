@@ -853,9 +853,10 @@ let perform vi_edit ctx exec action=
       in
       vi_edit#set_register register content;
       vi_edit#set_register "\"" content;
+      let del_len= if line && stop < eot then len + 1 else len in
       exec [
         Edit (Zed (Zed_edit.Goto start));
-        Edit (Zed (Zed_edit.Kill_next_chars len));
+        Edit (Zed (Zed_edit.Kill_next_chars del_len));
         Edit (Zed (Zed_edit.Goto end_pos))
         ]
     else
@@ -1372,10 +1373,6 @@ let perform vi_edit ctx exec action=
       let dest= min line_count (line + count - 1) in
       let pos_start= Zed_lines.line_start lines line
       and pos_end= Zed_lines.line_stop lines dest in
-      let pos_end=
-        if dest < line_count
-        then pos_end + 1
-        else pos_end in
       let pos_delta= pos_end - pos_start in
       delete ~line:true pos_start pos_delta
     | Word->
@@ -2223,10 +2220,6 @@ let perform vi_edit ctx exec action=
       let dest= min line_count (line + count - 1) in
       let pos_start= Zed_lines.line_start lines line
       and pos_end= Zed_lines.line_stop lines dest in
-      let pos_end=
-        if dest < line_count
-        then pos_end + 1
-        else pos_end in
       let pos_delta= pos_end - pos_start in
       yank ~line:true pos_start pos_delta
     | Word->
@@ -2605,7 +2598,7 @@ let perform vi_edit ctx exec action=
         ]
       | Some (Line str)-> [
         Edit (Zed (Zed_edit.Goto_bol));
-        Edit (Zed (Zed_edit.Insert_str (Zed_string.of_utf8 str)));
+        Edit (Zed (Zed_edit.Insert_str (Zed_string.of_utf8 (str ^ "\n"))));
         Edit (Zed (Zed_edit.Prev_line));
         Edit (Zed (Zed_edit.Goto_eol));
         Edit (Zed (Zed_edit.Prev_char));
@@ -2632,7 +2625,7 @@ let perform vi_edit ctx exec action=
         Edit (Zed (Zed_edit.Goto_eol));
         Edit (Zed (Zed_edit.Insert_str
           (Zed_string.of_utf8
-            ("\n" ^ (String.sub str 0 ((String.length str)-1))))));
+            ("\n" ^ (String.sub str 0 (String.length str))))));
         Edit (Zed (Zed_edit.Goto_eol));
         Edit (Zed (Zed_edit.Prev_char));
         ]
