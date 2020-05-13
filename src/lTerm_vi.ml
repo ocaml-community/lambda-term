@@ -2644,11 +2644,15 @@ let perform vi_edit ctx exec action=
       let open Vi.Interpret.Register in
       match vi_edit#get_register register with
       | Some (Seq str)->
-        [
-        Edit (Zed (Zed_edit.Next_char));
-        Edit (Zed (Zed_edit.Insert_str (Zed_string.of_utf8 str)));
-        Edit (Zed (Zed_edit.Prev_char));
-        ]
+        let actions= [
+          Edit (Zed (Zed_edit.Insert_str (Zed_string.of_utf8 str)));
+          Edit (Zed (Zed_edit.Prev_char));
+          ]
+        in
+        if Zed_edit.at_eol ctx then
+          actions
+        else
+          Edit (Zed (Zed_edit.Next_char)) :: actions
       | Some (Line str)->
         [
         Edit (Zed (Zed_edit.Goto_eol));
