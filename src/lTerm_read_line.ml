@@ -1162,8 +1162,14 @@ object(self)
 
   (* The main loop. *)
   method private loop =
+    let read_event=
+      match vi_edit with
+      | Some _->
+        Lwt.pause () >>= fun ()-> Lwt.(>|=) (LTerm.read_event term) (fun ev-> Ev ev)
+      | None-> Lwt.(>|=) (LTerm.read_event term) (fun ev-> Ev ev)
+    in
     Lwt.pick [
-      (Lwt.pause () >>= fun ()-> Lwt.(>|=) (LTerm.read_event term) (fun ev-> Ev ev));
+      read_event;
       Lwt.(>|=) (Lwt_mvar.take result) (fun r-> Loop_result r);
       Lwt.(>|=) (Lwt_mvar.take self#interrupt) (fun e-> Interrupted e);
       ]
