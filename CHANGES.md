@@ -1,7 +1,9 @@
-3.1.0 (2020-04-26)
+next
 ------------------
 
-* `LTerm_read_line` and `LTerm_vi`: add support for vi visual mode
+* `LTerm_read_line` and `LTerm_vi`:
+  * vi visual mode
+  * register support
 
 3.0.1 (2020-05-06)
 ------------------
