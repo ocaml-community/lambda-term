@@ -240,7 +240,6 @@ module Vi :
               set_mode: ?step:React.step -> Mew_vi.Mode.Name.t -> unit;
               keyseq: keyseq React.signal;
               set_keyseq: ?step:React.step -> keyseq -> unit;
-              mutable registers : Register.content RegisterMap.t;
               mutable resolver_insert: t;
               mutable resolver_normal: t;
               mutable resolver_visual: t;
@@ -282,7 +281,6 @@ module Vi :
             val make_config :
               ?mode:Mew_vi.Mode.Name.t ->
               ?keyseq:keyseq ->
-              ?registers:Register.content RegisterMap.t ->
               ?resolver_insert:t ->
               ?resolver_normal:t ->
               ?resolver_visual:t ->
@@ -299,9 +297,7 @@ module Vi :
       end
   end
 
-class edit :
-  < default_mode : 'a * Vi.Base.Mode.t; modes : Vi.Base.Mode.t Vi.Base.Mode.Modes.t;
-    timeout : float; .. > ->
+class edit : state ->
   object
     val action_output : Vi.Edit_action.t Lwt_mvar.t
     val mutable curr_mode : Vi.Base.Mode.t
@@ -319,7 +315,7 @@ class edit :
     method get_register : string -> Vi.Interpret.Register.content option
     method set_register : string -> Vi.Interpret.Register.content -> unit
   end
-class state :
+and state :
   object
     val mutable default_mode : Vi.Base.Mode.name * Vi.Base.Mode.t
     val mutable timeout : float
@@ -327,6 +323,10 @@ class state :
     method edit : Vi.Base.edit
     method modes : Vi.Base.Mode.t Vi.Base.Mode.Modes.t
     method timeout : float
+    method get_register : string -> Vi.Interpret.Register.content option
+    method set_register : string -> Vi.Interpret.Register.content -> unit
+    method get_registers : Vi.Interpret.Register.content Vi.Interpret.RegisterMap.t
+    method set_registers : Vi.Interpret.Register.content Vi.Interpret.RegisterMap.t -> unit
     method vi_edit : edit
   end
 
