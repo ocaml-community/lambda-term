@@ -1,4 +1,4 @@
-next
+3.1.0 (2020-05-30)
 ------------------
 
 * `LTerm_read_line` and `LTerm_vi`:
