@@ -817,6 +817,8 @@ object(self)
 
   val mutable vi_thread= None
 
+  method vi_state= vi_state
+
   method set_editor_mode mode =
     set_editor_mode mode;
     match mode with

@@ -315,6 +315,9 @@ class virtual ['a] term : LTerm.t -> object
   method set_editor_mode : LTerm_editor.mode -> unit
     (** Set the current editor mode. *)
 
+  method vi_state : LTerm_vi.state
+    (** Get the current vi_state . *)
+
   method bind : LTerm_key.t list -> action list -> unit
 
   method draw_update : unit Lwt.t
