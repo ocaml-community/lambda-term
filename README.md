@@ -15,6 +15,8 @@ a C library.
 Lambda-Term integrates with zed to provide text edition facilities in
 console applications.
 
+[API Documentation](https://ocaml-community.github.io/lambda-term/)
+
 Installation
 ------------
 
