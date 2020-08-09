@@ -1,3 +1,9 @@
+Next release
+------------
+
+* The inputrc file has been moved from ~/.config/.lambda-term-inputrc to ~/.config/lambda-term-inputrc
+  The old location will still be accepted until the next major version (@copy)
+
 3.1.0 (2020-05-30)
 ------------------
 

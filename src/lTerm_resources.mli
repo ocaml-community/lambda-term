@@ -68,7 +68,7 @@ val home : string
 type xdg_location = Cache | Config | Data
   (** The type for user-specific 'cached', 'configuration' and 'data' files. *)
 
-val xdgbd_file : loc:xdg_location -> ?allow_legacy_location:bool -> string -> string
+val xdgbd_file : loc:xdg_location -> ?legacy_name:string -> string -> string
   (** [xdgbd_file ~loc fn] returns the full file-name for a file [fn] in the
       XDG Base Directory corresponding to the variant given by [loc].
 
@@ -78,8 +78,8 @@ val xdgbd_file : loc:xdg_location -> ?allow_legacy_location:bool -> string -> st
       Follows the XDG Base Directory specification:
       http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html
 
-      The optional parameter [allow_legacy_location], default [false], first
-      searches if there is already a file with the desired name in the user's
+      If the optional parameter [legacy_name] is given, first
+      check if there is already a file with the given name in the user's
       home directory. If it finds such a file, it returns that filename,
       else it resorts to regular behavior.
   *)

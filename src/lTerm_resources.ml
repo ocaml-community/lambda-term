@@ -63,12 +63,15 @@ let xdgbd_warning loc file_name =
     file_name loc_name
     "http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html"
 
-let xdgbd_file ~loc ?(allow_legacy_location=false) name =
-  let home_file = Filename.concat home name in
-  if allow_legacy_location && Sys.file_exists home_file then
+let xdgbd_file ~loc ?legacy_name name =
+  let home_file = match legacy_name with
+    | Some n -> Some (Filename.concat home n)
+    | None -> None in
+  match home_file with
+  | Some home_file when Sys.file_exists home_file ->
     let () = xdgbd_warning loc home_file in
     home_file
-  else
+  | _ ->
     Filename.concat (XDGBD.user_dir loc) name
 
 (* +-----------------------------------------------------------------+

@@ -334,10 +334,17 @@ and comma_actions seq l = parse
 
 {
   let default =
-    LTerm_resources.xdgbd_file
-      ~loc:LTerm_resources.Config
-      ~allow_legacy_location:true
-      ".lambda-term-inputrc"
+    let new_file =
+      LTerm_resources.xdgbd_file
+        ~loc:LTerm_resources.Config
+        ~legacy_name:".lambda-term-inputrc"
+        "lambda-term-inputrc"
+    in
+    if Sys.file_exists new_file then
+      new_file
+    else
+      (* compatiblity with 3.x *)
+      LTerm_resources.xdgbd_file ~loc:LTerm_resources.Config ".lambda-term-inputrc"
 
   let load ?(file = default) () =
     Lwt.catch (fun () ->

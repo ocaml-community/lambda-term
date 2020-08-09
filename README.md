@@ -95,7 +95,7 @@ You can then send the result to jeremie@dimino.org, including:
 Key bindings
 ------------
 
-Key bindings can be set in `~/.config/.lambda-term-inputrc`. See
+Key bindings can be set in `~/.config/lambda-term-inputrc`. See
 [lambda-term-inputrc](lambda-term-inputrc). Useful mappings:
 
 ```
