@@ -1,6 +1,6 @@
 # -*- conf-colon -*-
 
-# Copy this file to your ~/.config/.lambda-term-inputrc
+# Copy this file to your ~/.config/lambda-term-inputrc
 
 [read-line]
 
