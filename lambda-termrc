@@ -13,7 +13,7 @@ slider.focused.background: blue
 slider.barstyle: filled
 slider.track: true
 !
-! For monochrome experience comment out the resources above and uncomment two
+! For monochrome experience comment out the resources above and uncomment the
 ! following lines:
 !
 !button.focused.reverse: true
