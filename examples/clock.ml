@@ -33,8 +33,10 @@ let main () =
   button#on_click (wakeup wakener);
 
   (* Run in the standard terminal. *)
-  Lazy.force LTerm.stdout
-  >>= fun term ->
-  run term vbox waiter
+  Lazy.force LTerm.stdout >>= fun term ->
+  LTerm.enable_mouse term >>= fun () ->
+  Lwt.finalize
+    (fun () -> run term vbox waiter)
+    (fun () -> LTerm.disable_mouse term)
 
 let () = Lwt_main.run (main ())
