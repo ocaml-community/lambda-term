@@ -158,10 +158,11 @@ let run_modal term ?save_state ?(load_resources = true) ?(resources_file = lambd
           loop ()
       (* left button mouse click *)
       | Event ((LTerm_event.Mouse m) as ev) when LTerm_mouse.(m.button=Button1) -> begin
-          let picked = pick LTerm_mouse.(coord m) (toplevel :> t) in
+          let current_layer = List.hd !layers in
+          let picked = pick LTerm_mouse.(coord m) (current_layer :> t) in
           match picked with
           | Some _ -> (* move focus and send it the event *)
-            toplevel#move_focus_to picked;
+            current_layer#move_focus_to picked;
             !(List.hd !focuses)#send_event ev;
             loop ()
           | None -> (* nothing got focus, so drop the event *)

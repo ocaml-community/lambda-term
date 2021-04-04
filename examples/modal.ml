@@ -1,3 +1,4 @@
+open Lwt
 open LTerm_widget
 
 let main () =
@@ -53,6 +54,10 @@ let main () =
   (* set 'change' button to open modal layer *)
   change#on_click (push_layer layer2);
 
-  do_run frame
+  Lazy.force LTerm.stdout >>= fun term ->
+  LTerm.enable_mouse term >>= fun () ->
+    Lwt.finalize
+      (fun () -> do_run frame)
+      (fun () -> LTerm.disable_mouse term)
 
 let () = Lwt_main.run (main ())
