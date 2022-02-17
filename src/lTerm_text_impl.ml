@@ -380,26 +380,28 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
       | None -> ()
       | Some f ->
           Format.pp_set_tags fmt true;
-          Format.pp_set_formatter_tag_functions fmt {
+          Format.pp_set_formatter_stag_functions fmt {
             Format.
-            mark_open_tag =
-              (fun a -> push_style (f a) ; "");
-            mark_close_tag =
+            mark_open_stag =
+              (function
+               | Format.String_tag a -> push_style (f a) ; ""
+               | _ -> "");
+            mark_close_stag =
               (fun _ -> pop_style (); "");
-            print_open_tag = (fun _ -> ());
-            print_close_tag = (fun _ -> ());
-          }[@ocaml.warning "-3"] ;
+            print_open_stag = (fun _ -> ());
+            print_close_stag = (fun _ -> ());
+          };
     end ;
 
     get_content, fmt
 
   let pp_with_style to_style =
     fun style fstr fmt ->
-      let tag = to_style style in
-      (Format.pp_open_tag[@ocaml.warning "-3"]) fmt tag;
+      let tag = Format.String_tag (to_style style) in
+      Format.pp_open_stag fmt tag;
       Format.kfprintf
         (fun fmt ->
-          Format.pp_close_tag fmt ()[@ocaml.warning "-3"])
+          Format.pp_close_stag fmt ())
         fmt fstr
 
   let kstyprintf ?read_color f fstr =

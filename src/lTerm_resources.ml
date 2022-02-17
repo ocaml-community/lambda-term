@@ -8,13 +8,6 @@
  * This file is a part of Lambda-Term.
  *)
 
-(* little hack to maintain 4.02.3 compat with warnings *)
-module String = struct
-  [@@@ocaml.warning "-3-32"]
-  let lowercase_ascii =  StringLabels.lowercase
-  include String
-end
-
 let (>>=) = Lwt.(>>=)
 
 let home =
