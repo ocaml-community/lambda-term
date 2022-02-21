@@ -3,21 +3,19 @@ maintainer: "jeremie@dimino.org"
 authors: ["Jérémie Dimino"]
 homepage: "https://github.com/ocaml-community/lambda-term"
 bug-reports: "https://github.com/ocaml-community/lambda-term/issues"
-dev-repo: "git://github.com/ocaml-community/lambda-term.git"
-license: "BSD3"
-build: [
-  ["dune" "build" "-p" name "-j" jobs]
-  ["dune" "runtest" "-p" name "-j" jobs] {with-test}
-]
+dev-repo: "git+https://github.com/ocaml-community/lambda-term.git"
+license: "BSD-3-Clause"
+build: ["dune" "build" "-p" name "-j" jobs]
+run-test: ["dune" "runtest" "-p" name "-j" jobs]
 depends: [
   "ocaml" {>= "4.08.0"}
-  "lwt"   {>= "4.0.0"}
+  "lwt" {>= "4.0.0"}
   "lwt_log"
   "react"
-  "zed"   {>= "3.0.0" & < "4.0"}
+  "zed" {>= "3.0.0" & < "4.0"}
   "camomile" {>= "1.0.1"}
   "lwt_react"
-  "mew_vi"  {>= "0.5.0" & < "0.6.0"}
+  "mew_vi" {>= "0.5.0" & < "0.6.0"}
   "dune" {>= "1.1.0"}
 ]
 synopsis: "Terminal manipulation library for OCaml"
