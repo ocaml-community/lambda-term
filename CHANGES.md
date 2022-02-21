@@ -1,8 +1,10 @@
-Next release
-------------
+3.2.0 (2022-02-21)
+------------------
+
+* Add support for OCaml 5.00 (@kit-ty-kate, #104)
 
 * The inputrc file has been moved from ~/.config/.lambda-term-inputrc to ~/.config/lambda-term-inputrc
-  The old location will still be accepted until the next major version (@copy)
+  The old location will still be accepted until the next major version (@copy, #97)
 
 3.1.0 (2020-05-30)
 ------------------
