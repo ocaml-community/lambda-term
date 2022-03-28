@@ -16,6 +16,7 @@
         shell
         repl
         modal
+        read_keyword
         read_password
         read_yes_no
         editor)
