@@ -5,10 +5,13 @@
   (libraries lwt lwt.unix lwt_react zed lwt_log mew_vi)
   (flags (:standard -safe-string))
   (synopsis "Cross-platform library for terminal manipulation")
-  (c_names lTerm_term_stubs lTerm_unix_stubs lTerm_windows_stubs)
-  (c_flags         (:standard (:include c_flags)))
   (c_library_flags (:standard (:include c_library_flags)))
-  )
+  (foreign_stubs
+    (language c)
+    (names lTerm_term_stubs lTerm_unix_stubs lTerm_windows_stubs)
+    (flags
+      (:standard
+        (:include c_flags)))))
 
 (ocamllex lTerm_inputrc lTerm_resource_lexer)
 
