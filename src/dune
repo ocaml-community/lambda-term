@@ -2,7 +2,7 @@
   (name lambda_term)
   (public_name lambda-term)
   (wrapped false)
-  (libraries camomile lwt lwt.unix lwt_react zed lwt_log mew_vi)
+  (libraries lwt lwt.unix lwt_react zed lwt_log mew_vi uucp)
   (flags (:standard -safe-string))
   (synopsis "Cross-platform library for terminal manipulation")
   (c_library_flags (:standard (:include c_library_flags)))

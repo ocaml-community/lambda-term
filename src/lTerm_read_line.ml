@@ -7,7 +7,6 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDefault.Camomile
 open Lwt_react
 open LTerm_geom
 open LTerm_style
@@ -77,18 +76,18 @@ let () =
   bind [{ control = false; meta = false; shift = false; code = Down }] [History_next];
   bind [{ control = false; meta = false; shift = false; code = Tab }] [Complete];
   bind [{ control = false; meta = false; shift = false; code = Enter }] [Accept];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'b') }] [Edit (LTerm_edit.Zed Zed_edit.Prev_char)];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'f') }] [Edit (LTerm_edit.Zed Zed_edit.Next_char)];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'h') }] [Edit (LTerm_edit.Zed Zed_edit.Delete_prev_char)];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'c') }] [Break];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'z') }] [Suspend];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'm') }] [Accept];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'l') }] [Clear_screen];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'r') }] [Prev_search];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 's') }] [Next_search];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'd') }] [Interrupt_or_delete_next_char];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'p') }] [History_prev];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'n') }] [History_next];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'b') }] [Edit (LTerm_edit.Zed Zed_edit.Prev_char)];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'f') }] [Edit (LTerm_edit.Zed Zed_edit.Next_char)];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'h') }] [Edit (LTerm_edit.Zed Zed_edit.Delete_prev_char)];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'c') }] [Break];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'z') }] [Suspend];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'm') }] [Accept];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'l') }] [Clear_screen];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'r') }] [Prev_search];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 's') }] [Next_search];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'd') }] [Interrupt_or_delete_next_char];
+  bind [{ control = false; meta = true; shift = false; code = Char(Uchar.of_char 'p') }] [History_prev];
+  bind [{ control = false; meta = true; shift = false; code = Char(Uchar.of_char 'n') }] [History_next];
   bind [{ control = false; meta = true; shift = false; code = Left }] [Complete_bar_prev];
   bind [{ control = false; meta = true; shift = false; code = Right }] [Complete_bar_next];
   bind [{ control = false; meta = true; shift = false; code = Home }] [Complete_bar_first];
@@ -97,8 +96,8 @@ let () =
   bind [{ control = false; meta = true; shift = false; code = Down }] [Complete_bar];
   bind [{ control = false; meta = true; shift = false; code = Enter }] [Edit (LTerm_edit.Zed Zed_edit.Newline)];
   bind [{ control = false; meta = false; shift = false; code = Escape }] [Cancel_search];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }
-       ;{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'e') }]
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'x') }
+       ;{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'e') }]
     [Edit_with_external_editor]
 
 (* +-----------------------------------------------------------------+
@@ -569,7 +568,7 @@ end
 class virtual ['a] abstract = object
   method virtual eval : 'a
   method virtual send_action : action -> unit
-  method virtual insert : UChar.t -> unit
+  method virtual insert : Uchar.t -> unit
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
   method virtual clipboard : Zed_edit.clipboard
@@ -641,7 +640,7 @@ end
    | Running in a terminal                                           |
    +-----------------------------------------------------------------+ *)
 
-let newline_uChar = UChar.of_char '\n'
+let newline_uChar = Uchar.of_char '\n'
 let newline = Zed_char.unsafe_of_uChar @@ newline_uChar
 let vline = LTerm_draw.({ top = Light; bottom = Light; left = Blank; right = Blank })
 let reverse_style = { LTerm_style.none with LTerm_style.reverse = Some true }
@@ -1110,7 +1109,7 @@ object(self)
                 | { control = false; meta = false; shift = false; code = Char ch } ->
                     Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert (Zed_char.unsafe_of_uChar ch))));
                     self#insert ch
-                | { code = Char ch; _ } when LTerm.windows term && UChar.code ch >= 32 ->
+                | { code = Char ch; _ } when LTerm.windows term && Uchar.to_int ch >= 32 ->
                     (* Windows reports Shift+A for A, ... *)
                     Zed_macro.add self#macro (Edit (LTerm_edit.Zed (Zed_edit.Insert (Zed_char.unsafe_of_uChar ch))));
                     self#insert ch

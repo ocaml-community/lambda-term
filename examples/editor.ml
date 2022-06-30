@@ -7,7 +7,6 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDefault.Camomile
 open Lwt
 
 let main () =
@@ -25,9 +24,9 @@ let main () =
   editor#bind
     (let open LTerm_key in
      [ { control = true; meta = false; shift = false
-       ; code = Char (UChar.of_char 'x') }
+       ; code = Char (Uchar.of_char 'x') }
      ; { control = true; meta = false; shift = false
-       ; code = Char (UChar.of_char 'c') }
+       ; code = Char (Uchar.of_char 'c') }
      ])
     [ LTerm_edit.Custom (fun () -> wakeup wakener ()) ];
 

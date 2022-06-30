@@ -9,8 +9,6 @@
 
 (** Terminal definitions *)
 
-open CamomileLibrary
-
 type t
   (** Type of terminals. *)
 
@@ -22,8 +20,6 @@ exception No_such_encoding of string
 val create :
   ?windows : bool ->
   ?model : string ->
-  ?incoming_encoding : string ->
-  ?outgoing_encoding : string ->
   Lwt_unix.file_descr -> Lwt_io.input_channel ->
   Lwt_unix.file_descr -> Lwt_io.output_channel -> t Lwt.t
   (** [create ?windows ?model ?incoming_encoding ?outgoing_encoding
@@ -284,11 +280,11 @@ val context_oc : context -> Lwt_io.output_channel
       this channel cannot be used after {!with_context} has
       terminated. *)
 
-val encode_string : t -> Zed_utf8.t -> string
+val encode_string : Zed_utf8.t -> string
   (** [encode_string term str] encodes an UTF-8 string using the
       terminal encoding. *)
 
-val encode_char : t -> UChar.t -> string
+val encode_char : Uchar.t -> string
   (** [encode_char term ch] encodes an unicode character using the
       terminal encoding. *)
 

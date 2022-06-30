@@ -11,8 +11,6 @@
 
 (** All these functions return [Lwt_sys.Not_available] on Unix. *)
 
-open CamomileLibrary
-
 (** {6 Codepage functions} *)
 
 val get_acp : unit -> int
@@ -129,7 +127,7 @@ val write_console_output : Lwt_unix.file_descr -> char_info array array -> LTerm
       matrix of characters with their attributes on the given console
       at given position. *)
 
-val fill_console_output_character : Lwt_unix.file_descr -> UChar.t -> int -> LTerm_geom.coord -> int
+val fill_console_output_character : Lwt_unix.file_descr -> Uchar.t -> int -> LTerm_geom.coord -> int
   (** [fill_console_output_character fd char count coord] writes
       [count] times [char] starting at [coord] on the given
       console. *)

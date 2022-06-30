@@ -7,8 +7,6 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDefault.Camomile
-
 let (>|=) = Lwt.(>|=)
 
 external get_acp : unit -> int = "lt_windows_get_acp"
@@ -25,38 +23,38 @@ type input =
 external read_console_input_job : Unix.file_descr -> input Lwt_unix.job = "lt_windows_read_console_input_job"
 
 let controls = [|
-  UChar.of_char ' ';
-  UChar.of_char 'a';
-  UChar.of_char 'b';
-  UChar.of_char 'c';
-  UChar.of_char 'd';
-  UChar.of_char 'e';
-  UChar.of_char 'f';
-  UChar.of_char 'g';
-  UChar.of_char 'h';
-  UChar.of_char 'i';
-  UChar.of_char 'j';
-  UChar.of_char 'k';
-  UChar.of_char 'l';
-  UChar.of_char 'm';
-  UChar.of_char 'n';
-  UChar.of_char 'o';
-  UChar.of_char 'p';
-  UChar.of_char 'q';
-  UChar.of_char 'r';
-  UChar.of_char 's';
-  UChar.of_char 't';
-  UChar.of_char 'u';
-  UChar.of_char 'v';
-  UChar.of_char 'w';
-  UChar.of_char 'x';
-  UChar.of_char 'y';
-  UChar.of_char 'z';
-  UChar.of_char '[';
-  UChar.of_char '\\';
-  UChar.of_char ']';
-  UChar.of_char '^';
-  UChar.of_char '_';
+  Uchar.of_char ' ';
+  Uchar.of_char 'a';
+  Uchar.of_char 'b';
+  Uchar.of_char 'c';
+  Uchar.of_char 'd';
+  Uchar.of_char 'e';
+  Uchar.of_char 'f';
+  Uchar.of_char 'g';
+  Uchar.of_char 'h';
+  Uchar.of_char 'i';
+  Uchar.of_char 'j';
+  Uchar.of_char 'k';
+  Uchar.of_char 'l';
+  Uchar.of_char 'm';
+  Uchar.of_char 'n';
+  Uchar.of_char 'o';
+  Uchar.of_char 'p';
+  Uchar.of_char 'q';
+  Uchar.of_char 'r';
+  Uchar.of_char 's';
+  Uchar.of_char 't';
+  Uchar.of_char 'u';
+  Uchar.of_char 'v';
+  Uchar.of_char 'w';
+  Uchar.of_char 'x';
+  Uchar.of_char 'y';
+  Uchar.of_char 'z';
+  Uchar.of_char '[';
+  Uchar.of_char '\\';
+  Uchar.of_char ']';
+  Uchar.of_char '^';
+  Uchar.of_char '_';
 |]
 
 let read_console_input fd =
@@ -64,8 +62,8 @@ let read_console_input fd =
   Lwt_unix.run_job ?async_method:None
    (read_console_input_job (Lwt_unix.unix_file_descr fd))
   >|= function
-  | Key({ LTerm_key.code = LTerm_key.Char ch ; _ } as key) when UChar.code ch < 32 ->
-    Key { key with LTerm_key.code = LTerm_key.Char controls.(UChar.code ch) }
+  | Key({ LTerm_key.code = LTerm_key.Char ch ; _ } as key) when Uchar.to_int ch < 32 ->
+    Key { key with LTerm_key.code = LTerm_key.Char controls.(Uchar.to_int ch) }
   | input ->
     input
 
@@ -139,7 +137,7 @@ type char_info = {
 }
 
 type char_info_raw = {
-  cir_char : UChar.t;
+  cir_char : Uchar.t;
   cir_foreground : int;
   cir_background : int;
 }
@@ -169,7 +167,7 @@ let write_console_output fd chars size coord rect =
   let chars= chars_to_raw chars in
   write_console_output (Lwt_unix.unix_file_descr fd) chars size coord rect
 
-external fill_console_output_character : Unix.file_descr -> UChar.t -> int -> LTerm_geom.coord -> int = "lt_windows_fill_console_output_character"
+external fill_console_output_character : Unix.file_descr -> Uchar.t -> int -> LTerm_geom.coord -> int = "lt_windows_fill_console_output_character"
 
 let fill_console_output_character fd char count coord =
   Lwt_unix.check_descriptor fd;

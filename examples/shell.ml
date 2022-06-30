@@ -9,7 +9,6 @@
 
 (* A mini shell *)
 
-open CamomileLibraryDefault.Camomile
 open React
 open Lwt
 open LTerm_style
@@ -67,7 +66,7 @@ let make_prompt size exit_code time =
     S" >─";
     S(Zed_utf8.make
         (size.cols - 24 - Zed_utf8.length code - Zed_utf8.length path)
-        (UChar.of_int 0x2500));
+        (Uchar.of_int 0x2500));
     S"[ ";
     B_fg(if exit_code = 0 then lwhite else lred); S code; E_fg;
     S" ]─";

@@ -14,7 +14,7 @@ let ( >>= ) = Lwt.( >>= )
 let make_key ?(ctrl = false) ?(meta = false) ?(shift = false) c =
   let code =
     match c with
-    | `Char c -> LTerm_key.Char (CamomileLibrary.UChar.of_char c)
+    | `Char c -> LTerm_key.Char (Uchar.of_char c)
     | `Other key -> key in
   { LTerm_key.control = ctrl; meta; shift; code }
 

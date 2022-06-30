@@ -8,7 +8,6 @@
  *)
 
 {
-  open CamomileLibraryDefault.Camomile
   open LTerm_key
 
   let return, (>>=) = Lwt.return, Lwt.(>>=)
@@ -285,7 +284,7 @@ and sequence key seq = parse
       }
   | [ 'a'-'z' 'A'-'Z' '0'-'9' '_' '(' ')' '[' ']' '{' '}' '~' '&' '$' '*' '%' '!' '?' ',' ';' '/' '\\' '.' '@' '=' '+' '-' '^' ] as ch (blank+ | ':' as sep)
       {
-        let seq = { key with code = Char(UChar.of_char ch) } :: seq in
+        let seq = { key with code = Char(Uchar.of_char ch) } :: seq in
         if sep = ":" then
           actions (List.rev seq) [] lexbuf
         else
@@ -303,7 +302,7 @@ and sequence key seq = parse
                | 'a' .. 'f' -> Char.code ch - Char.code 'a' + 10
                | _ -> assert false)
         done;
-        match try Some (UChar.of_int !code) with _ -> None with
+        match try Some (Uchar.of_int !code) with _ -> None with
           | Some ch ->
               let seq = { key with code = Char ch } :: seq in
               if sep = ":" then

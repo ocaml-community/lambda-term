@@ -58,7 +58,6 @@ let indices img =
 open Lwt
 open LTerm_widget
 open LTerm_geom
-open CamomileLibrary
 
 (* scrollable asciiart widget *)
 class asciiart img = object(self)
@@ -126,19 +125,19 @@ class asciiart img = object(self)
 
   (* adjust scale, which changes the document size *)
   method private scale_event = function
-    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c;_} when c = UChar.of_char 'w' ->
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c;_} when c = Uchar.of_char 'w' ->
       avg_rows := max 1 (!avg_rows - 1);
       vscroll#set_document_size self#document_size.rows;
       self#queue_draw; true
-    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c;_} when c = UChar.of_char 's' ->
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c;_} when c = Uchar.of_char 's' ->
       avg_rows := !avg_rows + 1; 
       vscroll#set_document_size self#document_size.rows;
       self#queue_draw; true
-    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c;_} when c = UChar.of_char 'a' ->
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c;_} when c = Uchar.of_char 'a' ->
       avg_cols := max 1 (!avg_cols - 1); 
       hscroll#set_document_size self#document_size.cols;
       self#queue_draw; true
-    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c;_} when c = UChar.of_char 'd' ->
+    | LTerm_event.Key{LTerm_key.code=LTerm_key.Char c;_} when c = Uchar.of_char 'd' ->
       avg_cols := !avg_cols + 1; 
       hscroll#set_document_size self#document_size.cols;
       self#queue_draw; true

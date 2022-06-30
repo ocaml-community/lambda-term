@@ -9,7 +9,6 @@
 
 let pervasives_compare= compare
 
-open CamomileLibraryDefault.Camomile
 open Zed_edit
 open LTerm_key
 open LTerm_geom
@@ -108,24 +107,24 @@ let () =
   bind [{ control = false; meta = false; shift = false; code = Insert }] [Zed Switch_erase_mode];
   bind [{ control = false; meta = false; shift = false; code = Delete }] [Zed Delete_next_char];
   bind [{ control = false; meta = false; shift = false; code = Enter }] [Zed Newline];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char ' ') }] [Zed Set_mark];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'a') }] [Zed Goto_bol];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'e') }] [Zed Goto_eol];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'd') }] [Zed Delete_next_char];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'h') }] [Zed Delete_prev_char];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') }] [Zed Kill_next_line];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'u') }] [Zed Kill_prev_line];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'n') }] [Zed Next_line];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'p') }] [Zed Prev_line];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'w') }] [Zed Kill];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'y') }] [Zed Yank];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char ' ') }] [Zed Set_mark];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'a') }] [Zed Goto_bol];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'e') }] [Zed Goto_eol];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'd') }] [Zed Delete_next_char];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'h') }] [Zed Delete_prev_char];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'k') }] [Zed Kill_next_line];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'u') }] [Zed Kill_prev_line];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'n') }] [Zed Next_line];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'p') }] [Zed Prev_line];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'w') }] [Zed Kill];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'y') }] [Zed Yank];
   bind [{ control = false; meta = false; shift = false; code = Backspace }] [Zed Delete_prev_char];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'w') }] [Zed Copy];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'c') }] [Zed Capitalize_word];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'l') }] [Zed Lowercase_word];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'u') }] [Zed Uppercase_word];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'b') }] [Zed Prev_word];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'f') }] [Zed Next_word];
+  bind [{ control = false; meta = true; shift = false; code = Char(Uchar.of_char 'w') }] [Zed Copy];
+  bind [{ control = false; meta = true; shift = false; code = Char(Uchar.of_char 'c') }] [Zed Capitalize_word];
+  bind [{ control = false; meta = true; shift = false; code = Char(Uchar.of_char 'l') }] [Zed Lowercase_word];
+  bind [{ control = false; meta = true; shift = false; code = Char(Uchar.of_char 'u') }] [Zed Uppercase_word];
+  bind [{ control = false; meta = true; shift = false; code = Char(Uchar.of_char 'b') }] [Zed Prev_word];
+  bind [{ control = false; meta = true; shift = false; code = Char(Uchar.of_char 'f') }] [Zed Next_word];
   bind [{ control = false; meta = true; shift = false; code = Right }] [Zed Next_word];
   bind [{ control = false; meta = true; shift = false; code = Left }] [Zed Prev_word];
   bind [{ control = true; meta = false; shift = false; code = Right }] [Zed Next_word];
@@ -133,21 +132,21 @@ let () =
   bind [{ control = false; meta = true; shift = false; code = Backspace }] [Zed Kill_prev_word];
   bind [{ control = false; meta = true; shift = false; code = Delete }] [Zed Kill_prev_word];
   bind [{ control = true; meta = false; shift = false; code = Delete }] [Zed Kill_next_word];
-  bind [{ control = false; meta = true; shift = false; code = Char(UChar.of_char 'd') }] [Zed Kill_next_word];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char '_') }] [Zed Undo];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(UChar.of_char '(') }] [Start_macro];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(UChar.of_char ')') }] [Stop_macro];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(UChar.of_char 'e') }] [Play_macro];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'g') }] [Cancel_macro];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') };
-        { control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') };
+  bind [{ control = false; meta = true; shift = false; code = Char(Uchar.of_char 'd') }] [Zed Kill_next_word];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char '_') }] [Zed Undo];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(Uchar.of_char '(') }] [Start_macro];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(Uchar.of_char ')') }] [Stop_macro];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'x') }; { control = false; meta = false; shift = false; code = Char(Uchar.of_char 'e') }] [Play_macro];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'g') }] [Cancel_macro];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'x') };
+        { control = true; meta = false; shift = false; code = Char(Uchar.of_char 'k') };
         { control = false; meta = false; shift = false; code = Tab }] [Insert_macro_counter];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') };
-        { control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') };
-        { control = true; meta = false; shift = false; code = Char(UChar.of_char 'a') }] [Add_macro_counter];
-  bind [{ control = true; meta = false; shift = false; code = Char(UChar.of_char 'x') };
-        { control = true; meta = false; shift = false; code = Char(UChar.of_char 'k') };
-        { control = true; meta = false; shift = false; code = Char(UChar.of_char 'c') }] [Set_macro_counter]
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'x') };
+        { control = true; meta = false; shift = false; code = Char(Uchar.of_char 'k') };
+        { control = true; meta = false; shift = false; code = Char(Uchar.of_char 'a') }] [Add_macro_counter];
+  bind [{ control = true; meta = false; shift = false; code = Char(Uchar.of_char 'x') };
+        { control = true; meta = false; shift = false; code = Char(Uchar.of_char 'k') };
+        { control = true; meta = false; shift = false; code = Char(Uchar.of_char 'c') }] [Set_macro_counter]
 
 (* +-----------------------------------------------------------------+
    | Widgets                                                         |
@@ -156,20 +155,17 @@ let () =
 let clipboard = Zed_edit.new_clipboard ()
 let macro = Zed_macro.create []
 
-let regexp_word =
-  let set = UCharInfo.load_property_set `Alphabetic in
-  let set = List.fold_left (fun set ch -> USet.add (UChar.of_char ch) set) set ['0'; '1'; '2'; '3'; '4'; '5'; '6'; '7'; '8'; '9'] in
-  Zed_re.Core.compile (`Repn(`Set set, 1, None))
-
 let dummy_engine = Zed_edit.create ()
 let dummy_cursor = Zed_edit.new_cursor dummy_engine
 let dummy_context = Zed_edit.context dummy_engine dummy_cursor
-let newline = Zed_char.unsafe_of_uChar (UChar.of_char '\n')
+let newline = Zed_char.unsafe_of_uChar (Uchar.of_char '\n')
 
 class scrollable = object
   inherit LTerm_widget.scrollable
   method! calculate_range page_size document_size = (document_size - page_size/2)
 end
+
+let default_match_word _ _ = None
 
 class edit ?(clipboard = clipboard) ?(macro = macro) ?(size = { cols = 1; rows = 1 }) () =
   let locale, set_locale = S.create None in
@@ -205,7 +201,7 @@ object(self)
     current_line_style <- LTerm_resources.get_style (rc ^ ".current-line") resources
 
   method editable _pos _len = true
-  method match_word text pos = match_by_regexp_core regexp_word text pos
+  method match_word = default_match_word
   method locale = S.value locale
   method set_locale locale = set_locale locale
 
@@ -263,7 +259,7 @@ object(self)
     engine <- (
       Zed_edit.create
         ~editable:(fun pos len -> self#editable pos len)
-        ~match_word:(fun text pos -> self#match_word text pos)
+        ?match_word:(if self # match_word == default_match_word then None else Some self # match_word)
         ~clipboard
         ~locale
         ()

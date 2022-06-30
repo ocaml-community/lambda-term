@@ -7,8 +7,6 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDefault.Camomile
-
 let return, (>>=) = Lwt.return, Lwt.(>>=)
 
 (* A node contains an entry of the history. *)
@@ -86,9 +84,7 @@ let create ?(max_size=max_int) ?(max_entries=max_int) init =
     cache = None;
   }
 
-let spaces = UCharInfo.load_property_tbl `White_Space
-
-let is_space_uChar ch = UCharTbl.Bool.get spaces ch
+let is_space_uChar ch = Uucp.White.is_white_space ch
 let is_space ch = Zed_char.for_all is_space_uChar ch
 let is_empty str = Zed_string.for_all is_space str
 
