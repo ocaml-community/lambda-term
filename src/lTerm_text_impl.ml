@@ -8,7 +8,6 @@
  *)
 
 module Make (LiteralIntf: LiteralIntf.Type) = struct
-  open CamomileLibraryDefault.Camomile
   open LTerm_style
   open Result
 
@@ -40,9 +39,9 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
 
   let uchar_of_hex x =
     if x < 10 then
-      UChar.of_int (Char.code '0' + x)
+      Uchar.of_int (Char.code '0' + x)
     else
-      UChar.of_int (Char.code 'a' + x - 10)
+      Uchar.of_int (Char.code 'a' + x - 10)
 
   let of_string_maybe_invalid str=
     let len= Zed_string.length str in
@@ -58,7 +57,7 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
             (ofs, idx + 1)
           with
             Zed_utf8.Invalid _->
-            let code= UChar.int_of (Zed_char.core (Zed_string.extract str ofs)) in
+            let code= Uchar.to_int (Zed_char.core (Zed_string.extract str ofs)) in
             Array.unsafe_set arr (idx + 0)
               (Zed_char.unsafe_of_char '\\', LTerm_style.none);
             Array.unsafe_set arr (idx + 1)

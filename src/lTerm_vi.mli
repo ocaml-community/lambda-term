@@ -41,8 +41,8 @@ module Query :
     val line_LastChar : ?newline:bool -> int -> 'a Zed_edit.context -> int
     val get_category :
       ?nl_as_sp:bool ->
-      CamomileLibrary.UChar.t ->
-      CamomileLibraryDefault.Camomile.UCharInfo.general_category_type
+      Uchar.t ->
+      Uucp.Gc.t
     val get_boundary : bool -> 'a Zed_edit.context -> int * int
     val is_space : [> `Cc | `Mn | `Zl | `Zp | `Zs ] -> bool
     val is_not_space : [> `Cc | `Mn | `Zl | `Zp | `Zs ] -> bool
@@ -52,15 +52,11 @@ module Query :
       [> `Cc | `Mn | `Zl | `Zp | `Zs ] -> bool
     val next_category :
       ?nl_as_sp:bool ->
-      ?is_equal:(CamomileLibraryDefault.Camomile.UCharInfo.general_category_type ->
-                CamomileLibraryDefault.Camomile.UCharInfo.general_category_type ->
-                bool) ->
+      ?is_equal:(Uucp.Gc.t -> Uucp.Gc.t -> bool) ->
       pos:int -> stop:int -> Zed_rope.t -> int
     val prev_category :
       ?nl_as_sp:bool ->
-      ?is_equal:(CamomileLibraryDefault.Camomile.UCharInfo.general_category_type ->
-                CamomileLibraryDefault.Camomile.UCharInfo.general_category_type ->
-                bool) ->
+      ?is_equal:(Uucp.Gc.t -> Uucp.Gc.t -> bool) ->
       pos:int -> start:int -> Zed_rope.t -> int
     val goto_line : 'a Zed_edit.context -> int -> int
     val next_line : 'a Zed_edit.context -> int -> int

@@ -7,13 +7,12 @@
  * This file is a part of Lambda-Term.
  *)
 
-open CamomileLibraryDefault.Camomile
 open Lwt_react
 open LTerm_geom
 
 let return, (>>=) = Lwt.return, Lwt.(>>=)
 
-let uspace = UChar.of_char ' '
+let uspace = Uchar.of_char ' '
 let yspace = Zed_char.unsafe_of_uChar uspace
 
 (* +-----------------------------------------------------------------+
@@ -81,8 +80,6 @@ type t = {
   mutable size : size;
   (* The current size of the terminal. *)
 
-  incoming_encoding : CharEncoding.t;
-  outgoing_encoding : CharEncoding.t;
   (* Characters encodings. *)
 
   outgoing_is_utf8 : bool;
@@ -157,22 +154,11 @@ let colors_of_term = function
 
 exception No_such_encoding of string
 
-let char_encoding_of_name name =
-  try
-    CharEncoding.of_name name
-  with Not_found ->
-    raise (No_such_encoding name)
-
-(* UTF-8 on windows. *)
-let () = CharEncoding.alias "CP65001" "UTF-8"
-
 let empty_stream = Lwt_stream.from (fun () -> return None)
 
 let create
       ?(windows=Sys.win32)
       ?(model=default_model)
-      ?incoming_encoding
-      ?outgoing_encoding
       incoming_fd incoming_channel outgoing_fd outgoing_channel
   =
   Lwt.catch (fun () ->
@@ -194,26 +180,6 @@ let create
         | n -> Printf.ksprintf failwith "LTerm.create: unknown number of colors (%d)" n
     in
     (* Encodings. *)
-    let incoming_encoding =
-      char_encoding_of_name
-        (match incoming_encoding with
-           | Some name ->
-               name
-           | None ->
-               if windows then
-                 Printf.sprintf "CP%d" (LTerm_windows.get_console_cp ())
-               else
-                 LTerm_unix.system_encoding)
-    and outgoing_encoding =
-      char_encoding_of_name
-        (match outgoing_encoding with
-           | Some name ->
-               name
-           | None ->
-               if windows then
-                 Printf.sprintf "CP%d" (LTerm_windows.get_console_output_cp ())
-               else
-                 LTerm_unix.system_encoding) in
     (* Check if fds are ttys. *)
     Lwt_unix.isatty incoming_fd >>= fun incoming_is_a_tty ->
     Lwt_unix.isatty outgoing_fd >>= fun outgoing_is_a_tty ->
@@ -232,9 +198,7 @@ let create
       input_stream = empty_stream;
       next_event = None;
       read_event = false;
-      incoming_encoding;
-      outgoing_encoding;
-      outgoing_is_utf8 = CharEncoding.name_of outgoing_encoding = "UTF-8";
+      outgoing_is_utf8 = true;
       notify = Lwt_condition.create ();
       event = E.never;
       incoming_is_a_tty;
@@ -311,11 +275,39 @@ let set_size _ _ = Lwt.fail (Failure "LTerm.set_size is deprecated")
    | Events                                                          |
    +-----------------------------------------------------------------+ *)
 
-class output_single (cell : UChar.t option ref) = object
-  method put char = cell := Some char
-  method flush () = ()
-  method close_out () = ()
-end
+let parse_char first_byte st=
+  let open Lwt in
+  let cp1= int_of_char first_byte in
+  let parse st=
+    match first_byte with
+    | '\x00' .. '\x7f'-> return (Uchar.of_int cp1)
+    | '\xc0' .. '\xdf'-> Lwt_stream.next st >|= int_of_char >>= fun cp2->
+      return @@ Uchar.of_int
+        (((cp1 land 0x1f) lsl 6) lor (cp2 land 0x3f))
+    | '\xe0' .. '\xef'->
+      Lwt_stream.next st >|= int_of_char >>= fun cp2->
+      Lwt_stream.next st >|= int_of_char >>= fun cp3->
+      return @@ Uchar.of_int
+        (((cp1 land 0x0f) lsl 12)
+        lor ((cp2 land 0x3f) lsl 6)
+        lor (cp3 land 0x3f))
+    | '\xf0' .. '\xf7'->
+      Lwt_stream.next st >|= int_of_char >>= fun cp2->
+      Lwt_stream.next st >|= int_of_char >>= fun cp3->
+      Lwt_stream.next st >|= int_of_char >>= fun cp4->
+      return @@ Uchar.of_int
+        (((cp1 land 0x07) lsl 18)
+        lor ((cp2 land 0x3f) lsl 12)
+        lor ((cp3 land 0x3f) lsl 6)
+        lor (cp4 land 0x3f))
+    | _-> assert false
+  in
+  Lwt.catch
+    (fun () -> Lwt_stream.parse st parse)
+    (function
+    | Lwt_stream.Empty ->
+        return (Uchar.of_char first_byte)
+    | exn -> Lwt.fail exn)
 
 let read_char term =
   begin
@@ -324,24 +316,11 @@ let read_char term =
       | Some byte -> return byte
       | None -> Lwt.fail End_of_file
   end >>= fun first_byte ->
-  let cell = ref None in
-  let output = new CharEncoding.convert_uchar_output term.incoming_encoding (new output_single cell) in
-  let rec loop st =
-    match !cell with
-      | Some char ->
-          return char
-      | None ->
-          Lwt_stream.next st >>= fun byte ->
-          assert (output#output (Bytes.make 1 byte) 0 1 = 1);
-          output#flush ();
-          loop st
-  in
   Lwt.catch (fun () ->
-      assert (output#output (Bytes.make 1 first_byte) 0 1 = 1);
-      Lwt_stream.parse term.input_stream loop)
+      Lwt_stream.parse term.input_stream (parse_char first_byte))
     (function
-    | CharEncoding.Malformed_code | Lwt_stream.Empty ->
-      return (UChar.of_char first_byte)
+    | Lwt_stream.Empty ->
+      return (Uchar.of_char first_byte)
     | exn -> Lwt.fail exn) >>= fun char ->
   return (LTerm_event.Key {
             LTerm_key.control = false;
@@ -374,7 +353,7 @@ let rec next_event term =
                       LTerm_mouse.col = mouse.LTerm_mouse.col - window.col1;
                   })
   else
-    LTerm_unix.parse_event ~escape_time:term.escape_time term.incoming_encoding term.input_stream
+    LTerm_unix.parse_event ~escape_time:term.escape_time term.input_stream
 
 let wrap_next_event next_event term =
   match term.next_event with
@@ -716,24 +695,25 @@ let load_state term =
    | String recoding                                                 |
    +-----------------------------------------------------------------+ *)
 
-let vline = UChar.of_char '|'
-let vlline = UChar.of_char '+'
-let dlcorner = UChar.of_char '+'
-let urcorner = UChar.of_char '+'
-let huline = UChar.of_char '+'
-let hdline = UChar.of_char '+'
-let vrline = UChar.of_char '+'
-let hline = UChar.of_char '-'
-let cross = UChar.of_char '+'
-let ulcorner = UChar.of_char '+'
-let drcorner = UChar.of_char '+'
-let question = UChar.of_char '?'
+(*
+let vline = Uchar.of_char '|'
+let vlline = Uchar.of_char '+'
+let dlcorner = Uchar.of_char '+'
+let urcorner = Uchar.of_char '+'
+let huline = Uchar.of_char '+'
+let hdline = Uchar.of_char '+'
+let vrline = Uchar.of_char '+'
+let hline = Uchar.of_char '-'
+let cross = Uchar.of_char '+'
+let ulcorner = Uchar.of_char '+'
+let drcorner = Uchar.of_char '+'
+let question = Uchar.of_char '?'
+*)
 
-module UNF = UNF.Make (UText)
 
 (* Map characters that cannot be encoded to ASCII ones. *)
-let map_char char =
-  match UChar.code char with
+(*let map_char char =
+  match Uchar.to_int char with
     | 0x2500 -> hline
     | 0x2501 -> hline
     | 0x2502 -> vline
@@ -817,60 +797,20 @@ let map_char char =
     | 0x2550 -> hline
     | 0x2551 -> vline
     | _ ->
-        match UNF.nfd_decompose char with
-          | char :: _ ->
-              if UChar.code char <= 127 then
-                char
-              else
-                question
-          | [] ->
-              question
+      let nfd_seq= Uunf.decomp char in
+      if Array.length nfd_seq > 0 then
+        let uchar= Uunf.d_uchar nfd_seq.(0) in
+        if Uchar.to_int uchar <= 127 then
+            uchar
+        else
+          question
+      else
+        question
+  *)
 
-class output_to_buffer buf res = object
-  method output str ofs len =
-    Buffer.add_subbytes buf str ofs len;
-    len
-  method flush () = ()
-  method close_out () =
-    res := Buffer.contents buf
-end
+let encode_string str = str
 
-let encode_string term str =
-  if term.outgoing_is_utf8 then
-    (* Do not recode [str] if the output is UTF-8. *)
-    str
-  else
-    let buf = Buffer.create (String.length str) in
-    let res = ref "" in
-    let output = new CharEncoding.uchar_output_channel_of term.outgoing_encoding (new output_to_buffer buf res) in
-    let rec loop ofs =
-      if ofs = String.length str then begin
-        output#close_out ();
-        !res
-      end else begin
-        let ch, ofs = Zed_utf8.unsafe_extract_next str ofs in
-        (try
-           output#put ch
-         with CharEncoding.Out_of_range | UChar.Out_of_range ->
-           output#put (map_char ch));
-        loop ofs
-      end
-    in
-    loop 0
-
-let encode_char term ch =
-  if term.outgoing_is_utf8 then
-    Zed_utf8.singleton ch
-  else begin
-    let res = ref "" in
-    let output = new CharEncoding.uchar_output_channel_of term.outgoing_encoding (new output_to_buffer (Buffer.create 8) res) in
-    (try
-       output#put ch
-     with CharEncoding.Out_of_range | UChar.Out_of_range ->
-       output#put (map_char ch));
-    output#close_out ();
-    !res
-  end
+let encode_char ch = Zed_utf8.singleton ch
 
 (* +-----------------------------------------------------------------+
    | Styled printing                                                 |
@@ -886,7 +826,7 @@ module Codes = struct
 end
 
 let fprint term str =
-  Lwt_io.fprint term.oc (encode_string term str)
+  Lwt_io.fprint term.oc str
 
 let fprintl term str =
   fprint term (str ^ "\n")
@@ -1021,7 +961,7 @@ let fprints_windows term oc text =
       end >>= fun () ->
       let chars= Zed_char.to_raw ch in
       let s= chars
-        |> List.map (encode_char term)
+        |> List.map encode_char
         |> String.concat ""
       in
       Lwt_io.write oc s >>= fun () ->
@@ -1143,7 +1083,7 @@ let same_style p1 p2 =
       p1.foreground = p2.foreground &&
       p1.background = p2.background
 
-let unknown_uchar = UChar.of_int 0xfffd
+let unknown_uchar = Uchar.of_int 0xfffd
 let unknown_char = Zed_char.unsafe_of_uChar unknown_uchar
 let unknown_utf8 = Zed_char.to_utf8 unknown_char
 
@@ -1164,7 +1104,7 @@ let render_style term buf old_point new_point =
 let render_point term buf old_point new_point =
   render_style term buf old_point new_point;
   (* Skip control characters, otherwise output will be messy. *)
-  if UChar.code (Zed_char.core new_point.LTerm_draw.char) < 32 then
+  if Uchar.to_int (Zed_char.core new_point.LTerm_draw.char) < 32 then
     Buffer.add_string buf unknown_utf8
   else
     Buffer.add_string buf (Zed_char.to_utf8 new_point.LTerm_draw.char)
@@ -1244,7 +1184,7 @@ let render_windows term kind handle_newlines matrix =
           else begin
             match !(Array.unsafe_get line i) with
             | LTerm_draw.Elem point->
-              let code = UChar.code (Zed_char.core point.LTerm_draw.char) in
+              let code = Uchar.to_int (Zed_char.core point.LTerm_draw.char) in
               if handle_newlines && code = 10 then begin
                 (* Copy styles. *)
                 Array.unsafe_set res i (windows_char_info term point yspace);
@@ -1345,7 +1285,7 @@ let print_box_with_newlines_unix term matrix =
     let rec loop x =
       match !(Array.unsafe_get line x) with
       | Elem point->
-        let code = UChar.code (Zed_char.core point.char) in
+        let code = Uchar.to_int (Zed_char.core point.char) in
         if x = cols then begin
           if code = 10 && y < rows - 1 then
             Buffer.add_char buf '\n'

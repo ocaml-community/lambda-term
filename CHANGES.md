@@ -1,3 +1,8 @@
+Unreleased
+----------
+
+* Replace Camomile with uu* (Nicolás Ojeda Bär, ZAN DoYe, Thibaut Mattio, Jonah Beckford, #109)
+
 3.2.0 (2022-02-21)
 ------------------
 

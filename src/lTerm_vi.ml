@@ -144,13 +144,11 @@ module Query = struct
     else
       max 0 (stop - 1)
 
-  open CamomileLibraryDefault.Camomile
-
   let get_category ?(nl_as_sp=false) uchar=
     if uchar = Zed_utf8.extract "\n" 0 && nl_as_sp then
       `Zs
     else
-      UCharInfo.general_category uchar
+      Uucp.Gc.general_category uchar
 
   let get_boundary multi_line ctx=
     let edit= Zed_edit.edit ctx in

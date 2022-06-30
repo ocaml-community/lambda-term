@@ -28,8 +28,6 @@ facilities in console applications.")
  (depends
   (ocaml
    (>= 4.08.0))
-  (camomile
-   (>= 1.0.1))
   (lwt
    (>= 4.2.0))
   lwt_log
@@ -41,5 +39,5 @@ facilities in console applications.")
   react
   (zed
    (and
-    (>= 3.1.0)
-    (< 3.2.0)))))
+    (>= 3.2.0)
+    (< 4.0)))))

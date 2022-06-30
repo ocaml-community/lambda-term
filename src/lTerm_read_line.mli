@@ -12,7 +12,6 @@
 (** For a complete example of usage of this module, look at the shell
     example (examples/shell.ml) distributed with Lambda-Term. *)
 
-open CamomileLibrary
 open React
 
 exception Interrupt
@@ -144,7 +143,7 @@ class virtual ['a] engine : ?history : history -> ?clipboard : Zed_edit.clipboar
 
   (** {6 Actions} *)
 
-  method insert : UChar.t -> unit
+  method insert : Uchar.t -> unit
     (** Inserts the given character. Note that is it also possible to
         manipulate directly the edition context. *)
 
@@ -224,7 +223,7 @@ end
 class virtual ['a] abstract : object
   method virtual eval : 'a
   method virtual send_action : action -> unit
-  method virtual insert : UChar.t -> unit
+  method virtual insert : Uchar.t -> unit
   method virtual edit : unit Zed_edit.t
   method virtual context : unit Zed_edit.context
   method virtual clipboard : Zed_edit.clipboard
