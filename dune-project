@@ -31,7 +31,7 @@ facilities in console applications.")
   (camomile
    (>= 1.0.1))
   (lwt
-   (>= 4.0.0))
+   (>= 4.2.0))
   lwt_log
   lwt_react
   (mew_vi
@@ -42,4 +42,4 @@ facilities in console applications.")
   (zed
    (and
     (>= 3.1.0)
-    (< 4.0)))))
+    (< 3.2.0)))))
