@@ -321,7 +321,9 @@ let unescape line =
   in
   loop 0 0
 
-let section = Lwt_log.Section.make "lambda-term(history)"
+
+let src = Logs.Src.create "lambda-term.history" ~doc:"logs LTerm_history module's events"
+module Log = (val Logs_lwt.src_log src : Logs_lwt.LOG)
 
 let rec safe_lockf fn fd cmd ofs =
   Lwt.catch (fun () ->
@@ -331,7 +333,7 @@ let rec safe_lockf fn fd cmd ofs =
     | Unix.Unix_error (Unix.EINTR, _, _) ->
         safe_lockf fn fd cmd ofs
     | Unix.Unix_error (error, _, _) ->
-        Lwt_log.ign_warning_f ~section "failed to lock file '%s': %s" fn (Unix.error_message error);
+        Log.warn (fun m -> m "failed to lock file '%s': %s" fn (Unix.error_message error)) >>= fun () ->
         return false
     | exn -> Lwt.fail exn)
 
@@ -344,7 +346,7 @@ let open_history fn =
     | Unix.Unix_error (Unix.ENOENT, _, _) ->
         return None
     | Unix.Unix_error (Unix.EACCES, _, _) ->
-        Lwt_log.ign_info_f "cannot open file '%s' in read and write mode: %s" fn (Unix.error_message Unix.EACCES);
+        Log.info (fun m -> m "cannot open file '%s' in read and write mode: %s" fn (Unix.error_message Unix.EACCES)) >>= fun () ->
         (* If the file cannot be openned in read & write mode,
            open it in read only mode but do not lock it. *)
         Lwt.catch (fun () ->
@@ -369,7 +371,7 @@ let load history ?log ?(skip_empty=true) ?(skip_dup=true) fn =
             func
         | None ->
             fun line msg ->
-              Lwt_log.ign_error_f ~section "File %S, at line %d: %s" fn line msg
+              Log.info (fun m -> m "File %S, at line %d: %s" fn line msg)
     in
     (* File opening. *)
     open_history fn >>= fun history_file ->
@@ -392,11 +394,12 @@ let load history ?log ?(skip_empty=true) ?(skip_dup=true) fn =
                        if not (skip_empty && is_empty entry) && not (skip_dup && is_dup history entry) then begin
                          add_aux history entry size;
                          history.old_count <- history.length
-                       end
+                        end;
+                        Lwt.return ()
                     with
                       | Zed_string.Invalid (msg, _)-> log num msg
                       | Zed_utf8.Invalid (msg, _)-> log num msg
-                   );
+                   ) >>= fun () ->
                     aux (num + 1)
             in
             aux 1)

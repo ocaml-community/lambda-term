@@ -13,8 +13,6 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
   open LTerm_mouse
   open LTerm_widget_callbacks
 
-  let section = Lwt_log.Section.make "lambda-term(buttons_impl)"
-
   class t = LTerm_widget_base_impl.t
 
   let space = Char(Uchar.of_char ' ')
