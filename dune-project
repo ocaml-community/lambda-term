@@ -28,9 +28,9 @@ facilities in console applications.")
  (depends
   (ocaml
    (>= 4.08.0))
+  logs
   (lwt
    (>= 4.2.0))
-  lwt_log
   lwt_react
   (mew_vi
    (and

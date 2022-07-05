@@ -72,7 +72,7 @@ val set_max_entries : t -> int -> unit
       oldest entries to honor the new limit. *)
 
 val load : t ->
-  ?log : (int -> string -> unit) ->
+  ?log : (int -> string -> unit Lwt.t) ->
   ?skip_empty : bool ->
   ?skip_dup : bool ->
   string -> unit Lwt.t

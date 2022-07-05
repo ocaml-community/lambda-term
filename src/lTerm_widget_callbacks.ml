@@ -7,7 +7,8 @@
  * This file is a part of Lambda-Term.
  *)
 
-let section = Lwt_log.Section.make "lambda-term(widget_callbacks)"
+let src = Logs.Src.create "lambda-term.widget-callbacks" ~doc:"logs LTerm_widget_callbacks module's events"
+module Log = (val Logs.src_log src : Logs.LOG)
 
 (* +-----------------------------------------------------------------+
    | Callbacks                                                       |
@@ -44,7 +45,8 @@ let exec_callbacks seq x =
        try
          f x
        with exn ->
-         ignore (Lwt_log.error ~section ~exn "callback failed with"))
+         Log.err (fun m -> m "callback failed with %s" (Printexc.to_string exn));
+         ())
     seq
 
 let exec_filters seq x =
@@ -56,7 +58,7 @@ let exec_filters seq x =
          try
            f x
          with exn ->
-           ignore (Lwt_log.error ~section ~exn "filter failed with");
+           Log.err (fun m -> m "filter failed with %s" (Printexc.to_string exn));
            false
        end)
     seq false
