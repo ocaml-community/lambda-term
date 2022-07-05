@@ -56,11 +56,6 @@ To build the examples:
 
 Binaries for the examples will be in `_build/default/examples`.
 
-The `asciiart` example is not built by default as it as an additional
-dependency on the `camlimages` library. To build it run:
-
-    $ dune build examples/asciiart/asciiart.exe
-
 Terminal emulators compatibility
 --------------------------------
 
