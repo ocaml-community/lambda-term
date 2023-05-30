@@ -34,12 +34,19 @@ module XDGBD = struct
     try
       Sys.getenv env_var
     with Not_found ->
-      if Sys.win32 then win32_default else unix_default
+      if Sys.win32 then
+        win32_default ()
+      else
+        unix_default
 
-  let cache  = get "XDG_CACHE_HOME"  (home / ".cache")           (home / "Local Settings" / "Cache")
-  let config = get "XDG_CONFIG_HOME" (home / ".config")          (home / "Local Settings")
-  let data   = get "XDG_DATA_HOME"   (home / ".local" / "share") (try Sys.getenv "AppData" with Not_found -> "")
-  let state  = get "XDG_STATE_HOME"  (home / ".local" / "state") (try Sys.getenv "AppData" with Not_found -> "")
+  let cache  = get "XDG_CACHE_HOME"  (home / ".cache") @@ fun () ->
+    try Sys.getenv "LocalAppData" / "Cache" with Not_found -> home / "AppData" / "Local" / "Cache"
+  let config = get "XDG_CONFIG_HOME" (home / ".config") @@ fun () ->
+    try Sys.getenv "AppData" with Not_found -> home / "AppData" / "Roaming"
+  let data   = get "XDG_DATA_HOME"   (home / ".local" / "share") @@ fun () ->
+    try Sys.getenv "AppData" with Not_found -> home / "AppData" / "Roaming"
+  let state  = get "XDG_STATE_HOME"  (home / ".local" / "state") @@ fun () ->
+    try Sys.getenv "LocalAppData" with Not_found -> home / "AppData" / "Local"
 
   let user_dir = function
     | Cache  -> cache
