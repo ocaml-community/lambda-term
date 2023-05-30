@@ -25,7 +25,7 @@ let home =
       else
         ""
 
-type xdg_location = Cache | Config | Data
+type xdg_location = Cache | Config | Data | State
 
 module XDGBD = struct
   let ( / ) = Filename.concat
@@ -39,18 +39,21 @@ module XDGBD = struct
   let cache  = get "XDG_CACHE_HOME"  (home / ".cache")           (home / "Local Settings" / "Cache")
   let config = get "XDG_CONFIG_HOME" (home / ".config")          (home / "Local Settings")
   let data   = get "XDG_DATA_HOME"   (home / ".local" / "share") (try Sys.getenv "AppData" with Not_found -> "")
+  let state  = get "XDG_STATE_HOME"  (home / ".local" / "state") (try Sys.getenv "AppData" with Not_found -> "")
 
   let user_dir = function
     | Cache  -> cache
     | Config -> config
     | Data   -> data
+    | State  -> state
 end
 
 let xdgbd_warning loc file_name =
   let loc_name = match loc with
     | Cache  -> "$XDG_CACHE_HOME"
     | Config -> "$XDG_CONFIG_HOME"
-    | Data   -> "$XDG_DATA_HOME" in
+    | Data   -> "$XDG_DATA_HOME"
+    | State  -> "$XDG_STATE_HOME" in
   Printf.eprintf
     "Warning: it is recommended to move `%s` to `%s`, see:\n%s\n"
     file_name loc_name
