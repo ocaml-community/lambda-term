@@ -46,14 +46,15 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
   let of_string_maybe_invalid str=
     let txt zc = (zc, LTerm_style.none) in
     let rec loop ofs acc =
-      if ofs = 0 then acc
+      if ofs = 0 then Array.of_list acc
       else begin
         try
           let (zc, ofs') = Zed_string.extract_prev str ofs in
           loop ofs' (txt zc :: acc)
-        with Invalid_argument _ | Zed_utf8.Invalid _ ->
-          (* extract_prev calls Zed_utf8.unsafe_extract_prev which throws
-             Zed_utf8.Invalid, or can call Uchar.of_int which throws Invalid_argument *)
+        with 
+        | Invalid_argument _      (* from Uchar.of_int *)
+        | Zed_utf8.Invalid _      (* invalid UTF8 sequence *)
+        | Zed_string.Invalid _ -> (* individual combining character *)
           let invalid = Zed_string.sub_ofs ~ofs:(ofs-1) ~len:1 str in
           let code = Char.code (Zed_string.to_utf8 invalid).[0] in
           loop (ofs - 1) (txt (Zed_char.unsafe_of_char '\\') ::
@@ -61,8 +62,9 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
                           txt (Zed_char.unsafe_of_uChar (uchar_of_hex (code lsr 4))) ::
                           txt (Zed_char.unsafe_of_uChar (uchar_of_hex (code land 15))) ::
                           acc)
-      end in
-    Array.of_list @@ loop (Zed_string.bytes str) []
+      end
+    in
+    loop (Zed_string.bytes str) []
 
   let of_utf8_maybe_invalid str=
     let str= Zed_string.unsafe_of_utf8 str in
