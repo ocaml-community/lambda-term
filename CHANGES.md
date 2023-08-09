@@ -1,3 +1,8 @@
+3.3.2 (2023-08-09)
+------------------
+
+* `LTerm_vi`: fix a downward-action issue when act in empty content
+
 3.3.1 (2022-07-04)
 ------------------
 
