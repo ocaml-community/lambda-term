@@ -242,7 +242,7 @@ module Query = struct
     let cursor= Zed_edit.cursor ctx in
     let count= Zed_lines.count lines in
     if index = Zed_lines.count lines then
-      Zed_rope.length text - 1
+      max 0 (Zed_rope.length text - 1)
     else begin
       let stop =
         if index + delta >= count then
