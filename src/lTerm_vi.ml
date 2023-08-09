@@ -1,7 +1,7 @@
 (*
  * lTerm_vi.ml
  * ------------
- * Copyright : (c) 2020, ZAN DoYe <zandoye@gmail.com>
+ * Copyright : (c) 2023, ZAN DoYe <zandoye@gmail.com>
  * Licence   : BSD3
  *
  * This file is a part of Lambda-Term.
