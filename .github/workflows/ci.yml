@@ -12,6 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
+          - macos-13
           - macos-latest
           - ubuntu-latest
           - windows-latest
@@ -20,15 +21,50 @@ jobs:
           - 4.10.x
           - 4.12.x
           - 4.14.x
+          - 5.02.x
+        setup-version:
+          - v2
+          - v3
+        exclude:
+          - os: ubuntu-latest
+            setup-version: v2
+          - os: macos-13
+            setup-version: v3
+          - os: macos-latest
+            setup-version: v2
+          - os: macos-latest
+            ocaml-compiler: 4.08.x
+          - os: windows-latest
+            setup-version: v3
+            ocaml-compiler: 4.08.x
+          - os: windows-latest
+            setup-version: v3
+            ocaml-compiler: 4.10.x
+          - os: windows-latest
+            setup-version: v3
+            ocaml-compiler: 4.12.x
+          - os: windows-latest
+            setup-version: v3
+            ocaml-compiler: 4.14.x
+          - os: windows-latest
+            setup-version: v2
+            ocaml-compiler: 5.02.x
 
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Use OCaml ${{ matrix.ocaml-compiler }}
+      - name: Use OCaml ${{ matrix.ocaml-compiler }} with v2
+        if: ${{ matrix.setup-version == 'v2' }}
         uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+      
+      - name: Use OCaml ${{ matrix.ocaml-compiler }} with v3
+        if: ${{ matrix.setup-version == 'v3' }}
+        uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
