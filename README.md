@@ -1,7 +1,7 @@
 Lambda-Term
 ===========
 
-[![CI](https://github.com/ocaml-community/lambda-term/actions/workflows/ci.yml/badge.svg)]([https://travis-ci.org/ocaml-community/lambda-term](https://github.com/ocaml-community/lambda-term/actions/workflows/ci.yml)
+[![CI](https://github.com/ocaml-community/lambda-term/actions/workflows/ci.yml/badge.svg)](https://github.com/ocaml-community/lambda-term/actions/workflows/ci.yml)
 
 Lambda-Term is a cross-platform library for manipulating the
 terminal. It provides an abstraction for keys, mouse events, colors,
