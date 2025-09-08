@@ -10,7 +10,7 @@
 module Concurrent = struct
   module Thread= struct
       include Lwt
-      let run= Lwt_unix.run [@@ocaml.warning "-3"]
+      let run= Lwt_main.run
       let sleep= Lwt_unix.sleep
     end
   module MsgBox= struct
