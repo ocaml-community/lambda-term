@@ -65,8 +65,10 @@ val load : string -> t Lwt.t
 val home : string
   (** The home directory. *)
 
-type xdg_location = Cache | Config | Data
-  (** The type for user-specific 'cached', 'configuration' and 'data' files. *)
+type xdg_location = Cache | Config | Data | State
+  (** The type for user-specific 'cached', 'configuration',
+      'data', and 'state' files.
+  *)
 
 val xdgbd_file : loc:xdg_location -> ?legacy_name:string -> string -> string
   (** [xdgbd_file ~loc fn] returns the full file-name for a file [fn] in the
