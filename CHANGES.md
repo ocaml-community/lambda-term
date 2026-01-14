@@ -1,3 +1,8 @@
+3.3.3 (2026-01-14)
+------------------
+
+* `LTerm_vi`: eliminate the incompatibility with lwt6 (@raphael-proust, #122)
+
 3.3.2 (2023-08-09)
 ------------------
 
