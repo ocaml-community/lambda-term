@@ -210,16 +210,24 @@ let create
     term.input_stream <- Lwt_stream.from (fun () -> Lwt_io.read_char_opt term.ic);
     (* Setup initial size and size updater. *)
     if term.outgoing_is_a_tty then begin
-      let check_size () =
-        let size = get_size_from_fd term.outgoing_fd in
-        if size <> term.size then begin
-          term.size <- size;
-          Lwt_condition.signal term.notify (LTerm_event.Resize size)
-        end
-      in
-      term.size <- get_size_from_fd term.outgoing_fd;
-      term.last_reported_size <- term.size;
-      term.event <- E.map check_size resize_event
+      try
+        let check_size () =
+          try
+            let size = get_size_from_fd term.outgoing_fd in
+            if size <> term.size then begin
+              term.size <- size;
+              Lwt_condition.signal term.notify (LTerm_event.Resize size)
+            end
+          with Unix.Unix_error _ -> ()
+        in
+        term.size <- get_size_from_fd term.outgoing_fd;
+        term.last_reported_size <- term.size;
+        term.event <- E.map check_size resize_event
+      with Unix.Unix_error _ ->
+        (* If we can't get the terminal size (e.g. on Windows when the
+           handle passes isatty but is not a real console), fall back to
+           treating it as a non-tty. *)
+        term.outgoing_is_a_tty <- false
     end;
     return term)
     Lwt.fail
