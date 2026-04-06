@@ -23,10 +23,22 @@
 
 CAMLprim value lt_term_get_size_from_fd(value fd)
 {
+  HANDLE h = Handle_val(fd);
   CONSOLE_SCREEN_BUFFER_INFO info;
+  DWORD mode;
   value result;
 
-  if (!GetConsoleScreenBufferInfo(Handle_val(fd), &info)) {
+  /* Validate that the handle is a usable console handle before calling
+     GetConsoleScreenBufferInfo. On some Windows environments (e.g. GitHub
+     Actions runners using ConPTY), _isatty() may return true for handles
+     that are not real console screen buffers, causing
+     GetConsoleScreenBufferInfo to crash with an access violation. */
+  if (h == INVALID_HANDLE_VALUE || h == NULL || !GetConsoleMode(h, &mode)) {
+    win32_maperr(ERROR_INVALID_HANDLE);
+    uerror("GetConsoleScreenBufferInfo", Nothing);
+  }
+
+  if (!GetConsoleScreenBufferInfo(h, &info)) {
     win32_maperr(GetLastError());
     uerror("GetConsoleScreenBufferInfo", Nothing);
   }
@@ -39,21 +51,28 @@ CAMLprim value lt_term_get_size_from_fd(value fd)
 
 CAMLprim value lt_term_set_size_from_fd(value fd, value val_size)
 {
+  HANDLE h = Handle_val(fd);
   CONSOLE_SCREEN_BUFFER_INFO info;
   SMALL_RECT rect;
+  DWORD mode;
 
-  if (!GetConsoleScreenBufferInfo(Handle_val(fd), &info)) {
+  /* Validate that the handle is a usable console handle. */
+  if (h == INVALID_HANDLE_VALUE || h == NULL || !GetConsoleMode(h, &mode)) {
+    win32_maperr(ERROR_INVALID_HANDLE);
+    uerror("SetConsoleWindowInfo", Nothing);
+  }
+
+  if (!GetConsoleScreenBufferInfo(h, &info)) {
     win32_maperr(GetLastError());
     uerror("GetConsoleScreenBufferInfo", Nothing);
   }
 
-  rect;
   rect.Top = info.srWindow.Top;
   rect.Left = info.srWindow.Left;
   rect.Bottom = rect.Top + Int_val(Field(val_size, 0)) - 1;
   rect.Right = rect.Left + Int_val(Field(val_size, 1)) - 1;
 
-  if (!SetConsoleWindowInfo(Handle_val(fd), TRUE, &rect)) {
+  if (!SetConsoleWindowInfo(h, TRUE, &rect)) {
     win32_maperr(GetLastError());
     uerror("SetConsoleWindowInfo", Nothing);
   }
