@@ -1,3 +1,8 @@
+3.4.0 (2026-04-06)
+------------------
+
+* `LTerm_unix`: fix mouse button reporting when button-event tracking is enabled (@RiderALT #126, @kandu #127)
+
 3.3.3 (2026-01-14)
 ------------------
 
