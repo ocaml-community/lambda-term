@@ -862,17 +862,17 @@ let rec parse_event ?(escape_time = 0.1) stream =
             | "[M" -> begin
                 (* Mouse report *)
                 let open LTerm_mouse in
-                Lwt_stream.next stream >|= Char.code >>= fun mask ->
-                Lwt_stream.next stream >|= Char.code >>= fun x ->
-                Lwt_stream.next stream >|= Char.code >>= fun y ->
+                Lwt_stream.next stream >|= Char.code >|= ((+)(-32)) >>= fun mask ->
+                Lwt_stream.next stream >|= Char.code >|= ((+)(-32)) >>= fun x ->
+                Lwt_stream.next stream >|= Char.code >|= ((+)(-32)) >>= fun y ->
                 try
                   if mask = 0b00100011 then raise Exit;
                   return (LTerm_event.Mouse {
                             control = mask land 0b00010000 <> 0;
                             meta = mask land 0b00001000 <> 0;
-                            shift = false;
-                            row = y - 33;
-                            col = x - 33;
+                            shift = mask land 0b00000100 <> 0;
+                            row = y - 1;
+                            col = x - 1;
                             button =
                               (match mask land 0b11000111 with
                                  | 0b00000000 -> Button1
