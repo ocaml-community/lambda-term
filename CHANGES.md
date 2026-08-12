@@ -1,3 +1,8 @@
+3.4.1 (2026-08-12)
+------------------
+
+* `LTerm_vi`: fix `prev_word'`, resolve an issue that vi commands `b` words backward and `B` WORDS backward may behave improperly in some cases
+
 3.4.0 (2026-04-06)
 ------------------
 
