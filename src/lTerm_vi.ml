@@ -340,17 +340,20 @@ module Query = struct
     in
     let prev= prev_category ~nl_as_sp ~pos ~start text in
     1 +
-      if category_equal start_category before_start then
-        if is_space start_category then
+      if is_space start_category then
+        (* condition 1: start at space, prev -> prev + 1 *)
+        prev_category ~nl_as_sp ~pos:prev ~start text
+      else if prev < pos-1 then
+        (* condition 2: start is not the head of a word, prev + 1 *)
+        prev
+      else
+        let prev= prev_category ~nl_as_sp ~pos:prev ~start text in
+        if is_space before_start then
+          (* condition 3: the char before start is space, prev -> prev -> prev + 1*)
           prev_category ~nl_as_sp ~pos:prev ~start text
         else
+          (* condition 4: start at the head of o word, prev -> prev + 1 *)
           prev
-      else if is_space before_start then
-        let prev= prev_category ~nl_as_sp ~pos:prev ~start text in
-        if prev <= start then prev else
-        prev_category ~nl_as_sp ~pos:prev ~start text
-      else
-        prev_category ~nl_as_sp ~pos:prev ~start text
 
   let prev_word ?multi_line ~pos ~start text=
     let prev_category ~nl_as_sp=
