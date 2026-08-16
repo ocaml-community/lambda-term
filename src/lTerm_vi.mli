@@ -66,108 +66,190 @@ module Concurrent :
       end
   end
 
+(** Module for querying and calculating vi command navigating through text. *)
 module Query :
   sig
+    (** Returns the new position and the difference between the new position and the current position after n times [h] command. *)
     val left : int -> 'a Zed_edit.context -> int * int
+
+    (** Returns the new position and the difference between the new position and the current position after n times [l] command. *)
     val right : ?newline:bool -> int -> 'a Zed_edit.context -> int * int
-    val line_FirstChar : 'a -> 'b Zed_edit.context -> int * int
+
+    (** Returns the position of the first character of the current line and the difference between the new position and the current position. *)
+    val line_FirstChar : int -> 'b Zed_edit.context -> int * int
+
+    (** Returns the position of the last character of the current line, with optional newline handling. *)
     val line_LastChar : ?newline:bool -> int -> 'a Zed_edit.context -> int
+
+    (** Gets the category of a character. *)
     val get_category :
       ?nl_as_sp:bool ->
       Uchar.t ->
       Uucp.Gc.t
+
+    (** Gets the boundary of the current line, i.e. the start and the stop of the line. *)
     val get_boundary : bool -> 'a Zed_edit.context -> int * int
-    val is_space : [> `Cc | `Mn | `Zl | `Zp | `Zs ] -> bool
-    val is_not_space : [> `Cc | `Mn | `Zl | `Zp | `Zs ] -> bool
-    val category_equal : ([> `Ll | `Lu ] as 'a) -> 'a -> bool
+
+    (** Checks if the category is a space. *)
+    val is_space : Uucp.Gc.t -> bool
+
+    (** Checks if a character is not a space. *)
+    val is_not_space : Uucp.Gc.t -> bool
+
+    (** Checks if two categories are equal for letters. *)
+    val category_equal : Uucp.Gc.t -> Uucp.Gc.t -> bool
+
+    (** Checks if two categories are all blanks or neither is. *)
     val category_equal_blank :
-      [> `Cc | `Mn | `Zl | `Zp | `Zs ] ->
-      [> `Cc | `Mn | `Zl | `Zp | `Zs ] -> bool
+      Uucp.Gc.t ->
+      Uucp.Gc.t -> bool
+
+    (** Scan forward for the first character with a different Unicode category than the current one and return its positon. *)
     val next_category :
       ?nl_as_sp:bool ->
       ?is_equal:(Uucp.Gc.t -> Uucp.Gc.t -> bool) ->
       pos:int -> stop:int -> Zed_rope.t -> int
+
+    (** Scan backward for the first character with a different Unicode category than the current one and return its positon. *)
     val prev_category :
       ?nl_as_sp:bool ->
       ?is_equal:(Uucp.Gc.t -> Uucp.Gc.t -> bool) ->
       pos:int -> start:int -> Zed_rope.t -> int
+
+    (** Moves to the nth line. *)
     val goto_line : 'a Zed_edit.context -> int -> int
+
+    (** Moves to the next line. *)
     val next_line : 'a Zed_edit.context -> int -> int
+
+    (** Moves to the previous line. *)
     val prev_line : 'a Zed_edit.context -> int -> int
+
+    (** Finds the next word, with custom category function to adjust its behavior. *)
     val next_word' :
       ?multi_line:bool ->
       next_category:(nl_as_sp:bool -> pos:int -> stop:int -> Zed_rope.t -> int) ->
       pos:int -> stop:int -> Zed_rope.t -> int
+
+    (** Finds the next word, i.e. vi command [w] *)
     val next_word :
       ?multi_line:bool -> pos:int -> stop:int -> Zed_rope.t -> int
+
+    (** Finds the next WORD, i.e. vi command [W] *)
     val next_WORD :
       ?multi_line:bool -> pos:int -> stop:int -> Zed_rope.t -> int
+
+    (** Finds the first non-blank character of the line, i.e. vi command [^] *)
     val line_FirstNonBlank : 'a -> 'b Zed_edit.context -> int
+
+    (** Finds the previous word, with custom category function to adjust its behavior. *)
     val prev_word' :
       ?multi_line:bool ->
       prev_category:(nl_as_sp:bool -> pos:int -> start:int -> Zed_rope.t -> int) ->
       pos:int -> start:int -> Zed_rope.t -> int
+
+    (** Finds the previous word, i.e. vi command [b] *)
     val prev_word :
       ?multi_line:bool -> pos:int -> start:int -> Zed_rope.t -> int
+
+    (** Finds the previous WORD, i.e. vi command [B] *)
     val prev_WORD :
       ?multi_line:bool -> pos:int -> start:int -> Zed_rope.t -> int
+
+    (** Finds the next word end, with custom category function to adjust its behavior. *)
     val next_word_end' :
       ?multi_line:bool ->
       next_category:(nl_as_sp:bool -> pos:int -> stop:int -> Zed_rope.t -> int) ->
       pos:int -> stop:int -> Zed_rope.t -> int
+
+    (** Finds the next word end, i.e. vi command [e] *)
     val next_word_end :
       ?multi_line:bool -> pos:int -> stop:int -> Zed_rope.t -> int
+
+    (** Finds the next WORD end, i.e. vi command [E] *)
     val next_WORD_end :
       ?multi_line:bool -> pos:int -> stop:int -> Zed_rope.t -> int
+
+    (** Finds the previous word end, with custom category function to adjust its behavior. *)
     val prev_word_end' :
       ?multi_line:bool ->
       prev_category:(nl_as_sp:bool -> pos:int -> start:int -> Zed_rope.t -> int) ->
       pos:int -> start:int -> Zed_rope.t -> int
+
+    (** Finds the previous word end, i.e. vi command [ge] *)
     val prev_word_end :
       ?multi_line:bool -> pos:int -> start:int -> Zed_rope.t -> int
+
+    (** Finds the previous WORD end, i.e. vi command [gE] *)
     val prev_WORD_end :
       ?multi_line:bool -> pos:int -> start:int -> Zed_rope.t -> int
+
+    (** Finds the first occurrence of a character. *)
     val occurrence_char :
       pos:int -> stop:int -> Zed_char.t -> Zed_rope.t -> int option
+
+    (** Finds the first occurrence of a character backwards. *)
     val occurrence_char_back :
       pos:int -> start:int -> Zed_char.t -> Zed_rope.t -> int option
+
+    (** Finds the first occurrence of a character satisfying a condition. *)
     val occurrence :
       pos:int ->
       stop:int ->
       cmp:(Zed_char.t -> bool) -> Zed_rope.t -> (int * Zed_char.t) option
+
+    (** Finds the first occurrence of a character satisfying a condition backwards. *)
     val occurrence_back :
       pos:int ->
       start:int ->
       cmp:(Zed_char.t -> bool) -> Zed_rope.t -> (int * Zed_char.t) option
+
+    (** Finds the first occurrence of a pair of left and right characters. *)
     val occurrence_pare_raw :
       pos:int ->
       level:int ->
       start:int ->
       stop:int -> Zed_char.t * Zed_char.t -> Zed_rope.t -> (int * int) option
+
+    (** Finds the first occurrence of a pair of left and right characters, handling nesting.  *)
     val occurrence_pare :
       pos:int ->
       level:int ->
       start:int ->
       stop:int -> Zed_char.t * Zed_char.t -> Zed_rope.t -> (int * int) option
+
+    (** Finds the occurrence of a bracket pair. *)
     val item_match : start:int -> stop:int -> int -> Zed_rope.t -> int option
+
+    (** Finds a word and the appended spaces, returns its left and right position. *)
     val include_word' :
       ?multi_line:bool ->
       next_category:(nl_as_sp:bool -> pos:int -> stop:int -> Zed_rope.t -> int) ->
       pos:int -> stop:int -> Zed_rope.t -> (int * int) option
+
+    (** Finds a word and the appended spaces, returns its left and right position, i.e. vi command [aw] *)
     val include_word :
       ?multi_line:bool ->
       pos:int -> stop:int -> Zed_rope.t -> (int * int) option
+
+    (** Finds a WORD and the appended spaces, returns its left and right position, i.e. vi command [aW] *)
     val include_WORD :
       ?multi_line:bool ->
       pos:int -> stop:int -> Zed_rope.t -> (int * int) option
+
+    (** Finds a word, returns its left and right position. *)
     val inner_word' :
       ?multi_line:bool ->
       prev_category:(nl_as_sp:bool -> pos:int -> start:int -> Zed_rope.t -> int) ->
       next_category:(nl_as_sp:bool -> pos:int -> stop:'a -> Zed_rope.t -> int) ->
       pos:int -> stop:'a -> Zed_rope.t -> (int * int) option
+
+    (** Finds a word, returns its left and right position, i.e. vi command [iw] *)
     val inner_word :
       ?multi_line:bool ->
       pos:int -> stop:int -> Zed_rope.t -> (int * int) option
+
+    (** Finds a WORD, returns its left and right position, i.e. vi command [iw] *)
     val inner_WORD :
       ?multi_line:bool ->
       pos:int -> stop:int -> Zed_rope.t -> (int * int) option
