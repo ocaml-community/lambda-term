@@ -7,28 +7,61 @@
  * This file is a part of Lambda-Term.
  *)
 
+(** Vi mode *)
 
+(** Module for handling concurrent operations. *)
 module Concurrent :
   sig
+    (** Module for thread management and synchronization. *)
     module Thread :
       sig
+        (** Thread type. *)
         type 'a t = 'a Lwt.t
+
+        (** Binds a thread's result to a function. *)
         val bind : 'a t -> ('a -> 'b t) -> 'b t
+
+        (** Create a thread returning a value directly. *)
         val return : 'a -> 'a t
+
+        (** Combines two threads into one. *)
         val both : 'a t -> 'b t -> ('a * 'b) t
+
+        (** Joins a list of threads. *)
         val join : unit t list -> unit t
+
+        (** Picks the first thread that becomes resolved and tries to canel all other threads that are still pending, using {!Thread.cancle}. *)
         val pick : 'a t list -> 'a t
+
+        (** The same as {!Thread.pick}, but it does not try to cancel the ramaining threads. *)
         val choose : 'a t list -> 'a t
+
+        (** Runs an asynchronous action. *)
         val async : (unit -> unit t) -> unit
+
+        (** Cancels a thread. *)
         val cancel : 'a t -> unit
+
+        (** Sleeps for a given number of seconds. *)
         val sleep : float -> unit t
+
+        (** Runs a thread and waits for its result. *)
         val run : 'a t -> 'a
       end
+
+    (** Module for thread message box. *)
     module MsgBox :
       sig
+        (** Message box type. *)
         type 'a t = 'a Lwt_mvar.t
+
+        (** Creates a new message box. *)
         val create : unit -> 'a t
+
+        (** Puts a value into the message box. *)
         val put : 'a t -> 'a -> unit Lwt.t
+
+        (** Gets a value from the message box. *)
         val get : 'a t -> 'a Lwt.t
       end
   end
