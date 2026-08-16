@@ -140,202 +140,115 @@ module Query :
       pos:int -> stop:int -> Zed_rope.t -> (int * int) option
   end
 
-module Vi :
-  sig
-    module Edit_action = Mew_vi.Edit_action
-    module Vi_action = Mew_vi.Vi_action
-    module Base :
-      sig
-        module Key :
-          sig
-            type t = Mew_vi.Modal.Key.t
-            type code = Mew_vi.Modal.Key.code
-            type modifier = Mew_vi.Modal.Key.modifier
-            type modifiers = Mew_vi.Modal.Key.modifiers
-            val create : code:code -> modifiers:modifiers -> t
-            val create_modifiers : modifier list -> modifiers
-            val code : t -> code
-            val modifiers : t -> modifiers
-            val modifier : key:t -> modifier:modifier -> bool
-            val compare : t -> t -> int
-            val to_string : t -> string
-            val equal : t -> t -> bool
-            val hash : t -> int
-          end
-        module Mode :
-          sig
-            module KeyTrie : Trie.Intf with type path = Key.t list
-            type name = Mew_vi.Modal.Name.t
-            type action =
-              |  Switch of name
-              | Key of Key.t
-              | KeySeq of Key.t Queue.t
-              | Custom of (unit -> unit)
-            type t = {
-              name : name;
-              timeout : float option;
-              bindings : action KeyTrie.node;
-            }
-            module Modes : Map.S with type key= name
-            type modes = t Modes.t
-            val name : t -> name
-            val timeout : t -> float option
-            val bindings : t -> action KeyTrie.node
-            val compare : t -> t -> int
-            val default_mode : 'a Modes.t -> name * 'a
-            val bind : t -> KeyTrie.path -> action -> unit
-            val unbind : t -> KeyTrie.path -> unit
-          end
-        val ( >>= ) : 'a Lwt.t -> ('a -> 'b Lwt.t) -> 'b Lwt.t
-        class edit :
-          < default_mode : 'a * Mode.t; modes : Mode.t Mode.Modes.t;
-            timeout : float; .. > ->
-          object
-            val mutable curr_mode : Mode.t
-            val i : Key.t Lwt_mvar.t
-            val o : Key.t Lwt_mvar.t
-            method bindings : Mode.action Mode.KeyTrie.node
-            method getMode : Mode.t
-            method i : Key.t Lwt_mvar.t
-            method keyin : Key.t -> unit Lwt.t
-            method o : Key.t Lwt_mvar.t
-            method setMode : Mode.name -> unit
-            method timeout : float
-          end
-        class state :
-          Mode.t Mew_vi.Modal.Mode.Modes.t ->
-          object
-            val mutable default_mode : Mew_vi.Modal.Mode.Modes.key * Mode.t
-            val mutable timeout : float
-            method default_mode : Mew_vi.Modal.Mode.Modes.key * Mode.t
-            method edit : edit
-            method modes : Mode.t Mode.Modes.t
-            method timeout : float
-          end
-      end
-    module Interpret :
-      sig
-        module Register :
-          sig
-            type t= string
-            type content= Seq of string | Line of string
-            val compare_content : content -> content -> int
-          end
-        module RegisterMap : Map.S with type key = Register.t
 
-        val ( >>= ) : 'a Lwt.t -> ('a -> 'b Lwt.t) -> 'b Lwt.t
-        type register= string option
-        type count= int option
-        type keyseq= Base.Key.t list
+(**
+ * Module for the Vi editor interface.
+ *)
+module Vi : module type of Mew_vi.Core.Make (Concurrent)
 
-        module Resolver :
-          sig
-            type t= config -> status -> keyseq -> result
-            and config= {
-              mode: Mew_vi.Mode.Name.t React.signal;
-              set_mode: ?step:React.step -> Mew_vi.Mode.Name.t -> unit;
-              keyseq: keyseq React.signal;
-              set_keyseq: ?step:React.step -> keyseq -> unit;
-              mutable resolver_insert: t;
-              mutable resolver_normal: t;
-              mutable resolver_visual: t;
-              mutable resolver_command: t;
-            }
-            and status= {
-              register: register;
-              count: count;
-            }
-            and result=
-              | Accept of (Edit_action.t * keyseq * Mew_vi.Mode.Name.t)
-              | Continue of (t * status * keyseq)
-              | Rejected of keyseq
 
-            val resolver_dummy : t
-            val resolver_insert : t
-
-            module Common :
-              sig
-                val try_count : t -> t
-                val try_motion : Mew_vi.Mode.name -> t
-              end
-            module Normal :
-              sig
-                val try_change_mode : t
-                val try_modify : t
-                val try_insert : t
-                val try_motion_modify_insert : t
-                val resolver_normal : t
-              end
-            module Visual :
-              sig
-                val try_change_mode : t
-                val try_motion : t
-                val try_modify : t
-                val try_motion_modify : t
-                val resolver_visual : t
-              end
-            val make_config :
-              ?mode:Mew_vi.Mode.Name.t ->
-              ?keyseq:keyseq ->
-              ?resolver_insert:t ->
-              ?resolver_normal:t ->
-              ?resolver_visual:t ->
-              ?resolver_command:t ->
-              unit -> config
-            val interpret :
-              ?resolver:t ->
-              ?keyseq:keyseq ->
-              config ->
-              status ->
-              Base.Key.t Lwt_mvar.t ->
-              Edit_action.t Lwt_mvar.t -> unit -> 'a Lwt.t
-          end
-      end
-  end
-
+(**
+ * An instance of the edit class for Vi mode.
+ *)
 class edit : state ->
   object
-    val action_output : Vi.Edit_action.t Lwt_mvar.t
+    (** MsgBox for action output. *)
+    val action_output : Vi.Edit_action.t Concurrent.MsgBox.t
+
+    (** Current mode of the editor. *)
     val mutable curr_mode : Vi.Base.Mode.t
-    val i : Mew_vi.Key.t Lwt_mvar.t
-    val o : Mew_vi.Key.t Lwt_mvar.t
+
+    (** Resolver configuration. *)
     val config : Vi.Interpret.Resolver.config
-    method action_output : Vi.Edit_action.t Lwt_mvar.t
+
+    (** Action output MsgBox. *)
+    method action_output : Vi.Edit_action.t Concurrent.MsgBox.t
+
+    (** Bindings for the current mode. *)
     method bindings : Vi.Base.Mode.action Vi.Base.Mode.KeyTrie.node
+
+    (** Get the current mode. *)
     method getMode : Vi.Base.Mode.t
-    method i : Mew_vi.Key.t Lwt_mvar.t
-    method keyin : Mew_vi.Key.t -> unit Lwt.t
-    method o : Mew_vi.Key.t Lwt_mvar.t
+
+    (** Get the input key MsgBox. *)
+    method i : Mew_vi.Key.t Concurrent.MsgBox.t
+
+    (** Input a key into the [i] MsgBox. *)
+    method keyin : Mew_vi.Key.t -> unit Concurrent.Thread.t
+
+    (** The output key MsgBox. *)
+    method o : Mew_vi.Key.t Concurrent.MsgBox.t
+
+    (** Set the current mode by name. *)
     method setMode : Vi.Base.Mode.name -> unit
+
+    (** Get the timeout value. *)
     method timeout : float
+
+    (** Get the content of a register by name. *)
     method get_register : string -> Vi.Interpret.Register.content option
+
+    (** Set the content of a register by name. *)
     method set_register : string -> Vi.Interpret.Register.content -> unit
   end
 and state :
   object
+    (** The default mode of the editor. *)
     val mutable default_mode : Vi.Base.Mode.name * Vi.Base.Mode.t
+
+    (** The timeout value of the editor. *)
     val mutable timeout : float
+
+    (** Get the default mode. *)
     method default_mode : Vi.Base.Mode.name * Vi.Base.Mode.t
+
+    (** The edit object. *)
     method edit : Vi.Base.edit
+
+    (** The set of modes. *)
     method modes : Vi.Base.Mode.t Vi.Base.Mode.Modes.t
+
+    (** Get the timeout value. *)
     method timeout : float
+
+    (** Get the content of a register by name. *)
     method get_register : string -> Vi.Interpret.Register.content option
+
+    (** Set the content of a register by name. *)
     method set_register : string -> Vi.Interpret.Register.content -> unit
+
+    (** Get all registers. *)
     method get_registers : Vi.Interpret.Register.content Vi.Interpret.RegisterMap.t
+
+    (** Set all registers. *)
     method set_registers : Vi.Interpret.Register.content Vi.Interpret.RegisterMap.t -> unit
+
+    (** Get the Vi edit object. *)
     method vi_edit : edit
   end
 
+
+(** Convert an LTerm key code to a Mew_vi key code. *)
 val of_lterm_code : LTerm_key.code -> Mew_vi.Key.code
+
+(** Convert a Mew_vi key code to an LTerm key code. *)
 val of_vi_code : Mew_vi.Key.code -> LTerm_key.code
+
+(** Convert an LTerm key to a Mew_vi key. *)
 val of_lterm_key : LTerm_key.t -> Mew_vi.Key.t
+
+(** Convert a Mew_vi key to an LTerm key. *)
 val of_vi_key : Mew_vi.Key.t -> LTerm_key.t
 
 open LTerm_read_line_base
 
+
+(**
+ * Performs one step of the Vi editing loop.
+ *)
 val perform :
   edit ->
   'a Zed_edit.context ->
-  (action list -> 'b loop_result Lwt.t) ->
-  Vi.Vi_action.t -> 'b loop_result Lwt.t
+  (action list -> 'b loop_result Concurrent.Thread.t) ->
+  Vi.Vi_action.t -> 'b loop_result Concurrent.Thread.t
 
