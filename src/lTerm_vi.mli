@@ -18,7 +18,7 @@ module Concurrent :
         (** Thread type. *)
         type 'a t = 'a Lwt.t
 
-        (** Binds a thread's result to a function. *)
+        (** [bind t f] attaches the callback function [f] to [t]. [f] will run when [t] is fulfilled. *)
         val bind : 'a t -> ('a -> 'b t) -> 'b t
 
         (** Create a thread returning a value directly. *)
@@ -30,10 +30,10 @@ module Concurrent :
         (** Joins a list of threads. *)
         val join : unit t list -> unit t
 
-        (** Picks the first thread that becomes resolved and tries to canel all other threads that are still pending, using {!Thread.cancle}. *)
+        (** Picks the first thread that becomes resolved and tries to cancel all other threads that are still pending, using {!Thread.cancel}. *)
         val pick : 'a t list -> 'a t
 
-        (** The same as {!Thread.pick}, but it does not try to cancel the ramaining threads. *)
+        (** Same as {!Thread.pick}, but it does not try to cancel the ramaining threads. *)
         val choose : 'a t list -> 'a t
 
         (** Runs an asynchronous action. *)
