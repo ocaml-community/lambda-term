@@ -44,36 +44,27 @@ module Make (LiteralIntf: LiteralIntf.Type) = struct
       Uchar.of_int (Char.code 'a' + x - 10)
 
   let of_string_maybe_invalid str=
-    let len= Zed_string.length str in
-    let arr= Array.make len dummy in
-    let rec loop ofs idx=
-      if idx = len then
-        arr
+    let txt zc = (zc, LTerm_style.none) in
+    let rec loop ofs acc =
+      if ofs = 0 then Array.of_list acc
       else begin
-        let ofs, idx=
-          try
-            let chr, ofs= Zed_string.extract_next str ofs in
-            Array.unsafe_set arr idx (chr, LTerm_style.none);
-            (ofs, idx + 1)
-          with
-            Zed_utf8.Invalid _->
-            let code= Uchar.to_int (Zed_char.core (Zed_string.extract str ofs)) in
-            Array.unsafe_set arr (idx + 0)
-              (Zed_char.unsafe_of_char '\\', LTerm_style.none);
-            Array.unsafe_set arr (idx + 1)
-              (Zed_char.unsafe_of_char 'y', LTerm_style.none);
-            Array.unsafe_set arr (idx + 2)
-              (Zed_char.unsafe_of_uChar (uchar_of_hex (code lsr 4))
-              , LTerm_style.none);
-            Array.unsafe_set arr (idx + 3)
-              (Zed_char.unsafe_of_uChar (uchar_of_hex (code land 15))
-              , LTerm_style.none);
-            ofs + 1, idx + 4
-        in
-        loop ofs idx
+        try
+          let (zc, ofs') = Zed_string.extract_prev str ofs in
+          loop ofs' (txt zc :: acc)
+        with 
+        | Invalid_argument _      (* from Uchar.of_int *)
+        | Zed_utf8.Invalid _      (* invalid UTF8 sequence *)
+        | Zed_string.Invalid _ -> (* individual combining character *)
+          let invalid = Zed_string.sub_ofs ~ofs:(ofs-1) ~len:1 str in
+          let code = Char.code (Zed_string.to_utf8 invalid).[0] in
+          loop (ofs - 1) (txt (Zed_char.unsafe_of_char '\\') ::
+                          txt (Zed_char.unsafe_of_char 'y') ::
+                          txt (Zed_char.unsafe_of_uChar (uchar_of_hex (code lsr 4))) ::
+                          txt (Zed_char.unsafe_of_uChar (uchar_of_hex (code land 15))) ::
+                          acc)
       end
     in
-    loop 0 0
+    loop (Zed_string.bytes str) []
 
   let of_utf8_maybe_invalid str=
     let str= Zed_string.unsafe_of_utf8 str in
