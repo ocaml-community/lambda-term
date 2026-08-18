@@ -329,30 +329,30 @@ module Query = struct
   let prev_word' ?(multi_line=true) ~prev_category ~pos ~start text=
     if pos <= start then start else
     let nl_as_sp= multi_line in
-    let start_category=
+    let pos_category=
       let zchar= Zed_rope.get text pos in
       let core= Zed_char.core zchar in
       get_category ~nl_as_sp core
-    and before_start=
+    and before_pos=
       let zchar= Zed_rope.get text (pos - 1) in
       let core= Zed_char.core zchar in
       get_category ~nl_as_sp core
     in
     let prev= prev_category ~nl_as_sp ~pos ~start text in
     1 +
-      if is_space start_category then
-        (* condition 1: start at space, prev -> prev + 1 *)
+      if is_space pos_category then
+        (* condition 1: the char at [pos] is space, prev -> prev + 1 *)
         prev_category ~nl_as_sp ~pos:prev ~start text
       else if prev < pos-1 then
-        (* condition 2: start is not the head of a word, prev + 1 *)
+        (* condition 2: the char at [pos] is not the head of a word, prev + 1 *)
         prev
       else
         let prev= prev_category ~nl_as_sp ~pos:prev ~start text in
-        if is_space before_start then
-          (* condition 3: the char before start is space, prev -> prev -> prev + 1*)
+        if is_space before_pos then
+          (* condition 3: the char before [pos] is space, prev -> prev -> prev + 1*)
           prev_category ~nl_as_sp ~pos:prev ~start text
         else
-          (* condition 4: start at the head of o word, prev -> prev + 1 *)
+          (* condition 4: the char at [pos] at the head of o word, prev -> prev + 1 *)
           prev
 
   let prev_word ?multi_line ~pos ~start text=
