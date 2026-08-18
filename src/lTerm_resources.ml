@@ -25,7 +25,7 @@ let home =
       else
         ""
 
-type xdg_location = Cache | Config | Data
+type xdg_location = Cache | Config | Data | State
 
 module XDGBD = struct
   let ( / ) = Filename.concat
@@ -34,23 +34,33 @@ module XDGBD = struct
     try
       Sys.getenv env_var
     with Not_found ->
-      if Sys.win32 then win32_default else unix_default
+      if Sys.win32 then
+        win32_default ()
+      else
+        unix_default
 
-  let cache  = get "XDG_CACHE_HOME"  (home / ".cache")           (home / "Local Settings" / "Cache")
-  let config = get "XDG_CONFIG_HOME" (home / ".config")          (home / "Local Settings")
-  let data   = get "XDG_DATA_HOME"   (home / ".local" / "share") (try Sys.getenv "AppData" with Not_found -> "")
+  let cache  = get "XDG_CACHE_HOME"  (home / ".cache") @@ fun () ->
+    try Sys.getenv "LocalAppData" / "Cache" with Not_found -> home / "AppData" / "Local" / "Cache"
+  let config = get "XDG_CONFIG_HOME" (home / ".config") @@ fun () ->
+    try Sys.getenv "AppData" with Not_found -> home / "AppData" / "Roaming"
+  let data   = get "XDG_DATA_HOME"   (home / ".local" / "share") @@ fun () ->
+    try Sys.getenv "AppData" with Not_found -> home / "AppData" / "Roaming"
+  let state  = get "XDG_STATE_HOME"  (home / ".local" / "state") @@ fun () ->
+    try Sys.getenv "LocalAppData" with Not_found -> home / "AppData" / "Local"
 
   let user_dir = function
     | Cache  -> cache
     | Config -> config
     | Data   -> data
+    | State  -> state
 end
 
 let xdgbd_warning loc file_name =
   let loc_name = match loc with
     | Cache  -> "$XDG_CACHE_HOME"
     | Config -> "$XDG_CONFIG_HOME"
-    | Data   -> "$XDG_DATA_HOME" in
+    | Data   -> "$XDG_DATA_HOME"
+    | State  -> "$XDG_STATE_HOME" in
   Printf.eprintf
     "Warning: it is recommended to move `%s` to `%s`, see:\n%s\n"
     file_name loc_name
